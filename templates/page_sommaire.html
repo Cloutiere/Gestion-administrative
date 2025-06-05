@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sommaire Global des Tâches</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Styles spécifiques pour la page sommaire. Le style.css global s'applique aussi. */
+        .container-sommaire { display: flex; flex-direction: column; gap: 30px; }
+        .section-sommaire { padding:15px; border: 1px solid #ccc; border-radius:5px; background-color: #f9f9f9; }
+        table { width: 100%; border-collapse: collapse; margin-top:10px; font-size: 0.9em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #e9ecef; }
+        .highlight-moyenne { font-weight: bold; background-color: #e7f3fe; } /* Section pour la moyenne générale */
+        .statut-non-compte { color: #6c757d; font-style: italic; } /* Pour enseignants temps partiel ou fictifs */
+        .total-row td { font-weight: bold; } /* Styles pour les lignes de total (non utilisé ici, mais bonne pratique) */
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Sommaire Global des Tâches des Enseignants</h1>
+        <p><a href="{{ url_for('index') }}">« Retour à la navigation par champ</a></p>
+    </header>
+
+    <div class="container-sommaire">
+        <!-- Section affichant le détail des tâches pour chaque enseignant -->
+        <section class="section-sommaire">
+            <h2>Détail des Tâches par Enseignant</h2>
+            {% if enseignants %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Champ</th>
+                        <th>Nom de l'Enseignant</th>
+                        <th>Pér. Cours</th>
+                        <th>Pér. Autres</th>
+                        <th>Total Pér.</th>
+                        <th>Compte pour Moyenne Champ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ens in enseignants %}
+                    <tr>
+                        <td>{{ ens.champno }} - {{ ens.champnom }}</td>
+                        <td>{{ ens.nomcomplet }}</td>
+                        <td>{{ ens.periodes_cours }}</td>
+                        <td>{{ ens.periodes_autres }}</td>
+                        <td>{{ ens.total_periodes }}</td>
+                        <td>
+                            {% if ens.compte_pour_moyenne_champ %}
+                                Oui
+                            {% else %}
+                                <span class="statut-non-compte">Non
+                                {% if ens.estfictif %}(Fictif){% elif not ens.esttempsplein %}(Temps Partiel){% endif %}
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>Aucun enseignant à afficher.</p>
+            {% endif %}
+        </section>
+
+        <!-- Section affichant les moyennes des périodes par champ pour les enseignants à temps plein non fictifs -->
+        <section class="section-sommaire">
+            <h2>Moyennes des Périodes par Champ (Temps Plein non Fictifs)</h2>
+            {% if moyennes_par_champ %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>N° Champ</th>
+                        <th>Nom du Champ</th>
+                        <th>Moyenne Périodes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for champ_no, data in moyennes_par_champ.items() %}
+                    <tr>
+                        <td>{{ champ_no }}</td>
+                        <td>{{ data.champ_nom }}</td>
+                        <td>{{ "%.2f"|format(data.moyenne) }}</td> {# Affiche la moyenne avec 2 décimales #}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>Aucune donnée de moyenne par champ disponible.</p>
+            {% endif %}
+        </section>
+
+        <!-- Section affichant la moyenne générale de l'établissement pour les enseignants à temps plein non fictifs -->
+        <section class="section-sommaire highlight-moyenne">
+            <h2>Moyenne Générale de l'Établissement (Temps Plein non Fictifs)</h2>
+            <p style="font-size: 1.5em; text-align: center;">
+                {{ "%.2f"|format(moyenne_generale) }} périodes {# Affiche la moyenne générale avec 2 décimales #}
+            </p>
+        </section>
+    </div>
+
+    <footer>
+        <p>© {{ SCRIPT_YEAR }} Votre École</p> {# SCRIPT_YEAR est passé depuis Flask #}
+    </footer>
+</body>
+</html>

@@ -1,29 +1,44 @@
+/* styles/style.css */
+
+/* Styles de base pour le corps de la page */
 body {
-  font-family: sans-serif;
-  margin: 20px;
-  background-color: #f4f4f4;
+  font-family: sans-serif; /* Police de caractères par défaut */
+  margin: 20px; /* Marges extérieures pour espacer du bord de la fenêtre */
+  background-color: #f4f4f4; /* Couleur de fond légère pour la page */
 }
+
+/* Styles communs pour les sections principales : en-tête, navigation, contenu principal, pied de page */
 header, nav, main, footer {
-  background-color: #fff;
-  padding: 15px;
-  margin-bottom: 15px;
-  border-radius: 5px;
-  box-shadow: 0 0 5px rgba(0,0,0,0.1);
+  background-color: #fff; /* Fond blanc pour les conteneurs principaux */
+  padding: 15px; /* Marges intérieures */
+  margin-bottom: 15px; /* Marge inférieure pour espacer les blocs verticalement */
+  border-radius: 5px; /* Coins arrondis */
+  box-shadow: 0 0 5px rgba(0,0,0,0.1); /* Ombre légère pour un effet de profondeur */
 }
+
+/* Styles pour les listes de navigation */
 nav ul {
-  list-style-type: none;
-  padding: 0;
+  list-style-type: none; /* Supprime les puces par défaut des listes */
+  padding: 0; /* Supprime le remplissage par défaut du navigateur */
 }
+
 nav ul li {
-  margin-bottom: 5px;
+  margin-bottom: 5px; /* Marge inférieure pour chaque élément de la liste */
 }
+
+/* Styles pour les liens de navigation */
 nav ul li a {
-  text-decoration: none;
-  color: #337ab7;
+  text-decoration: none; /* Supprime le soulignement par défaut des liens */
+  color: #337ab7; /* Couleur bleue typique pour les liens */
 }
+
 nav ul li a:hover {
-  text-decoration: underline;
+  text-decoration: underline; /* Souligne les liens au survol pour un meilleur retour visuel */
 }
+
+/* Styles pour les titres de niveau 1 et 2 */
 h1, h2 {
-  color: #333;
+  color: #333; /* Couleur de texte foncée pour les titres */
 }
+
+/* Ajoutez ici d'autres styles globaux si nécessaire */

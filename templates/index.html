@@ -4,15 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion des Tâches Enseignants</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> <!-- On préparera un CSS plus tard -->
+    <!-- Lien vers la feuille de style CSS globale -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <header>
         <h1>Application de Gestion des Tâches</h1>
     </header>
     <nav>
-        <h2>Navigation par Champ</h2>
+        <h2>Navigation</h2>
         <ul>
+            <!-- Lien vers la page de sommaire global -->
+            <li><a href="{{ url_for('page_sommaire') }}"><strong>Voir le Sommaire Global</strong></a></li>
+            <hr>
+            <li><strong>Navigation par Champ :</strong></li>
+            <!-- Boucle pour afficher les liens vers chaque page de champ -->
             {% if champs %}
                 {% for champ in champs %}
                 <li>
@@ -22,16 +28,16 @@
                 </li>
                 {% endfor %}
             {% else %}
+                <!-- Message affiché si aucun champ n'est trouvé ou en cas d'erreur -->
                 <li>Aucun champ trouvé ou erreur de chargement.</li>
             {% endif %}
         </ul>
-        <!-- Plus tard, un lien vers la page sommaire globale -->
     </nav>
     <main>
         <p>Bienvenue ! Sélectionnez un champ pour commencer.</p>
     </main>
     <footer>
-        <p>2025 Pour l'école Marie-Rivier</p>
+        <p>2025 Pour l'école Marie-Rivier</p> <!-- Année statique, pourrait être dynamisée si besoin -->
     </footer>
 </body>
 </html>

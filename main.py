@@ -1,3 +1,4 @@
+import datetime
 import os
 
 import psycopg2
@@ -38,8 +39,6 @@ def get_db():
         except psycopg2.Error as e:
             # Loggue l'erreur de connexion pour le débogage côté serveur
             print(f"Erreur de connexion à la base de données: {e}")
-            # Ne pas retourner None directement ici, laisser les routes gérer
-            # l'absence de g.db ou les erreurs de get_db()
             g.db = None  # S'assurer que g.db est None si la connexion échoue
     return g.db
 
@@ -62,16 +61,15 @@ def get_all_champs():
     """Récupère tous les champs de la base de données, ordonnés par leur numéro."""
     db = get_db()
     if not db:
-        return []  # Retourne une liste vide si la connexion a échoué
+        return []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute("SELECT ChampNo, ChampNom FROM Champs ORDER BY ChampNo;")
-            # Convertit chaque Row de DictCursor en un dictionnaire standard
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
         print(f"Erreur lors de la récupération des champs: {e}")
-        if db and not db.closed:  # Vérifie si db existe et n'est pas déjà fermé
-            db.rollback()  # Annule la transaction en cas d'erreur
+        if db and not db.closed:
+            db.rollback()
         return []
 
 
@@ -120,6 +118,48 @@ def get_enseignants_par_champ(champ_no):
         return []
 
 
+def get_all_enseignants_avec_details():
+    """
+    Récupère tous les enseignants de tous les champs, avec le nom de leur champ
+    et leurs détails de périodes.
+    """
+    db = get_db()
+    if not db:
+        return []
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT e.EnseignantID, e.NomComplet, e.EstTempsPlein, e.EstFictif,
+                       e.ChampNo, ch.ChampNom
+                FROM Enseignants e
+                JOIN Champs ch ON e.ChampNo = ch.ChampNo
+                ORDER BY e.ChampNo, e.EstFictif, e.NomComplet;
+            """
+            )
+            enseignants_bruts = [dict(row) for row in cur.fetchall()]
+
+        enseignants_complets = []
+        for ens_brut in enseignants_bruts:
+            periodes = calculer_periodes_enseignant(ens_brut["enseignantid"])
+            compte_pour_moyenne_champ = ens_brut["esttempsplein"] and not ens_brut["estfictif"]
+            enseignants_complets.append(
+                {
+                    **ens_brut,  # Déballe toutes les clés de ens_brut
+                    "periodes_cours": periodes["periodes_cours"],
+                    "periodes_autres": periodes["periodes_autres"],
+                    "total_periodes": periodes["total_periodes"],
+                    "compte_pour_moyenne_champ": compte_pour_moyenne_champ,
+                }
+            )
+        return enseignants_complets
+    except psycopg2.Error as e:
+        print(f"Erreur lors de la récupération de tous les enseignants avec détails: {e}")
+        if db and not db.closed:
+            db.rollback()
+        return []
+
+
 def get_cours_disponibles_par_champ(champ_no):
     """
     Récupère les cours disponibles pour un champ, avec le nombre de groupes restants.
@@ -129,8 +169,6 @@ def get_cours_disponibles_par_champ(champ_no):
         return []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # Cette requête inclut tous les cours du champ, même ceux avec 0 groupe
-            # restant. Le front-end gère l'affichage et la logique d'attribution.
             cur.execute(
                 """
                 SELECT
@@ -197,7 +235,7 @@ def get_groupes_restants_pour_cours(code_cours):
     """Calcule le nombre de groupes restants pour un cours spécifique."""
     db = get_db()
     if not db:
-        return -1  # Indique une erreur ou l'incapacité de calculer
+        return -1
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
@@ -212,16 +250,12 @@ def get_groupes_restants_pour_cours(code_cours):
                 (code_cours,),
             )
             result = cur.fetchone()
-        # Si un cours n'existe pas ou n'a jamais été attribué et COALESCE
-        # ne s'applique pas (e.g., cours inexistant), result peut être None.
-        return (
-            result["grprestant"] if result and result["grprestant"] is not None else 0  # Par défaut à 0 si non trouvé ou si grprestant est NULL
-        )
+        return result["grprestant"] if result and result["grprestant"] is not None else 0
     except psycopg2.Error as e:
         print(f"Erreur get_groupes_restants_pour_cours pour {code_cours}: {e}")
         if db and not db.closed:
             db.rollback()
-        return -1  # Indique une erreur
+        return -1
 
 
 # --- ROUTES DE L'APPLICATION (Pages HTML) ---
@@ -242,13 +276,11 @@ def page_champ(champ_no):
     enseignants_du_champ_bruts = get_enseignants_par_champ(champ_no)
     cours_du_champ_disponibles = get_cours_disponibles_par_champ(champ_no)
 
-    # Sépare les cours d'enseignement des autres tâches pour l'affichage
     cours_enseignement_champ = [c for c in cours_du_champ_disponibles if not c["estcoursautre"]]
     cours_autres_taches_champ = [c for c in cours_du_champ_disponibles if c["estcoursautre"]]
 
-    # Enrichit les données des enseignants avec leurs attributions et totaux de périodes
     enseignants_avec_attributions = []
-    taches_sommaire_champ_data = []  # Pour le tableau récapitulatif
+    taches_sommaire_champ_data = []
     total_periodes_temps_plein_champ = 0
     nb_enseignants_temps_plein_champ = 0
 
@@ -257,7 +289,6 @@ def page_champ(champ_no):
         periodes = calculer_periodes_enseignant(ens_brut["enseignantid"])
         enseignants_avec_attributions.append({**ens_brut, "attributions": attributions, "periodes_actuelles": periodes})
 
-        # Collecte des données pour le sommaire des tâches du champ
         taches_sommaire_champ_data.append(
             {
                 "enseignant_id": ens_brut["enseignantid"],
@@ -269,12 +300,10 @@ def page_champ(champ_no):
                 "est_fictif": ens_brut["estfictif"],
             }
         )
-        # Calcul pour la moyenne des périodes des enseignants à temps plein (non fictifs)
         if ens_brut["esttempsplein"] and not ens_brut["estfictif"]:
             total_periodes_temps_plein_champ += periodes["total_periodes"]
             nb_enseignants_temps_plein_champ += 1
 
-    # Calcul de la moyenne des périodes pour les enseignants à temps plein du champ
     moyenne_champ = (total_periodes_temps_plein_champ / nb_enseignants_temps_plein_champ) if nb_enseignants_temps_plein_champ > 0 else 0
 
     return render_template(
@@ -286,6 +315,51 @@ def page_champ(champ_no):
         cours_disponibles_pour_tableau_restant=cours_du_champ_disponibles,
         taches_sommaire_champ=taches_sommaire_champ_data,
         moyenne_champ_initiale=moyenne_champ,
+    )
+
+
+@app.route("/sommaire")
+def page_sommaire():
+    """Affiche la page du sommaire global des tâches."""
+    tous_les_enseignants = get_all_enseignants_avec_details()
+
+    moyennes_par_champ = {}
+    total_periodes_etablissement = 0
+    nb_enseignants_temps_plein_etablissement = 0
+
+    # Calcul des moyennes par champ et pour l'établissement
+    for ens in tous_les_enseignants:
+        if ens["compte_pour_moyenne_champ"]:  # Temps plein non fictif
+            champ_no = ens["champno"]
+            if champ_no not in moyennes_par_champ:
+                moyennes_par_champ[champ_no] = {
+                    "champ_nom": ens["champnom"],
+                    "total_periodes": 0,
+                    "nb_enseignants": 0,
+                    "moyenne": 0.0,
+                }
+            moyennes_par_champ[champ_no]["total_periodes"] += ens["total_periodes"]
+            moyennes_par_champ[champ_no]["nb_enseignants"] += 1
+
+            total_periodes_etablissement += ens["total_periodes"]
+            nb_enseignants_temps_plein_etablissement += 1
+
+    for data_champ in moyennes_par_champ.values():
+        if data_champ["nb_enseignants"] > 0:
+            data_champ["moyenne"] = data_champ["total_periodes"] / data_champ["nb_enseignants"]
+
+    moyenne_generale = (
+        (total_periodes_etablissement / nb_enseignants_temps_plein_etablissement) if nb_enseignants_temps_plein_etablissement > 0 else 0
+    )
+
+    current_year = datetime.datetime.now().year
+
+    return render_template(
+        "page_sommaire.html",
+        enseignants=tous_les_enseignants,
+        moyennes_par_champ=moyennes_par_champ,
+        moyenne_generale=moyenne_generale,
+        SCRIPT_YEAR=current_year,  # Ajout de l'année pour le footer
     )
 
 
@@ -303,7 +377,7 @@ def api_ajouter_attribution():
 
     enseignant_id = data.get("enseignant_id")
     code_cours = data.get("code_cours")
-    nb_groupes_a_prendre = 1  # Par défaut, on attribue un groupe à la fois
+    nb_groupes_a_prendre = 1
 
     if not enseignant_id or not code_cours:
         return jsonify({"success": False, "message": "Données manquantes (id ou code_cours)"}), 400
@@ -314,7 +388,6 @@ def api_ajouter_attribution():
 
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # Vérifie la disponibilité des groupes pour le cours
             cur.execute(
                 """
                 SELECT (NbGroupeInitial - COALESCE((
@@ -329,14 +402,8 @@ def api_ajouter_attribution():
             cours_info = cur.fetchone()
 
             if not cours_info or cours_info["grp_dispo"] < nb_groupes_a_prendre:
-                return jsonify(
-                    {
-                        "success": False,
-                        "message": "Plus de groupes disponibles ou cours inexistant.",
-                    }
-                ), 409  # Conflit: la ressource n'est pas dans l'état attendu
+                return jsonify({"success": False, "message": "Plus de groupes disponibles ou cours inexistant."}), 409
 
-            # Insère la nouvelle attribution
             cur.execute(
                 """
                 INSERT INTO AttributionsCours (EnseignantID, CodeCours, NbGroupesPris)
@@ -349,23 +416,16 @@ def api_ajouter_attribution():
             if insert_result_row is None:
                 db.rollback()
                 print("Erreur critique: INSERT n'a pas retourné d'ID pour l'attribution.")
-                return jsonify(
-                    {
-                        "success": False,
-                        "message": "Erreur interne (pas de retour ID attribution).",
-                    }
-                ), 500
+                return jsonify({"success": False, "message": "Erreur interne (pas de retour ID attribution)."}), 500
             attribution_id = insert_result_row["attributionid"]
-            db.commit()  # Valide la transaction
+            db.commit()
 
-        # Calculs post-commit pour la réponse JSON
         try:
             periodes_enseignant_maj = calculer_periodes_enseignant(enseignant_id)
             groupes_restants_cours_maj = get_groupes_restants_pour_cours(code_cours)
-            if groupes_restants_cours_maj == -1:  # Indique une erreur de la fonction DAO
+            if groupes_restants_cours_maj == -1:
                 raise Exception("Erreur calcul groupes restants post-attribution.")
         except Exception as calc_error:
-            # L'attribution a réussi, mais les calculs pour la réponse ont échoué
             print(f"Erreur post-attribution (calculs): {calc_error}")
             return jsonify(
                 {
@@ -374,13 +434,11 @@ def api_ajouter_attribution():
                     "attribution_id": attribution_id,
                     "enseignant_id": enseignant_id,
                     "code_cours": code_cours,
-                    # Retourne les valeurs même si potentiellement incomplètes ou par défaut
                     "periodes_enseignant": periodes_enseignant_maj,
                     "groupes_restants_cours": groupes_restants_cours_maj,
                 }
-            ), 201  # Créé, mais avec un avertissement potentiel
+            ), 201
 
-        # Récupère les informations de l'enseignant pour la réponse
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT ChampNo, EstTempsPlein, EstFictif FROM Enseignants WHERE EnseignantID = %s",
@@ -389,16 +447,14 @@ def api_ajouter_attribution():
             enseignant_info_row = cur.fetchone()
 
         if enseignant_info_row is None:
-            # Cela ne devrait pas arriver si l'enseignant_id est valide
             print(f"Erreur critique: Enseignant {enseignant_id} non trouvé après attribution et commit.")
             return jsonify(
                 {
-                    "success": True,  # L'attribution a réussi
+                    "success": True,
                     "message": "Cours attribué, mais erreur récupération détails enseignant.",
                     "attribution_id": attribution_id,
-                    # Autres infos potentiellement utiles même si l'enseignant n'est pas trouvé
                 }
-            ), 500  # Erreur serveur car état final potentiellement inconsistant
+            ), 500
         enseignant_info_dict = dict(enseignant_info_row)
 
         return (
@@ -416,7 +472,7 @@ def api_ajouter_attribution():
                     "est_fictif": enseignant_info_dict.get("estfictif", False),
                 }
             ),
-            201,  # Code HTTP pour "Created"
+            201,
         )
 
     except psycopg2.Error as e:
@@ -425,9 +481,8 @@ def api_ajouter_attribution():
         print(f"Erreur psycopg2 API ajouter attribution: {e}")
         return jsonify({"success": False, "message": "Erreur base de données lors de l'ajout."}), 500
     except Exception as e:
-        # Ce bloc catch les erreurs non-psycopg2 (ex: erreurs de logique Python)
         if db and not db.closed:
-            db.rollback()  # Assure un rollback si une transaction était en cours
+            db.rollback()
         print(f"Erreur Exception API ajouter attribution: {e}")
         return jsonify({"success": False, "message": "Erreur serveur inattendue lors de l'ajout."}), 500
 
@@ -456,7 +511,6 @@ def api_supprimer_attribution():
 
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # Récupère les infos de l'attribution avant suppression
             cur.execute(
                 """
                 SELECT ac.EnseignantID, ac.CodeCours, c.NbPeriodes AS PeriodesDuCours
@@ -475,14 +529,12 @@ def api_supprimer_attribution():
             code_cours = attribution_info["codecours"]
             nb_periodes_cours_libere = attribution_info.get("periodesducours", 0)
 
-            # Supprime l'attribution
             cur.execute(
                 "DELETE FROM AttributionsCours WHERE AttributionID = %s;",
                 (attribution_id_req,),
             )
-            db.commit()  # Valide la suppression
+            db.commit()
 
-            # Calculs post-suppression pour la réponse
             try:
                 periodes_enseignant_maj = calculer_periodes_enseignant(enseignant_id)
                 groupes_restants_cours_maj = get_groupes_restants_pour_cours(code_cours)
@@ -490,7 +542,6 @@ def api_supprimer_attribution():
                     raise Exception("Erreur calcul groupes restants post-suppression.")
             except Exception as calc_error:
                 print(f"Erreur post-suppression attribution (calculs): {calc_error}")
-                # La suppression a réussi, mais les calculs pour la réponse ont échoué
                 return jsonify(
                     {
                         "success": True,
@@ -501,9 +552,8 @@ def api_supprimer_attribution():
                         "periodes_enseignant": periodes_enseignant_maj,
                         "groupes_restants_cours": groupes_restants_cours_maj,
                     }
-                ), 200  # OK, mais avec un avertissement
+                ), 200
 
-            # Récupère les infos de l'enseignant concerné
             with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur_ens:
                 cur_ens.execute(
                     "SELECT ChampNo, EstTempsPlein, EstFictif FROM Enseignants WHERE EnseignantID = %s",
@@ -512,7 +562,6 @@ def api_supprimer_attribution():
                 enseignant_data_row = cur_ens.fetchone()
                 if not enseignant_data_row:
                     print(f"Avertissement: Enseignant {enseignant_id} non trouvé après suppression attribution pour màj détails.")
-                    # enseignant_data_dict restera vide, .get() gérera cela dans la réponse
                 else:
                     enseignant_data_dict = dict(enseignant_data_row)
 
@@ -531,15 +580,14 @@ def api_supprimer_attribution():
                     "est_fictif": enseignant_data_dict.get("estfictif", False),
                 }
             ),
-            200,  # OK
+            200,
         )
 
     except psycopg2.Error as e:
         if db and not db.closed:
             db.rollback()
         print(f"Erreur psycopg2 API supprimer attribution: {e}")
-        # Vérifie spécifiquement le code d'erreur pour violation de contrainte FK
-        if e.pgcode == "23503":  # Foreign key violation
+        if e.pgcode == "23503":
             return (
                 jsonify(
                     {
@@ -547,7 +595,7 @@ def api_supprimer_attribution():
                         "message": ("Impossible de supprimer cette attribution car elle est référencée ailleurs (contrainte de clé étrangère)."),
                     }
                 ),
-                409,  # Conflit
+                409,
             )
         return jsonify({"success": False, "message": "Erreur base de données lors de la suppression."}), 500
     except Exception as e:
@@ -565,7 +613,6 @@ def api_creer_tache_restante(champ_no):
         return jsonify({"success": False, "message": "Erreur de connexion BDD"}), 500
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # Détermine le prochain numéro pour le nom de la tâche restante
             cur.execute(
                 """
                 SELECT NomComplet FROM Enseignants
@@ -578,24 +625,20 @@ def api_creer_tache_restante(champ_no):
             max_num = 0
             for tache in taches_existantes:
                 try:
-                    # Extrait le numéro à la fin du nom de la tâche
                     num_str = tache["nomcomplet"].split("-")[-1].strip()
                     num = int(num_str)
                     if num > max_num:
                         max_num = num
                 except (ValueError, IndexError):
-                    # Ignore les noms qui ne correspondent pas au format attendu
                     continue
 
-            # Crée le nom de la nouvelle tâche
             nom_tache_restante = f"{champ_no}-Tâche restante-{max_num + 1}"
 
-            # Insère le nouvel enseignant fictif
             cur.execute(
                 """
                 INSERT INTO Enseignants (NomComplet, ChampNo, EstTempsPlein, EstFictif, PeutChoisirHorsChampPrincipal)
                 VALUES (%s, %s, FALSE, TRUE, FALSE)
-                RETURNING EnseignantID, NomComplet, EstTempsPlein, EstFictif, PeutChoisirHorsChampPrincipal;
+                RETURNING EnseignantID, NomComplet, EstTempsPlein, EstFictif, PeutChoisirHorsChampPrincipal, ChampNo;
             """,
                 (nom_tache_restante, champ_no),
             )
@@ -604,13 +647,13 @@ def api_creer_tache_restante(champ_no):
 
             if nouvel_enseignant_fictif_row is None:
                 print(f"Erreur critique: INSERT tâche restante pour {nom_tache_restante} n'a rien retourné.")
-                return jsonify(
-                    {
-                        "success": False,
-                        "message": "Erreur interne lors de la création (pas de retour).",
-                    }
-                ), 500
+                return jsonify({"success": False, "message": "Erreur interne lors de la création (pas de retour)."}), 500
+
             nouvel_enseignant_fictif_dict = dict(nouvel_enseignant_fictif_row)
+            # Récupérer le nom du champ pour le retour JSON complet, si besoin dans le JS
+            # Mais l'objet enseignant contient déjà ChampNo, ce qui est souvent suffisant.
+            # Si ChampNom est absolument nécessaire, une autre requête ou une jointure serait requise
+            # ici, nous supposons que les informations retournées par RETURNING sont suffisantes.
 
         return (
             jsonify(
@@ -618,13 +661,8 @@ def api_creer_tache_restante(champ_no):
                     "success": True,
                     "message": "Tâche restante créée avec succès!",
                     "enseignant": nouvel_enseignant_fictif_dict,
-                    # Initialise les périodes pour le nouvel enseignant fictif
-                    "periodes_actuelles": {
-                        "periodes_cours": 0,
-                        "periodes_autres": 0,
-                        "total_periodes": 0,
-                    },
-                    "attributions": [],  # Un nouvel enseignant n'a pas d'attributions
+                    "periodes_actuelles": {"periodes_cours": 0, "periodes_autres": 0, "total_periodes": 0},
+                    "attributions": [],
                 }
             ),
             201,
@@ -654,18 +692,11 @@ def api_supprimer_enseignant(enseignant_id):
 
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # 1. Vérifier l'existence de l'enseignant
-            cur.execute(
-                "SELECT ChampNo FROM Enseignants WHERE EnseignantID = %s;",
-                (enseignant_id,),
-            )
+            cur.execute("SELECT ChampNo FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
             enseignant_info_row = cur.fetchone()
             if not enseignant_info_row:
                 return jsonify({"success": False, "message": "Enseignant non trouvé."}), 404
-            # _enseignant_info_dict = dict(enseignant_info_row) # Non utilisé directement
 
-            # 2. Récupérer les cours affectés à cet enseignant AVANT suppression
-            # Ceci est nécessaire pour savoir quels cours mettre à jour côté client
             cur.execute(
                 """
                 SELECT ac.CodeCours, c.NbPeriodes
@@ -677,30 +708,19 @@ def api_supprimer_enseignant(enseignant_id):
             )
             cours_affectes_avant_suppression = cur.fetchall()
 
-            # 3. Supprimer l'enseignant.
-            # La contrainte ON DELETE CASCADE sur AttributionsCours.EnseignantID
-            # devrait s'occuper de supprimer les attributions associées.
             cur.execute("DELETE FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
-            db.commit()  # Valider la suppression de l'enseignant et de ses attributions
+            db.commit()
 
-            # 4. Calculer les nouveaux groupes restants pour chaque cours qui était affecté
             cours_liberes_details = []
             if cours_affectes_avant_suppression:
-                # Obtenir la liste unique des codes de cours affectés
                 codes_cours_uniques = list(set(ca["codecours"] for ca in cours_affectes_avant_suppression))
 
                 for code_cours in codes_cours_uniques:
                     nouveaux_groupes_restants = get_groupes_restants_pour_cours(code_cours)
-                    if nouveaux_groupes_restants == -1:  # Erreur DAO
-                        # Remonter une exception pour la gestion d'erreur globale
+                    if nouveaux_groupes_restants == -1:
                         raise Exception(f"Erreur calcul des groupes restants pour {code_cours} après suppression enseignant.")
 
-                    # Récupère le nombre de périodes du cours (pour information)
-                    nb_periodes_cours = next(
-                        (c["nbperiodes"] for c in cours_affectes_avant_suppression if c["codecours"] == code_cours),
-                        0,  # Valeur par défaut si non trouvé (ne devrait pas arriver)
-                    )
-
+                    nb_periodes_cours = next((c["nbperiodes"] for c in cours_affectes_avant_suppression if c["codecours"] == code_cours), 0)
                     cours_liberes_details.append(
                         {
                             "code_cours": code_cours,
@@ -708,26 +728,22 @@ def api_supprimer_enseignant(enseignant_id):
                             "nb_periodes": nb_periodes_cours,
                         }
                     )
-
-        # 5. Construire et envoyer la réponse JSON
         return (
             jsonify(
                 {
                     "success": True,
                     "message": ("Enseignant supprimé avec succès. Les cours ont été libérés."),
-                    "enseignant_id": enseignant_id,  # ID de l'enseignant supprimé
-                    "cours_liberes_details": cours_liberes_details,  # Détails des cours mis à jour
+                    "enseignant_id": enseignant_id,
+                    "cours_liberes_details": cours_liberes_details,
                 }
             ),
-            200,  # OK
+            200,
         )
 
     except psycopg2.Error as e:
         if db and not db.closed:
             db.rollback()
-        # Gérer spécifiquement l'erreur de violation de clé étrangère si ON DELETE CASCADE
-        # n'est pas configuré ou si une autre contrainte FK bloque.
-        if e.pgcode == "23503":  # Foreign key violation
+        if e.pgcode == "23503":
             print(f"Erreur psycopg2 (FK violation) API supprimer enseignant: {e}")
             return (
                 jsonify(
@@ -740,14 +756,11 @@ def api_supprimer_enseignant(enseignant_id):
                         ),
                     }
                 ),
-                409,  # Conflit
+                409,
             )
         print(f"Erreur psycopg2 API supprimer enseignant: {e}")
         return jsonify({"success": False, "message": "Erreur base de données lors de la suppression."}), 500
     except Exception as e:
-        # Gère les erreurs inattendues (ex: problème de logique dans les calculs post-suppression)
-        # Le commit principal a peut-être déjà eu lieu.
-        # Un rollback ici est pour toute transaction implicite que Python ou Flask pourrait gérer.
         if db and not db.closed:
             db.rollback()
         print(f"Erreur Exception API supprimer enseignant: {e}")
@@ -756,6 +769,4 @@ def api_supprimer_enseignant(enseignant_id):
 
 # --- Démarrage de l'application ---
 if __name__ == "__main__":
-    # Exécute l'application Flask en mode débogage
-    # 'host="0.0.0.0"' rend l'application accessible depuis d'autres machines sur le réseau
     app.run(host="0.0.0.0", port=8080, debug=True)
