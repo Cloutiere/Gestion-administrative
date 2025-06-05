@@ -1,7 +1,80 @@
 [project]
 name = "python-template"
 version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+description = "Une application Flask pour la gestion des tâches enseignants."
+authors = [{name = "Votre Nom", email = "vous@example.com"}]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "flask>=3.1.1",
+    "psycopg2-binary>=2.9.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+]
+
+# --- Configuration de Ruff ---
+[tool.ruff]
+# Répertoires source à vérifier.
+src = ["."]
+# Exclure les répertoires typiques.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    ".pythonlibs",
+]
+# Longueur maximale des lignes (s'applique au linter et au formateur).
+line-length = 150
+# Définir la version Python cible pour Ruff (doit correspondre à votre `requires-python`)
+target-version = "py311"
+
+
+# --- Configuration spécifique au Linter de Ruff ---
+[tool.ruff.lint]
+# Règles de linter à activer.
+select = ["E", "F", "W", "I", "UP"] # Erreurs, Flakes, Warnings, Isort, Pyupgrade
+
+# Vous pouvez ignorer des règles spécifiques si nécessaire.
+# Par exemple:
+# ignore = ["E501"] # Ignorer les erreurs de ligne trop longue (si le formateur s'en charge)
+
+# Pour déclarer des variables globales que Ruff ne peut pas déduire (ex: `g` de Flask)
+# afin d'éviter des erreurs F821 (undefined name) dans certains modules.
+# globals = [
+#   "g"
+# ]
+
+# Il est possible de spécifier quelles règles sont "fixables" ou "non-fixables"
+# mais ce n'est généralement pas nécessaire pour une configuration de base.
+# fixable = ["A", "B"] # Sélectionne TOUTES les règles fixables de A et B
+# unfixable = []
+
+
+# --- Configuration spécifique au Formateur de Ruff ---
+[tool.ruff.format]
+# Style de guillemets pour les chaînes de caractères.
+quote-style = "double"
+
+# Indentation : espaces ou tabulations.
+indent-style = "space"
+
+# Si vous souhaitez sauter le formatage des chaînes de type f-string multilignes complexes.
+# skip-magic-trailing-comma = false

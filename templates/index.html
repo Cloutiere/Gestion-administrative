@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Tâches Enseignants</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> <!-- On préparera un CSS plus tard -->
+</head>
+<body>
+    <header>
+        <h1>Application de Gestion des Tâches</h1>
+    </header>
+    <nav>
+        <h2>Navigation par Champ</h2>
+        <ul>
+            {% if champs %}
+                {% for champ in champs %}
+                <li>
+                    <a href="{{ url_for('page_champ', champ_no=champ.champno) }}">
+                        {{ champ.champno }} - {{ champ.champnom }}
+                    </a>
+                </li>
+                {% endfor %}
+            {% else %}
+                <li>Aucun champ trouvé ou erreur de chargement.</li>
+            {% endif %}
+        </ul>
+        <!-- Plus tard, un lien vers la page sommaire globale -->
+    </nav>
+    <main>
+        <p>Bienvenue ! Sélectionnez un champ pour commencer.</p>
+    </main>
+    <footer>
+        <p>2025 Pour l'école Marie-Rivier</p>
+    </footer>
+</body>
+</html>
