@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Réassignation des Cours</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .select-champ {
+            min-width: 150px;
+        }
+        .btn-reassigner {
+            padding: 5px 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-reassigner:hover {
+            background-color: #0056b3;
+        }
+        .btn-reassigner:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .message-area {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none; /* Caché par défaut */
+        }
+        .message-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Administration : Réassigner un Cours à un Champ</h1>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('index') }}">Accueil</a></li>
+                <li><a href="{{ url_for('page_sommaire') }}">Sommaire Global</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <div id="message-container" class="message-area"></div>
+
+        {% if cours_a_reassigner and champs_destination %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Code Cours</th>
+                        <th>Descriptif</th>
+                        <th>Champ Actuel (No)</th>
+                        <th>Champ Actuel (Nom)</th>
+                        <th>Nouveau Champ</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cours in cours_a_reassigner %}
+                    <tr id="cours-row-{{ cours.codecours }}">
+                        <td>{{ cours.codecours }}</td>
+                        <td>{{ cours.coursdescriptif }}</td>
+                        <td class="champ-actuel-no" data-champno="{{ cours.champno }}">{{ cours.champno }}</td>
+                        <td class="champ-actuel-nom">{{ cours.champnom }}</td>
+                        <td>
+                            <select id="select-champ-{{ cours.codecours }}" class="select-champ" data-codecours="{{ cours.codecours }}">
+                                <option value="">-- Sélectionner un nouveau champ --</option>
+                                {% for champ_dest in champs_destination %}
+                                    {# On ne propose pas le champ actuel comme destination pour éviter une réassignation inutile #}
+                                    {# et pour faciliter la mise à jour de la liste après réassignation #}
+                                    {% if champ_dest.champno != cours.champno %}
+                                        <option value="{{ champ_dest.champno }}">{{ champ_dest.champnom }} ({{ champ_dest.champno }})</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <button class="btn-reassigner" data-codecours="{{ cours.codecours }}">Réassigner</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% elif not cours_a_reassigner %}
+            <p>Aucun cours n'a été trouvé dans la base de données.</p>
+        {% elif not champs_destination %}
+            <p>Aucun champ de destination n'a été trouvé. Impossible de réassigner les cours.</p>
+        {% else %}
+            <p>Un problème est survenu lors du chargement des données.</p>
+        {% endif %}
+    </main>
+
+    <footer>
+        <p>© {{ SCRIPT_YEAR if SCRIPT_YEAR else "2024" }} Votre Application de Gestion</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const messageContainer = document.getElementById('message-container');
+            // Stocker les données des champs de destination pour la mise à jour des selects
+            const champsDestinationData = JSON.parse('{{ champs_destination | tojson | safe }}');
+
+            document.querySelectorAll('.btn-reassigner').forEach(button => {
+                button.addEventListener('click', function() {
+                    const codeCours = this.dataset.codecours;
+                    const selectElement = document.getElementById(`select-champ-${codeCours}`);
+                    const nouveauChampNo = selectElement.value;
+                    const ancienChampNoCell = document.querySelector(`#cours-row-${codeCours} .champ-actuel-no`);
+                    const ancienChampNo = ancienChampNoCell.dataset.champno; // Lire depuis data-champno
+
+                    if (!nouveauChampNo) {
+                        displayMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
+                        return;
+                    }
+
+                    if (nouveauChampNo === ancienChampNo) {
+                        displayMessage('Le cours est déjà dans ce champ. Aucune action effectuée.', 'error');
+                        return;
+                    }
+                    
+                    const nomCours = document.querySelector(`#cours-row-${codeCours} td:nth-child(2)`).textContent;
+                    const nomNouveauChamp = selectElement.options[selectElement.selectedIndex].text;
+
+                    if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${nomCours}" (${codeCours}) au champ "${nomNouveauChamp}" ?`)) {
+                        return;
+                    }
+
+                    // Désactiver le bouton pour éviter les clics multiples
+                    this.disabled = true;
+
+                    fetch('/api/cours/reassigner_champ', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            code_cours: codeCours,
+                            nouveau_champ_no: nouveauChampNo
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            displayMessage(data.message, 'success');
+                            // Mettre à jour l'UI
+                            const row = document.getElementById(`cours-row-${codeCours}`);
+                            const champNoCell = row.querySelector('.champ-actuel-no');
+                            const champNomCell = row.querySelector('.champ-actuel-nom');
+
+                            // Mettre à jour les cellules du tableau avec les nouvelles valeurs
+                            champNoCell.textContent = data.nouveau_champ_no;
+                            champNomCell.textContent = data.nouveau_champ_nom;
+                            
+                            // Mettre à jour l'attribut data-champno qui stocke le champ actuel
+                            champNoCell.dataset.champno = data.nouveau_champ_no;
+
+                            // Mettre à jour les options du select pour ce cours
+                            updateSelectOptions(selectElement, data.nouveau_champ_no, ancienChampNo);
+
+                        } else {
+                            displayMessage(data.message || 'Une erreur est survenue.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erreur lors de la réassignation:', error);
+                        displayMessage('Erreur de communication avec le serveur.', 'error');
+                    })
+                    .finally(() => {
+                        // Réactiver le bouton après la tentative
+                        this.disabled = false;
+                    });
+                });
+            });
+
+            function displayMessage(message, type) {
+                messageContainer.textContent = message;
+                messageContainer.className = `message-area message-${type}`; // Applique la classe de succès ou d'erreur
+                messageContainer.style.display = 'block'; // Rend le conteneur visible
+
+                // Optionnel: cacher le message après quelques secondes
+                setTimeout(() => {
+                    messageContainer.style.display = 'none';
+                }, 5000); // Cache après 5 secondes
+            }
+
+            function updateSelectOptions(selectElement, nouveauChampNoActuel, ancienChampNoPrecedent) {
+                // Vider les options actuelles (sauf la première "-- Sélectionner --")
+                while (selectElement.options.length > 1) {
+                    selectElement.remove(1);
+                }
+
+                // Récupérer le nom du champ qui était précédemment le champ actuel (et qui doit maintenant être une option)
+                const champPrecedentInfo = champsDestinationData.find(ch => ch.champno === ancienChampNoPrecedent);
+
+                champsDestinationData.forEach(champ => {
+                    if (champ.champno !== nouveauChampNoActuel) { // Ne pas ajouter le nouveau champ actuel comme option
+                        const option = document.createElement('option');
+                        option.value = champ.champno;
+                        option.textContent = `${champ.champnom} (${champ.champno})`;
+                        selectElement.appendChild(option);
+                    }
+                });
+                
+                // Si l'ancien champ (qui vient d'être quitté) existe dans la liste des champs, on l'ajoute.
+                // Cela est utile si on veut "annuler" en le re-sélectionnant.
+                // Cette logique est déjà couverte par la boucle ci-dessus si ancienChampNoPrecedent est dans champsDestinationData
+                // et différent de nouveauChampNoActuel.
+                // Il faut s'assurer que `champsDestinationData` contient bien tous les champs.
+                // La logique initiale du template Jinja2 excluait déjà le champ actuel.
+                // Ici, nous reconstruisons la liste en excluant le *nouveau* champ actuel.
+
+                selectElement.value = ""; // Réinitialiser la sélection
+            }
+        });
+    </script>
+</body>
+</html>

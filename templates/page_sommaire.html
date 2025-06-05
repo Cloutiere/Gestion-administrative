@@ -14,7 +14,7 @@
         th { background-color: #e9ecef; }
         .highlight-moyenne { font-weight: bold; background-color: #e7f3fe; } /* Section pour la moyenne générale */
         .statut-non-compte { color: #6c757d; font-style: italic; } /* Pour enseignants temps partiel ou fictifs */
-        .total-row td { font-weight: bold; } /* Styles pour les lignes de total (non utilisé ici, mais bonne pratique) */
+        .total-row td { font-weight: bold; } /* Styles pour les lignes de total */
     </style>
 </head>
 <body>
@@ -28,7 +28,7 @@
         <section class="section-sommaire">
             <h2>Détail des Tâches par Enseignant</h2>
             {% if enseignants %}
-            <table>
+            <table id="table-detail-enseignants">
                 <thead>
                     <tr>
                         <th>Champ</th>
@@ -41,13 +41,13 @@
                 </thead>
                 <tbody>
                     {% for ens in enseignants %}
-                    <tr>
+                    <tr data-enseignant-id="{{ ens.enseignantid }}"> {# Ajout d'un identifiant pour la mise à jour JS #}
                         <td>{{ ens.champno }} - {{ ens.champnom }}</td>
                         <td>{{ ens.nomcomplet }}</td>
-                        <td>{{ ens.periodes_cours }}</td>
-                        <td>{{ ens.periodes_autres }}</td>
-                        <td>{{ ens.total_periodes }}</td>
-                        <td>
+                        <td class="periodes-cours">{{ ens.periodes_cours }}</td>
+                        <td class="periodes-autres">{{ ens.periodes_autres }}</td>
+                        <td class="total-periodes">{{ ens.total_periodes }}</td>
+                        <td class="compte-moyenne">
                             {% if ens.compte_pour_moyenne_champ %}
                                 Oui
                             {% else %}
@@ -61,7 +61,7 @@
                 </tbody>
             </table>
             {% else %}
-            <p>Aucun enseignant à afficher.</p>
+            <p id="aucun-enseignant-message">Aucun enseignant à afficher.</p>
             {% endif %}
         </section>
 
@@ -69,7 +69,7 @@
         <section class="section-sommaire">
             <h2>Moyennes des Périodes par Champ (Temps Plein non Fictifs)</h2>
             {% if moyennes_par_champ %}
-            <table>
+            <table id="table-moyennes-par-champ">
                 <thead>
                     <tr>
                         <th>N° Champ</th>
@@ -79,23 +79,23 @@
                 </thead>
                 <tbody>
                     {% for champ_no, data in moyennes_par_champ.items() %}
-                    <tr>
+                    <tr data-champ-no="{{ champ_no }}"> {# Ajout d'un identifiant pour la mise à jour JS #}
                         <td>{{ champ_no }}</td>
                         <td>{{ data.champ_nom }}</td>
-                        <td>{{ "%.2f"|format(data.moyenne) }}</td> {# Affiche la moyenne avec 2 décimales #}
+                        <td class="moyenne-periodes">{{ "%.2f"|format(data.moyenne) }}</td> {# Affiche la moyenne avec 2 décimales #}
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <p>Aucune donnée de moyenne par champ disponible.</p>
+            <p id="aucune-moyenne-champ-message">Aucune donnée de moyenne par champ disponible.</p>
             {% endif %}
         </section>
 
         <!-- Section affichant la moyenne générale de l'établissement pour les enseignants à temps plein non fictifs -->
         <section class="section-sommaire highlight-moyenne">
             <h2>Moyenne Générale de l'Établissement (Temps Plein non Fictifs)</h2>
-            <p style="font-size: 1.5em; text-align: center;">
+            <p id="moyenne-generale-etablissement" style="font-size: 1.5em; text-align: center;">
                 {{ "%.2f"|format(moyenne_generale) }} périodes {# Affiche la moyenne générale avec 2 décimales #}
             </p>
         </section>
@@ -104,5 +104,160 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre École</p> {# SCRIPT_YEAR est passé depuis Flask #}
     </footer>
+
+    <script>
+        const INTERVAL_MISE_A_JOUR = 7000; // Délai en millisecondes (7 secondes)
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Lancer la mise à jour initiale au chargement de la page est optionnel, 
+            // car les données sont déjà rendues par le serveur.
+            // Si vous souhaitez forcer un premier rafraîchissement JS :
+            // mettreAJourDonneesSommaire(); 
+
+            // Configurer l'intervalle pour les mises à jour périodiques
+            setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
+        });
+
+        /**
+         * Récupère les données actualisées du sommaire depuis l'API et met à jour l'interface.
+         */
+        async function mettreAJourDonneesSommaire() {
+            try {
+                const response = await fetch('/api/sommaire/donnees');
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // Mise à jour du tableau des détails par enseignant
+                mettreAJourTableauEnseignants(data.enseignants);
+
+                // Mise à jour du tableau des moyennes par champ
+                mettreAJourTableauMoyennesChamp(data.moyennes_par_champ);
+
+                // Mise à jour de la moyenne générale
+                const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
+                if (elMoyenneGenerale) {
+                    elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
+                }
+
+            } catch (error) {
+                console.error("Erreur lors de la mise à jour du sommaire:", error);
+                // Gérer l'erreur, par exemple, afficher un message à l'utilisateur si nécessaire
+            }
+        }
+
+        /**
+         * Met à jour le contenu du tableau des détails des enseignants.
+         * @param {Array} enseignantsData Les données des enseignants récupérées de l'API.
+         */
+        function mettreAJourTableauEnseignants(enseignantsData) {
+            const tbody = document.querySelector('#table-detail-enseignants tbody');
+            const aucunEnseignantMsg = document.getElementById('aucun-enseignant-message');
+
+            if (!tbody) return; // Si le tableau n'existe pas, ne rien faire
+
+            // Vider le corps du tableau actuel
+            tbody.innerHTML = ''; 
+
+            if (enseignantsData && enseignantsData.length > 0) {
+                if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'none'; // Cacher le message "aucun enseignant"
+
+                enseignantsData.forEach(ens => {
+                    const row = tbody.insertRow();
+                    row.dataset.enseignantId = ens.enseignantid; // Conserver l'ID
+
+                    row.insertCell().textContent = `${ens.champno} - ${ens.champnom}`; // Colonne Champ
+                    row.insertCell().textContent = ens.nomcomplet; // Colonne Nom de l'Enseignant
+                    
+                    // Colonne Pér. Cours
+                    const cellPerCours = row.insertCell();
+                    cellPerCours.textContent = ens.periodes_cours;
+                    cellPerCours.classList.add('periodes-cours');
+                    
+                    // Colonne Pér. Autres
+                    const cellPerAutres = row.insertCell();
+                    cellPerAutres.textContent = ens.periodes_autres;
+                    cellPerAutres.classList.add('periodes-autres');
+                    
+                    // Colonne Total Pér.
+                    const cellTotalPer = row.insertCell();
+                    cellTotalPer.textContent = ens.total_periodes;
+                    cellTotalPer.classList.add('total-periodes');
+                    
+                    // Colonne Compte pour Moyenne Champ
+                    const cellCompteMoyenne = row.insertCell();
+                    cellCompteMoyenne.classList.add('compte-moyenne');
+                    if (ens.compte_pour_moyenne_champ) {
+                        cellCompteMoyenne.textContent = 'Oui';
+                    } else {
+                        let nonCompteText = 'Non';
+                        if (ens.estfictif) nonCompteText += ' (Fictif)';
+                        else if (!ens.esttempsplein) nonCompteText += ' (Temps Partiel)';
+                        cellCompteMoyenne.innerHTML = `<span class="statut-non-compte">${nonCompteText}</span>`;
+                    }
+                });
+            } else {
+                // Afficher le message si aucun enseignant
+                if (aucunEnseignantMsg) {
+                    aucunEnseignantMsg.style.display = 'block';
+                } else { // Si le message n'existait pas, le créer et l'ajouter (robustesse)
+                    const p = document.createElement('p');
+                    p.id = 'aucun-enseignant-message';
+                    p.textContent = 'Aucun enseignant à afficher.';
+                    const tableElement = document.querySelector('#table-detail-enseignants');
+                    if (tableElement) {
+                        tableElement.insertAdjacentElement('afterend', p);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Met à jour le contenu du tableau des moyennes par champ.
+         * @param {Object} moyennesChampData Les données des moyennes par champ récupérées de l'API.
+         */
+        function mettreAJourTableauMoyennesChamp(moyennesChampData) {
+            const tbody = document.querySelector('#table-moyennes-par-champ tbody');
+            const aucuneMoyenneMsg = document.getElementById('aucune-moyenne-champ-message');
+
+            if (!tbody) return;
+
+            tbody.innerHTML = ''; // Vider
+
+            const champNos = Object.keys(moyennesChampData); // Récupère les clés (numéros de champ)
+
+            if (champNos.length > 0) {
+                 if (aucuneMoyenneMsg) aucuneMoyenneMsg.style.display = 'none';
+
+                champNos.forEach(champ_no => {
+                    const data = moyennesChampData[champ_no];
+                    const row = tbody.insertRow();
+                    row.dataset.champNo = champ_no; // Conserver l'ID du champ
+
+                    row.insertCell().textContent = champ_no; // Colonne N° Champ
+                    row.insertCell().textContent = data.champ_nom; // Colonne Nom du Champ
+                    
+                    // Colonne Moyenne Périodes
+                    const cellMoyenne = row.insertCell();
+                    cellMoyenne.classList.add('moyenne-periodes');
+                    cellMoyenne.textContent = parseFloat(data.moyenne).toFixed(2);
+                });
+            } else {
+                if (aucuneMoyenneMsg) {
+                    aucuneMoyenneMsg.style.display = 'block';
+                } else {
+                    const p = document.createElement('p');
+                    p.id = 'aucune-moyenne-champ-message';
+                    p.textContent = 'Aucune donnée de moyenne par champ disponible.';
+                    const tableElement = document.querySelector('#table-moyennes-par-champ');
+                    if (tableElement) {
+                        tableElement.insertAdjacentElement('afterend', p);
+                    }
+                }
+            }
+        }
+
+    </script>
 </body>
 </html>
