@@ -16,8 +16,8 @@
         .enseignants-section { 
             flex: 2; 
             min-width: 400px; 
-            max-height: calc(100vh - 200px); /* Ajustez cette valeur ! */
-            overflow-y: auto; 
+            max-height: calc(100vh - 200px); /* Hauteur maximale pour permettre le défilement interne */
+            overflow-y: auto; /* Défilement vertical pour la section des enseignants si elle dépasse la hauteur max */
             padding:10px; 
             border: 1px solid #ccc; 
             border-radius:5px; 
@@ -31,6 +31,8 @@
             border: 1px solid #ccc; 
             border-radius:5px; 
             background-color: #f9f9f9;
+            max-height: calc(100vh - 200px); /* Hauteur maximale pour ces sections aussi */
+            overflow-y: auto; /* Permettre le défilement si le contenu est trop grand */
         }
 
         .enseignant-card { 
@@ -38,50 +40,97 @@
             padding: 10px; 
             margin-bottom: 10px; 
             background-color: #fff; 
-            transition: background-color 0.3s ease; /* Pour une transition douce du surlignage */
+            transition: background-color 0.3s ease;
         }
-
-        /* Supprimer le style spécifique pour temps partiel qui ajoutait un fond rose */
-        /* .enseignant-temps-partiel { background-color: #fff0f0; border-left: 5px solid #ffcccc; } */
-        .enseignant-temps-partiel .titre-enseignant-bascule small:first-of-type { 
-            /* Optionnel: garder une indication visuelle pour temps partiel dans le titre si désiré, sans fond */
-            /* color: #b94a48; */ /* Exemple de couleur pour le texte "Temps Partiel" */
-        }
-
 
         .enseignant-fictif { background-color: #f0f8ff; border-left: 5px solid #cce5ff; } 
 
-        /* Nouveau style pour surligner la carte active (détail visible) */
         .enseignant-card.detail-visible {
-            background-color: #e7f3fe; /* Bleu clair pour le surlignage, similaire à .highlight-moyenne */
-            border-left: 5px solid #007bff; /* Bordure plus prononcée pour l'actif */
+            background-color: #e7f3fe; 
+            border-left: 5px solid #007bff; 
         }
 
-        .titre-enseignant-bascule { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-        .titre-enseignant-bascule:hover { background-color: #f0f0f0; }
-        .titre-enseignant-bascule .arrow-indicator { margin-left: 10px; transition: transform 0.3s ease; }
-        .enseignant-card.detail-visible .titre-enseignant-bascule .arrow-indicator { transform: rotate(90deg); }
+        .entete-enseignant {
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            cursor: pointer; 
+        }
+        .entete-enseignant:hover { background-color: #f0f0f0; }
+        .entete-enseignant .arrow-indicator { margin-left: 10px; transition: transform 0.3s ease; }
+        .enseignant-card.detail-visible .entete-enseignant .arrow-indicator { transform: rotate(90deg); }
 
-        .vue-detaillee-contenu { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #eee; }
-        .enseignant-card.detail-visible .vue-detaillee-contenu { display: block; }
+        /* Réduction de la marge inférieure du h3 pour le rapprocher du tableau */
+        .entete-enseignant h3.titre-enseignant-bascule {
+            margin-bottom: 5px; /* Ajusté pour moins d'espace */
+        }
 
-        .resume-cours-attribues-list { list-style-type: none; padding-left: 0; margin-top: 5px; font-size: 0.9em; }
-        .resume-cours-attribues-list li { padding: 2px 0; }
+        .nom-enseignant-texte {
+            flex-grow: 1;
+        }
 
+        .action-enseignant-fictif {
+            text-align: right; 
+            margin-top: 0; /* Réduit pour coller */
+            margin-bottom: 5px; /* Espace avant le tableau des attributions */
+        }
+
+        .contenu-selection-cours { 
+            display: none; 
+            margin-top: 10px; 
+            padding-top: 10px; 
+            border-top: 1px dashed #eee; 
+        }
+        .enseignant-card.detail-visible .contenu-selection-cours { display: block; }
+
+        /* Style global pour les tables, sauf si surchargé */
         table { width: 100%; border-collapse: collapse; margin-top:10px; font-size: 0.9em; }
+        
+        /* Surcharge pour les tables d'attribution pour réduire l'espace supérieur */
+        div.cours-attribues > table {
+            margin-top: 5px; /* Réduit pour coller au nom/bouton */
+        }
+
         th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
         th { background-color: #e9ecef; }
+        
+        .sous-titre-cours-restants td, .sous-titre-attributions td {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+            border-top: 2px solid #ccc;
+            border-bottom: 1px solid #ccc;
+        }
+        
+        .total-attributions-row td {
+            font-weight: bold;
+            background-color: #e9ecef; 
+            text-align: right; 
+        }
+        .total-attributions-row td:first-child {
+             text-align: left; 
+        }
+
+        .cours-attribues {
+            margin-top: 0px; /* Réduit pour coller aux éléments précédents */
+        }
+
         .cours-selection button, .btn-retirer-cours, .btn-supprimer-enseignant {
             margin-left:5px; cursor:pointer; padding: 3px 8px; font-size: 0.85em;
         }
         .btn-retirer-cours, .btn-supprimer-enseignant { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
         .btn-retirer-cours:hover, .btn-supprimer-enseignant:hover { background-color: #f5c6cb;}
         .section-title { margin-top: 20px; margin-bottom:10px; font-size: 1.2em; color: #333; border-bottom: 1px solid #eee; padding-bottom:5px;}
-        .cours-attribues ul, .cours-selection ul { list-style-type: none; padding-left: 0; }
-        .cours-attribues li, .cours-selection li { margin-bottom: 5px; padding: 5px; border-bottom: 1px dashed #eee; }
-        .cours-attribues li:last-child, .cours-selection li:last-child { border-bottom: none; }
-        .liste-cours-a-choisir li[data-complet="true"] { opacity:0.5; text-decoration:line-through; }
-        .liste-cours-a-choisir li[data-complet="true"] button { display:none; }
+        
+        .cours-selection { margin-top: 15px; }
+        .cours-selection ul { list-style-type: none; padding-left: 0; margin-top: 5px; margin-bottom: 5px; }
+        .cours-selection li { 
+            margin-bottom: 2px; 
+            padding: 3px 5px; 
+            border-bottom: 1px dashed #eee; 
+        }
+        .cours-selection li:last-child { border-bottom: none; }
+
     </style>
 </head>
 <body>
@@ -91,59 +140,55 @@
     </header>
 
     <div class="container">
-        <!-- La classe 'enseignant-temps-partiel' est toujours ajoutée par Jinja, mais son style de fond a été retiré/commenté -->
         <section class="enseignants-section">
             <h2 class="section-title">Attribution des Tâches aux Enseignants</h2>
             {% for enseignant in enseignants %}
             <div class="enseignant-card {% if not enseignant.esttempsplein %}enseignant-temps-partiel{% endif %} {% if enseignant.estfictif %}enseignant-fictif{% endif %}"
                  id="enseignant-card-{{ enseignant.enseignantid }}">
 
-                <div class="vue-condensee">
-                    <h3 class="titre-enseignant-bascule">
-                        <span>
-                            {{ enseignant.nomcomplet }}
-                            {% if not enseignant.esttempsplein %}<small>(Temps Partiel)</small>{% endif %}
-                            {% if enseignant.estfictif %}<small>(Tâche Restante)</small>{% endif %}
-                            {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
-                        </span>
-                        <span class="arrow-indicator">▶</span>
+                <div class="entete-enseignant">
+                    <h3 class="titre-enseignant-bascule nom-enseignant-texte">
+                        {{ enseignant.nomcomplet }}
+                        {% if not enseignant.esttempsplein %}<small>(Temps Partiel)</small>{% endif %}
+                        {% if enseignant.estfictif %}<small>(Tâche Restante)</small>{% endif %}
+                        {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
                     </h3>
-                    <div class="resume-cours-attribues">
-                        <ul class="resume-cours-attribues-list" id="resume-attributions-list-{{ enseignant.enseignantid }}">
-                            {# Généré par JavaScript #}
-                        </ul>
-                    </div>
-                    <p><strong>Total Périodes:</strong> <span id="total-gen-condense-{{ enseignant.enseignantid }}">{{ enseignant.periodes_actuelles.total_periodes }}</span></p>
+                    <span class="arrow-indicator">▶</span>
                 </div>
 
-                <div class="vue-detaillee-contenu">
-                    {% if enseignant.estfictif %}
-                        <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}" style="float:right; margin-bottom:5px;">Supprimer Tâche</button>
-                    {% endif %}
-                    <div class="cours-attribues">
-                        <h4>Cours Actuellement Attribués (Détail) :</h4>
-                        <ul id="attributions-list-{{ enseignant.enseignantid }}">
-                            {% for attribution in enseignant.attributions %}
-                            <li data-attribution-id="{{ attribution.attributionid }}" data-codecours="{{ attribution.codecours }}" data-nbperiodes="{{ attribution.nbperiodes }}">
-                                {{ attribution.coursdescriptif }} ({{ attribution.nbperiodes }} pér. x {{ attribution.nbgroupespris }} grp)
-                                <button class="btn-retirer-cours" data-attribution-id="{{ attribution.attributionid }}">Retirer</button>
-                            </li>
-                            {% else %}
-                            <li class="no-attributions">Aucun cours attribué pour le moment.</li>
-                            {% endfor %}
-                        </ul>
-                    </div>
+                {% if enseignant.estfictif %}
+                <div class="action-enseignant-fictif">
+                    <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer Tâche</button>
+                </div>
+                {% endif %}
+                
+                <div class="cours-attribues">
+                    <table id="table-attributions-{{ enseignant.enseignantid }}">
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Cours choisi</th>
+                                <th>Pér.</th>
+                                <th>Nb. grp.</th>
+                                <th>Pér. totale</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-attributions-{{ enseignant.enseignantid }}">
+                            {# Contenu généré par JavaScript #}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="contenu-selection-cours">
                     <div class="cours-selection">
-                        <h4>Cours d'enseignement disponibles :</h4>
+                        <h4>Cours d'enseignement disponibles à l'attribution :</h4>
                         <ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul>
                     </div>
                     <div class="cours-selection">
-                        <h4>Autres tâches disponibles (coordination, soutien) :</h4>
+                        <h4>Autres tâches disponibles à l'attribution :</h4>
                         <ul class="liste-cours-a-choisir" data-type-cours="autre"></ul>
                     </div>
-                    <p><strong>Total Périodes Enseignement:</strong> <span id="total-ens-{{ enseignant.enseignantid }}">{{ enseignant.periodes_actuelles.periodes_cours }}</span></p>
-                    <p><strong>Total Périodes Autres:</strong> <span id="total-autre-{{ enseignant.enseignantid }}">{{ enseignant.periodes_actuelles.periodes_autres }}</span></p>
-                    <p><strong>Total Général (Détail):</strong> <span id="total-gen-detail-{{ enseignant.enseignantid }}">{{ enseignant.periodes_actuelles.total_periodes }}</span></p>
                 </div>
             </div>
             {% endfor %}
@@ -153,20 +198,20 @@
             <button id="btn-creer-tache-restante" style="margin-top:15px;">Créer une Tâche Restante</button>
         </section>
 
-        <!-- Sections latérales (inchangées) -->
         <section class="cours-restants-section">
             <h2 class="section-title">Périodes Restantes dans ce Champ</h2>
             <table id="tableau-cours-restants">
-                <thead><tr><th>Code</th><th>Cours disponibles</th><th>Pér.</th><th>Grp. rest.</th></tr></thead>
-                <tbody>
-                    {% for cours in cours_disponibles_pour_tableau_restant %}
+                <thead>
                     <tr>
-                        <td>{{ cours.codecours }}</td><td>{{ cours.coursdescriptif }}</td>
-                        <td>{{ cours.nbperiodes }}</td><td id="grp-restant-{{ cours.codecours }}">{{ cours.grprestant }}</td>
+                        <th>Code</th>
+                        <th>Cours disponibles</th>
+                        <th>Pér.</th>
+                        <th>Grp. rest.</th>
+                        <th>Pér. restantes</th>
                     </tr>
-                    {% else %}
-                    <tr><td colspan="4">Aucun cours disponible ou tous les groupes sont attribués.</td></tr>
-                    {% endfor %}
+                </thead>
+                <tbody>
+                    <tr><td colspan="5" style="text-align:center;">Chargement des données...</td></tr>
                 </tbody>
             </table>
         </section>
@@ -177,7 +222,7 @@
                 <thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead>
                 <tbody>
                     {% for tache in taches_sommaire_champ %}
-                    <tr data-enseignant-id="{{ tache.enseignant_id }}"> <!-- Assurez-vous que tache.enseignant_id est bien passé par main.py -->
+                    <tr data-enseignant-id="{{ tache.enseignant_id }}">
                         <td>{{ tache.nom }}</td><td class="sum-cours-val">{{ tache.periodes_cours }}</td>
                         <td class="sum-autres-val">{{ tache.periodes_autres }}</td><td class="sum-total-val">{{ tache.total_periodes }}</td>
                         <td>{% if tache.est_fictif %}Fictif{% elif not tache.est_temps_plein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
@@ -193,14 +238,12 @@
     </div>
 
     <script>
-        // Variables globales (inchangées)
         let G_COURS_ENSEIGNEMENT_CHAMP = []; 
         let G_COURS_AUTRES_TACHES_CHAMP = []; 
         let G_ENSEIGNANTS_INITIAL_DATA = []; 
         const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}"; 
 
         document.addEventListener('DOMContentLoaded', function () {
-            // Parsing JSON (inchangé)
             try {
                 G_COURS_ENSEIGNEMENT_CHAMP = JSON.parse('{{ cours_enseignement_champ|tojson|safe }}');
                 G_COURS_AUTRES_TACHES_CHAMP = JSON.parse('{{ cours_autres_taches_champ|tojson|safe }}');
@@ -210,102 +253,128 @@
                 alert("Erreur chargement données page. Fonctionnalités affectées.");
             }
 
-            // Initialisations (inchangées)
             initialiserTableauSommaire(); 
-            regenererToutesLesListesDeCoursAChoisir(); 
-            initialiserToutesLesListesCondensees();
+            regenererTableauCoursRestants(); 
+            
+            G_ENSEIGNANTS_INITIAL_DATA.forEach(enseignant => {
+                regenererTableauAttributionsEnseignant(enseignant.enseignantid, enseignant.attributions || []);
+                const enseignantCard = document.getElementById(`enseignant-card-${enseignant.enseignantid}`);
+                if (enseignantCard) {
+                    const ulEnseignement = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
+                    if (ulEnseignement) {
+                        ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignant.enseignantid, 'enseignement');
+                    }
+                    const ulAutres = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
+                    if (ulAutres) {
+                        ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignant.enseignantid, 'autre');
+                    }
+                }
+            });
 
-            // Gestionnaire de clics section enseignants (inchangé)
             const enseignantsSection = document.querySelector('.enseignants-section');
             if (enseignantsSection) {
                 enseignantsSection.addEventListener('click', gestionnaireClicsEnseignantsSection);
             }
 
-            // Gestionnaire création tâche restante (inchangé)
             document.getElementById('btn-creer-tache-restante')?.addEventListener('click', async function() {
                 await creerTacheRestante(this);
             });
 
-            // Gestionnaire pour basculer la vue détaillée des enseignants (inchangé)
-            // La logique CSS s'occupe du surlignage via la classe '.detail-visible'
-            document.querySelectorAll('.titre-enseignant-bascule').forEach(titre => {
-                titre.addEventListener('click', function() {
+            document.querySelectorAll('.entete-enseignant').forEach(entete => {
+                entete.addEventListener('click', function() {
                     const enseignantCard = this.closest('.enseignant-card');
                     if (enseignantCard) {
-                        // Si on clique sur une carte déjà ouverte, on la ferme
-                        if (enseignantCard.classList.contains('detail-visible')) {
-                            enseignantCard.classList.remove('detail-visible');
-                        } else {
-                            // Sinon, on ferme toutes les autres et on ouvre celle-ci
-                            document.querySelectorAll('.enseignant-card.detail-visible').forEach(card => {
-                                card.classList.remove('detail-visible');
-                            });
+                        const etaitVisible = enseignantCard.classList.contains('detail-visible');
+                        document.querySelectorAll('.enseignant-card.detail-visible').forEach(card => {
+                            card.classList.remove('detail-visible');
+                        });
+                        if (!etaitVisible) {
                             enseignantCard.classList.add('detail-visible');
                         }
                     }
                 });
             });
         });
+        
+        function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray) {
+            const tbody = document.getElementById(`tbody-attributions-${enseignantId}`);
+            if (!tbody) return;
+            tbody.innerHTML = ''; 
 
-        // --- Toutes les fonctions JavaScript suivantes restent INCHANGÉES par rapport à la version précédente ---
-        // initialiserToutesLesListesCondensees, regenererListeCondenseeAttributions, 
-        // gestionnaireClicsEnseignantsSection, attribuerCours, retirerCours,
-        // creerTacheRestante, supprimerEnseignantFictif, mettreAJourDonneesGlobalesCours,
-        // regenererTableauCoursRestants, regenererToutesLesListesDeCoursAChoisir,
-        // genererListeHTMLCoursDispo, mettreAJourTotauxPeriodesEnseignant,
-        // mettreAJourLigneSommaire, ajouterCoursAttribueVisuellementDetail,
-        // retirerCoursAttribueVisuellementDetail, ajouterEnseignantDynamiquement,
-        // ajouterAuTableauSommaire, recalculerEtAfficherMoyenneChamp, initialiserTableauSommaire.
-        // (Pour la concision, je ne les répète pas ici, elles sont identiques à la version précédente)
+            const attributionsEnseignement = attributionsArray.filter(attr => !attr.estcoursautre)
+                .sort((a,b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
+            const attributionsAutres = attributionsArray.filter(attr => attr.estcoursautre)
+                .sort((a,b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
 
-        // Copiez-collez ici l'intégralité du bloc <script> de la version précédente
-        // à partir de la fonction initialiserToutesLesListesCondensees()
-        // jusqu'à la fin de initialiserTableauSommaire().
+            let totalPeriodesEnseignantCalcule = 0;
+            let contenuAjoute = false; // Pour savoir si on a ajouté au moins une ligne de cours
 
-        function initialiserToutesLesListesCondensees() {
-            G_ENSEIGNANTS_INITIAL_DATA.forEach(enseignant => {
-                regenererListeCondenseeAttributions(enseignant.enseignantid, enseignant.attributions || []);
-            });
-        }
-
-        function regenererListeCondenseeAttributions(enseignantId, attributions) {
-            const ulCondense = document.getElementById(`resume-attributions-list-${enseignantId}`);
-            if (!ulCondense) return;
-            ulCondense.innerHTML = ''; 
-
-            if (!attributions || attributions.length === 0) {
-                ulCondense.innerHTML = '<li class="no-attributions-condense">Aucun cours attribué.</li>';
-                return;
+            if (attributionsEnseignement.length > 0) {
+                const titreEnsRow = tbody.insertRow();
+                titreEnsRow.classList.add('sous-titre-attributions');
+                const titreEnsCell = titreEnsRow.insertCell();
+                titreEnsCell.colSpan = 6; 
+                titreEnsCell.textContent = "Périodes d'enseignement attribuées";
+                contenuAjoute = true;
+                
+                attributionsEnseignement.forEach(attr => {
+                    const row = tbody.insertRow();
+                    const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
+                    totalPeriodesEnseignantCalcule += totalPeriodesAttr;
+                    row.innerHTML = `
+                        <td>${attr.codecours}</td>
+                        <td>${attr.coursdescriptif}</td>
+                        <td>${attr.nbperiodes}</td>
+                        <td>${attr.nbgroupespris}</td>
+                        <td>${totalPeriodesAttr}</td>
+                        <td><button class="btn-retirer-cours" data-attribution-id="${attr.attributionid}">Retirer</button></td>
+                    `;
+                });
             }
 
-            const coursAgreges = {}; 
-            attributions.forEach(attr => {
-                if (!coursAgreges[attr.codecours]) {
-                    coursAgreges[attr.codecours] = {
-                        descriptif: attr.coursdescriptif,
-                        nbPeriodesUnitaire: attr.nbperiodes, 
-                        nbGroupes: 0,
-                        totalPeriodesCours: 0
-                    };
-                }
-                coursAgreges[attr.codecours].nbGroupes += attr.nbgroupespris; 
-                coursAgreges[attr.codecours].totalPeriodesCours += attr.nbperiodes * attr.nbgroupespris;
-            });
+            if (attributionsAutres.length > 0) {
+                const titreAutresRow = tbody.insertRow();
+                titreAutresRow.classList.add('sous-titre-attributions');
+                const titreAutresCell = titreAutresRow.insertCell();
+                titreAutresCell.colSpan = 6;
+                titreAutresCell.textContent = "Autres tâches attribuées";
+                contenuAjoute = true;
 
-            const coursAgregesTries = Object.values(coursAgreges).sort((a, b) => 
-                a.descriptif.localeCompare(b.descriptif)
-            );
-
-            coursAgregesTries.forEach(cours => {
-                const li = document.createElement('li');
-                li.textContent = `${cours.descriptif} (${cours.nbPeriodesUnitaire} pér. x ${cours.nbGroupes} grp) = ${cours.totalPeriodesCours} pér.`;
-                ulCondense.appendChild(li);
-            });
+                attributionsAutres.forEach(attr => {
+                    const row = tbody.insertRow();
+                    const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
+                    totalPeriodesEnseignantCalcule += totalPeriodesAttr;
+                    row.innerHTML = `
+                        <td>${attr.codecours}</td>
+                        <td>${attr.coursdescriptif}</td>
+                        <td>${attr.nbperiodes}</td>
+                        <td>${attr.nbgroupespris}</td>
+                        <td>${totalPeriodesAttr}</td>
+                        <td><button class="btn-retirer-cours" data-attribution-id="${attr.attributionid}">Retirer</button></td>
+                    `;
+                });
+            }
+            
+            if (!contenuAjoute) { // Si aucune attribution (ni enseignement, ni autre)
+                 const row = tbody.insertRow();
+                 row.innerHTML = `<td colspan="6" style="text-align:center; font-style:italic;">Aucune période attribuée pour le moment.</td>`;
+            }
+            
+            const totalRow = tbody.insertRow();
+            totalRow.classList.add('total-attributions-row');
+            const totalLabelCell = totalRow.insertCell();
+            totalLabelCell.colSpan = 4; 
+            totalLabelCell.textContent = "Total Périodes Attribuées:";
+            
+            const totalValueCell = totalRow.insertCell();
+            totalValueCell.textContent = totalPeriodesEnseignantCalcule;
+            
+            totalRow.insertCell(); // Cellule vide pour la colonne Action
         }
 
         function gestionnaireClicsEnseignantsSection(event) {
             const target = event.target; 
-            if (target.matches('.cours-selection button[data-enseignant-id][data-cours-code]')) {
+            if (target.matches('.contenu-selection-cours .cours-selection button[data-enseignant-id][data-cours-code]')) {
                 attribuerCours(target.dataset.enseignantId, target.dataset.coursCode, target.dataset.nbPeriodes, target);
             } 
             else if (target.classList.contains('btn-retirer-cours')) {
@@ -320,7 +389,7 @@
             }
         }
 
-        async function attribuerCours(enseignantId, codeCours, nbPeriodesCours, boutonClique) {
+        async function attribuerCours(enseignantId, codeCours, _nbPeriodesCours, boutonClique) {
             boutonClique.disabled = true; 
             boutonClique.textContent = '...'; 
             try {
@@ -333,21 +402,21 @@
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || "Erreur attribution cours.");
                 }
-
-                mettreAJourTotauxPeriodesEnseignant(enseignantId, data.periodes_enseignant);
+                
                 mettreAJourLigneSommaire(enseignantId, data.periodes_enseignant);
                 recalculerEtAfficherMoyenneChamp();
-
-                ajouterCoursAttribueVisuellementDetail(enseignantId, data.attribution_id, codeCours, nbPeriodesCours);
-                regenererListeCondenseeAttributions(enseignantId, data.attributions_enseignant || []);
+                
+                regenererTableauAttributionsEnseignant(enseignantId, data.attributions_enseignant || []);
 
                 mettreAJourDonneesGlobalesCours(codeCours, data.groupes_restants_cours);
                 regenererTableauCoursRestants();
-                regenererToutesLesListesDeCoursAChoisir();
+                regenererToutesLesListesDeCoursAChoisirGlobale();
+
 
             } catch (error) {
                 console.error('Erreur attribuerCours:', error);
                 alert(error.message);
+            } finally {
                 boutonClique.disabled = false; 
                 boutonClique.textContent = 'Attribuer';
             }
@@ -367,20 +436,19 @@
                     throw new Error(data.message || 'Erreur retrait cours.');
                 }
 
-                mettreAJourTotauxPeriodesEnseignant(data.enseignant_id, data.periodes_enseignant);
                 mettreAJourLigneSommaire(data.enseignant_id, data.periodes_enseignant);
                 recalculerEtAfficherMoyenneChamp();
 
-                retirerCoursAttribueVisuellementDetail(attributionId, data.enseignant_id);
-                regenererListeCondenseeAttributions(data.enseignant_id, data.attributions_enseignant || []);
+                regenererTableauAttributionsEnseignant(data.enseignant_id, data.attributions_enseignant || []);
 
                 mettreAJourDonneesGlobalesCours(data.code_cours, data.groupes_restants_cours);
                 regenererTableauCoursRestants();
-                regenererToutesLesListesDeCoursAChoisir();
+                regenererToutesLesListesDeCoursAChoisirGlobale();
 
             } catch (error) {
                 console.error('Erreur retirerCours:', error);
                 alert(error.message);
+            } finally {
                  boutonClique.disabled = false; 
                  boutonClique.textContent = 'Retirer';
             }
@@ -398,11 +466,16 @@
                 if (!response.ok || !data.success || !data.enseignant) {
                     throw new Error(data.message || 'Erreur création tâche restante.');
                 }
-
-                G_ENSEIGNANTS_INITIAL_DATA.push(data.enseignant); 
-                ajouterEnseignantDynamiquement(data.enseignant);
+                
+                const nouvelEnseignant = data.enseignant;
+                G_ENSEIGNANTS_INITIAL_DATA.push(nouvelEnseignant); 
+                ajouterEnseignantDynamiquement(nouvelEnseignant); 
+                
+                // Initialiser le tableau des attributions pour le nouvel enseignant (il sera vide)
+                regenererTableauAttributionsEnseignant(nouvelEnseignant.enseignantid, []);
+                
                 const periodesInitiales = data.periodes_actuelles || {periodes_cours:0, periodes_autres:0, total_periodes:0};
-                ajouterAuTableauSommaire(data.enseignant, periodesInitiales);
+                ajouterAuTableauSommaire(nouvelEnseignant, periodesInitiales);
                 recalculerEtAfficherMoyenneChamp(); 
             } catch (error) {
                 console.error('Erreur creerTacheRestante:', error);
@@ -437,14 +510,16 @@
                     });
                 }
                 regenererTableauCoursRestants();
-                regenererToutesLesListesDeCoursAChoisir();
+                regenererToutesLesListesDeCoursAChoisirGlobale();
                 recalculerEtAfficherMoyenneChamp(); 
 
             } catch (error) {
                 console.error('Erreur supprimerEnseignantFictif:', error);
                 alert(error.message);
-                boutonClique.disabled = false; 
-                boutonClique.textContent = 'Supprimer Tâche';
+                if (boutonClique && document.body.contains(boutonClique)) {
+                     boutonClique.disabled = false; 
+                     boutonClique.textContent = 'Supprimer Tâche';
+                }
             }
         }
 
@@ -458,55 +533,90 @@
 
         function regenererTableauCoursRestants() {
             const tbody = document.querySelector('#tableau-cours-restants tbody');
-            if (!tbody) return; 
+            if (!tbody) return;
             tbody.innerHTML = ''; 
 
-            const tousLesCoursDuChamp = [...G_COURS_ENSEIGNEMENT_CHAMP, ...G_COURS_AUTRES_TACHES_CHAMP]
-                                      .sort((a,b) => a.codecours.localeCompare(b.codecours));
+            let contenuGenere = false;
 
-            const codesVus = new Set(); 
-            tousLesCoursDuChamp.forEach(cours => {
-                if (!codesVus.has(cours.codecours)) {
+            const titreEnsRow = tbody.insertRow();
+            titreEnsRow.classList.add('sous-titre-cours-restants');
+            const titreEnsCell = titreEnsRow.insertCell();
+            titreEnsCell.colSpan = 5; 
+            titreEnsCell.textContent = "Périodes d'enseignement";
+            
+            if (G_COURS_ENSEIGNEMENT_CHAMP.length > 0) {
+                G_COURS_ENSEIGNEMENT_CHAMP.forEach(cours => {
                     const row = tbody.insertRow();
-                    row.innerHTML = `<td>${cours.codecours}</td><td>${cours.coursdescriptif}</td><td>${cours.nbperiodes}</td><td id="grp-restant-${cours.codecours}">${cours.grprestant}</td>`;
-                    codesVus.add(cours.codecours);
-                }
-            });
+                    const periodesRestantes = cours.nbperiodes * cours.grprestant;
+                    row.innerHTML = `<td>${cours.codecours}</td>
+                                     <td>${cours.coursdescriptif}</td>
+                                     <td>${cours.nbperiodes}</td>
+                                     <td id="grp-restant-${cours.codecours}">${cours.grprestant}</td>
+                                     <td>${periodesRestantes}</td>`;
+                    contenuGenere = true;
+                });
+            } else {
+                const row = tbody.insertRow();
+                row.innerHTML = `<td colspan="5" style="text-align:center; font-style:italic;">Aucun cours d'enseignement disponible.</td>`;
+            }
 
-            if (tbody.children.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4">Aucun cours disponible ou tous les groupes sont attribués.</td></tr>';
+            const titreAutresRow = tbody.insertRow();
+            titreAutresRow.classList.add('sous-titre-cours-restants');
+            const titreAutresCell = titreAutresRow.insertCell();
+            titreAutresCell.colSpan = 5; 
+            titreAutresCell.textContent = "Périodes Autres";
+            
+            if (G_COURS_AUTRES_TACHES_CHAMP.length > 0) {
+                G_COURS_AUTRES_TACHES_CHAMP.forEach(cours => {
+                    const row = tbody.insertRow();
+                    const periodesRestantes = cours.nbperiodes * cours.grprestant;
+                    row.innerHTML = `<td>${cours.codecours}</td>
+                                     <td>${cours.coursdescriptif}</td>
+                                     <td>${cours.nbperiodes}</td>
+                                     <td id="grp-restant-${cours.codecours}">${cours.grprestant}</td>
+                                     <td>${periodesRestantes}</td>`;
+                    contenuGenere = true;
+                });
+            } else {
+                const row = tbody.insertRow();
+                row.innerHTML = `<td colspan="5" style="text-align:center; font-style:italic;">Aucune autre tâche disponible.</td>`;
+            }
+
+            if (!contenuGenere && G_COURS_ENSEIGNEMENT_CHAMP.length === 0 && G_COURS_AUTRES_TACHES_CHAMP.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Aucun cours disponible dans ce champ.</td></tr>';
             }
         }
 
-        function regenererToutesLesListesDeCoursAChoisir() {
+        function regenererToutesLesListesDeCoursAChoisirGlobale() {
             document.querySelectorAll('.enseignant-card').forEach(card => {
                 const enseignantId = card.id.split('-').pop(); 
+                const enseignantCard = document.getElementById(`enseignant-card-${enseignantId}`);
+                if (enseignantCard) {
+                    const ulEnseignement = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
+                    if (ulEnseignement) {
+                        ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, 'enseignement');
+                    }
 
-                const ulEnseignement = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
-                if (ulEnseignement) {
-                    ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, 'enseignement');
-                }
-
-                const ulAutres = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
-                if (ulAutres) {
-                    ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, 'autre');
+                    const ulAutres = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
+                    if (ulAutres) {
+                        ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, 'autre');
+                    }
                 }
             });
         }
 
+
         function genererListeHTMLCoursDispo(listeCoursGlobale, enseignantId, typeCours) {
             let html = '';
-            const coursFiltres = listeCoursGlobale; 
+            const coursAffichables = listeCoursGlobale.filter(cours => cours.grprestant > 0);
 
-            if (coursFiltres.length > 0) {
-                coursFiltres.forEach(cours => {
-                    const estComplet = cours.grprestant <= 0;
-                    html += `<li data-complet="${estComplet}">
-                                ${cours.coursdescriptif} (${cours.nbperiodes} pér. - ${cours.grprestant} grp. rest.)
+            if (coursAffichables.length > 0) {
+                coursAffichables.forEach(cours => {
+                    html += `<li>
+                                ${cours.codecours} - ${cours.coursdescriptif} (${cours.nbperiodes} pér. - ${cours.grprestant} grp. rest.)
                                 <button data-enseignant-id="${enseignantId}" data-cours-code="${cours.codecours}" 
-                                        data-type="${typeCours}" data-nb-periodes="${cours.nbperiodes}"
-                                        ${estComplet ? 'disabled title="Plus de groupes disponibles"' : ''}>
-                                    ${estComplet ? 'Complet' : 'Attribuer'}
+                                        data-type="${typeCours}" data-nb-periodes="${cours.nbperiodes}">
+                                    Attribuer
                                 </button>
                              </li>`;
                 });
@@ -514,13 +624,6 @@
                 html = `<li>Aucun cours de ce type disponible pour le moment.</li>`;
             }
             return html;
-        }
-
-        function mettreAJourTotauxPeriodesEnseignant(enseignantId, periodes) {
-            document.getElementById(`total-ens-${enseignantId}`).textContent = periodes.periodes_cours;
-            document.getElementById(`total-autre-${enseignantId}`).textContent = periodes.periodes_autres;
-            document.getElementById(`total-gen-detail-${enseignantId}`).textContent = periodes.total_periodes;
-            document.getElementById(`total-gen-condense-${enseignantId}`).textContent = periodes.total_periodes;
         }
 
         function mettreAJourLigneSommaire(enseignantId, periodes) {
@@ -531,38 +634,7 @@
                 ligne.querySelector('.sum-total-val').textContent = periodes.total_periodes;
             }
         }
-
-        function ajouterCoursAttribueVisuellementDetail(enseignantId, attributionId, codeCours, nbPeriodesCours) {
-            const ulDetail = document.getElementById(`attributions-list-${enseignantId}`);
-            if (!ulDetail) return;
-
-            ulDetail.querySelector('.no-attributions')?.remove();
-
-            const coursDataGlobal = [...G_COURS_ENSEIGNEMENT_CHAMP, ...G_COURS_AUTRES_TACHES_CHAMP].find(c => c.codecours === codeCours);
-            const descriptionCours = coursDataGlobal ? coursDataGlobal.coursdescriptif : "Cours (info manquante)";
-            const periodesEffectives = parseInt(nbPeriodesCours) || (coursDataGlobal ? coursDataGlobal.nbperiodes : 0);
-            const nbGroupesPris = 1; 
-
-            const liDetail = document.createElement('li');
-            liDetail.dataset.attributionId = attributionId;
-            liDetail.dataset.codecours = codeCours;
-            liDetail.dataset.nbperiodes = periodesEffectives; 
-
-            liDetail.innerHTML = `${descriptionCours} (${periodesEffectives} pér. x ${nbGroupesPris} grp) <button class="btn-retirer-cours" data-attribution-id="${attributionId}">Retirer</button>`;
-            ulDetail.appendChild(liDetail);
-        }
-
-        function retirerCoursAttribueVisuellementDetail(attributionId, enseignantId) {
-            const liDetail = document.querySelector(`#attributions-list-${enseignantId} li[data-attribution-id="${attributionId}"]`);
-            if (liDetail) {
-                const ulDetail = liDetail.parentNode;
-                liDetail.remove();
-                if (ulDetail.children.length === 0) {
-                    ulDetail.innerHTML = '<li class="no-attributions">Aucun cours attribué pour le moment.</li>';
-                }
-            }
-        }
-
+        
         function ajouterEnseignantDynamiquement(enseignant) {
             const container = document.querySelector('.enseignants-section');
             const btnCreerTache = document.getElementById('btn-creer-tache-restante'); 
@@ -572,31 +644,31 @@
             card.id = `enseignant-card-${enseignant.enseignantid}`;
 
             card.innerHTML = `
-                <div class="vue-condensee">
-                    <h3 class="titre-enseignant-bascule">
-                        <span>
-                            ${enseignant.nomcomplet}
-                            ${!enseignant.esttempsplein ? '<small>(Temps Partiel)</small>' : ''}
-                            ${enseignant.estfictif ? '<small>(Tâche Restante)</small>' : ''}
-                            ${enseignant.peutchoisirhorschampprincipal ? '<small>(Peut choisir hors champ)</small>' : ''}
-                        </span>
-                        <span class="arrow-indicator">▶</span>
+                <div class="entete-enseignant">
+                    <h3 class="titre-enseignant-bascule nom-enseignant-texte">
+                        ${enseignant.nomcomplet}
+                        ${!enseignant.esttempsplein ? '<small>(Temps Partiel)</small>' : ''}
+                        ${enseignant.estfictif ? '<small>(Tâche Restante)</small>' : ''}
+                        ${enseignant.peutchoisirhorschampprincipal ? '<small>(Peut choisir hors champ)</small>' : ''}
                     </h3>
-                    <div class="resume-cours-attribues">
-                        <ul class="resume-cours-attribues-list" id="resume-attributions-list-${enseignant.enseignantid}">
-                            <li class="no-attributions-condense">Aucun cours attribué.</li>
-                        </ul>
-                    </div>
-                    <p><strong>Total Périodes:</strong> <span id="total-gen-condense-${enseignant.enseignantid}">0</span></p>
+                    <span class="arrow-indicator">▶</span>
                 </div>
-                <div class="vue-detaillee-contenu">
-                    ${enseignant.estfictif ? `<button class="btn-supprimer-enseignant" data-enseignant-id="${enseignant.enseignantid}" style="float:right; margin-bottom:5px;">Supprimer Tâche</button>` : ''}
-                    <div class="cours-attribues"><h4>Cours Actuellement Attribués (Détail) :</h4><ul id="attributions-list-${enseignant.enseignantid}"><li class="no-attributions">Aucun cours attribué.</li></ul></div>
-                    <div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement">${genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignant.enseignantid, 'enseignement')}</ul></div>
-                    <div class="cours-selection"><h4>Autres tâches disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre">${genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignant.enseignantid, 'autre')}</ul></div>
-                    <p><strong>Total Périodes Enseignement:</strong> <span id="total-ens-${enseignant.enseignantid}">0</span></p>
-                    <p><strong>Total Périodes Autres:</strong> <span id="total-autre-${enseignant.enseignantid}">0</span></p>
-                    <p><strong>Total Général (Détail):</strong> <span id="total-gen-detail-${enseignant.enseignantid}">0</span></p>
+                ${enseignant.estfictif ? 
+                    `<div class="action-enseignant-fictif">
+                        <button class="btn-supprimer-enseignant" data-enseignant-id="${enseignant.enseignantid}">Supprimer Tâche</button>
+                    </div>` : ''}
+                <div class="cours-attribues">
+                    <table id="table-attributions-${enseignant.enseignantid}">
+                        <thead>
+                            <tr><th>Code</th><th>Cours choisi</th><th>Pér.</th><th>Nb. grp.</th><th>Pér. totale</th><th>Action</th></tr>
+                        </thead>
+                        <tbody id="tbody-attributions-${enseignant.enseignantid}">
+                            </tbody>
+                    </table>
+                </div>
+                <div class="contenu-selection-cours">
+                    <div class="cours-selection"><h4>Cours d'enseignement disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement">${genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignant.enseignantid, 'enseignement')}</ul></div>
+                    <div class="cours-selection"><h4>Autres tâches disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre">${genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignant.enseignantid, 'autre')}</ul></div>
                 </div>
             `;
 
@@ -605,15 +677,21 @@
             } else {
                 container.appendChild(card);
             }
+            
+            // Initialiser le tableau des attributions pour la nouvelle carte
+            regenererTableauAttributionsEnseignant(enseignant.enseignantid, []);
 
-            card.querySelector('.titre-enseignant-bascule')?.addEventListener('click', function() {
+            card.querySelector('.entete-enseignant')?.addEventListener('click', function() {
                 const currentCard = this.closest('.enseignant-card');
-                 document.querySelectorAll('.enseignant-card.detail-visible').forEach(openCard => {
-                    if (openCard !== currentCard) {
+                if (currentCard) {
+                    const etaitVisible = currentCard.classList.contains('detail-visible');
+                    document.querySelectorAll('.enseignant-card.detail-visible').forEach(openCard => {
                         openCard.classList.remove('detail-visible');
+                    });
+                    if (!etaitVisible) {
+                        currentCard.classList.add('detail-visible');
                     }
-                });
-                currentCard.classList.toggle('detail-visible');
+                }
             });
         }
 
@@ -647,7 +725,7 @@
             document.querySelectorAll('#tableau-sommaire-champ tbody tr').forEach(row => {
                 const estFictif = row.classList.contains('enseignant-fictif-sommaire');
                 const estTempsPartiel = row.classList.contains('enseignant-temps-partiel-sommaire');
-                if (!estFictif && !estTempsPartiel) {
+                if (!estFictif && !estTempsPartiel) { 
                     const totalCell = row.querySelector('.sum-total-val');
                     if (totalCell) {
                         totalPeriodes += parseInt(totalCell.textContent) || 0;
@@ -662,43 +740,31 @@
 
         function initialiserTableauSommaire() {
             const lignesSommaire = document.querySelectorAll('#tableau-sommaire-champ tbody tr');
-            // Récupérer les données des enseignants du contexte global JS pour une association fiable
             const enseignantsData = G_ENSEIGNANTS_INITIAL_DATA; 
 
             lignesSommaire.forEach(row => {
-                const nomEnseignantSommaire = row.cells[0].textContent.trim();
-                // Trouver l'enseignant correspondant dans les données globales par nom
-                // Ceci est plus robuste que de se fier à l'index si les listes ne sont pas parfaitement synchronisées.
-                // Pour une solution encore meilleure, l'ID de l'enseignant devrait être inclus dans `taches_sommaire_champ`
-                // et utilisé ici comme `data-enseignant-id` sur la ligne TR dès le rendu Jinja.
-                // Pour l'instant, on assume que `taches_sommaire_champ` fournit `enseignant_id`.
-                const enseignantIdAttendu = row.dataset.enseignantId; // Si Jinja a déjà mis l'ID
+                const enseignantIdAttendu = row.dataset.enseignantId; 
                 let enseignantAssocie;
 
                 if (enseignantIdAttendu) {
                      enseignantAssocie = enseignantsData.find(ens => String(ens.enseignantid) === enseignantIdAttendu);
-                } else {
-                    // Fallback sur le nom si l'ID n'est pas directement sur la row (moins idéal)
+                } else { 
+                    const nomEnseignantSommaire = row.cells[0].textContent.trim();
                     enseignantAssocie = enseignantsData.find(ens => ens.nomcomplet === nomEnseignantSommaire);
+                    if (enseignantAssocie) row.dataset.enseignantId = enseignantAssocie.enseignantid;
                 }
 
-
                 if (enseignantAssocie) {
-                    // S'assurer que row.dataset.enseignantId est bien défini (surtout si on a utilisé le fallback par nom)
-                    if (!row.dataset.enseignantId) {
-                        row.dataset.enseignantId = enseignantAssocie.enseignantid;
-                    }
-
-                    // Appliquer les classes pour le calcul de la moyenne
+                    row.classList.remove('enseignant-fictif-sommaire', 'enseignant-temps-partiel-sommaire', 'enseignant-temps-plein-sommaire');
                     if (enseignantAssocie.estfictif) {
                         row.classList.add('enseignant-fictif-sommaire');
                     } else if (!enseignantAssocie.esttempsplein) {
                         row.classList.add('enseignant-temps-partiel-sommaire');
-                    } else {
+                    } else { 
                         row.classList.add('enseignant-temps-plein-sommaire');
                     }
                 } else {
-                    console.warn(`Aucun enseignant correspondant trouvé dans G_ENSEIGNANTS_INITIAL_DATA pour la ligne de sommaire: ${nomEnseignantSommaire} (ID attendu: ${enseignantIdAttendu})`);
+                    console.warn(`Aucun enseignant correspondant trouvé dans G_ENSEIGNANTS_INITIAL_DATA pour la ligne de sommaire (ID attendu: ${enseignantIdAttendu}, Nom: ${row.cells[0].textContent.trim()})`);
                 }
             });
             recalculerEtAfficherMoyenneChamp();
