@@ -3,124 +3,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sommaire Global des Tâches</title>
+    <title>Sommaire global des tâches</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         /* Styles spécifiques pour la page sommaire. Le style.css global s'applique aussi. */
-        .container-sommaire { display: flex; flex-direction: column; gap: 30px; }
-        .section-sommaire { padding:15px; border: 1px solid #ccc; border-radius:5px; background-color: #f9f9f9; }
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh; 
+            margin: 0; 
+        }
+
+        header {
+            flex-shrink: 0; 
+            padding-bottom: 5px; 
+        }
+        header h1 { 
+            margin-top: 10px; 
+            margin-bottom: 5px; 
+            margin-left: 20px;
+            margin-right: 20px;
+            font-size: 1.8em; 
+        }
+        header p { 
+            margin-top: 0; 
+            margin-bottom: 10px; 
+            margin-left: 20px;
+            margin-right: 20px;
+        }
+
+
+        .container-principal-sommaire {
+            display: flex;
+            flex-grow: 1; 
+            overflow: hidden; 
+            padding: 10px 15px 15px 15px; 
+            gap: 15px; 
+        }
+
+        .colonne-sommaire {
+            display: flex;
+            flex-direction: column;
+            gap: 15px; 
+            overflow-y: auto; 
+            padding: 10px; 
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background-color: #ffffff;
+        }
+
+        .colonne-gauche {
+            flex-basis: 35%;
+        }
+
+        .colonne-droite {
+            flex-basis: 65%;
+        }
+
+        .section-sommaire {
+            padding: 10px 15px 15px 15px; 
+            border: 1px solid #ccc;
+            border-radius:5px;
+            background-color: #f9f9f9;
+        }
+        .section-sommaire h2 {
+            margin-top: 0; 
+            margin-bottom: 10px; 
+            font-size: 1.2em; 
+        }
+        
         table { width: 100%; border-collapse: collapse; margin-top:10px; font-size: 0.9em; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #e9ecef; }
-        .highlight-moyenne { font-weight: bold; background-color: #e7f3fe; } /* Section pour la moyenne générale */
-        .statut-non-compte { color: #6c757d; font-style: italic; } /* Pour enseignants temps partiel ou fictifs */
-        .total-row td { font-weight: bold; } /* Styles pour les lignes de total */
+        th { 
+            background-color: #e9ecef; 
+            padding: 8px; 
+            text-align: left; 
+            border: 1px solid #ddd;
+        }
+        td { 
+            border: 1px solid #ddd; 
+            padding: 8px; 
+            text-align: left; 
+        }
+
+        /* Styles pour la section moyenne générale reformatée */
+        .section-moyenne-generale {
+            background-color: #e7f3fe; /* Fond bleu clair existant */
+            padding: 10px 15px; /* Padding ajusté */
+        }
+        .moyenne-generale-contenu {
+            display: flex; /* Pour aligner le label et la valeur sur une ligne */
+            justify-content: space-between; /* Espace entre label et valeur */
+            align-items: center; /* Alignement vertical */
+            font-size: 1.1em; /* Taille de police pour la ligne */
+            font-weight: bold;
+        }
+        .moyenne-generale-contenu .label {
+            margin-right: 10px; /* Espace entre label et valeur */
+        }
+        .moyenne-generale-contenu .valeur {
+            /* Styles spécifiques pour la valeur si nécessaire */
+        }
+
+
+        .statut-non-compte { color: #6c757d; font-style: italic; }
+        
+        .champ-header-row th.champ-title-cell {
+            background-color: #ddeeff; 
+            font-size: 1.05em; 
+            padding: 8px 10px; 
+            text-align: center; 
+            font-weight: bold;
+        }
+        .column-header-row th {
+            background-color: #f8f9fa;
+            position: sticky; 
+            top: 0; 
+            z-index: 1; 
+            font-size: 0.85em; 
+            padding: 6px 8px; 
+        }
+
+        footer {
+            flex-shrink: 0; 
+            text-align: center;
+            padding: 10px;
+            background-color: #f1f1f1; 
+            border-top: 1px solid #ddd;
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Sommaire Global des Tâches des Enseignants</h1>
+        <h1>Sommaire global des tâches des enseignants</h1> 
         <p><a href="{{ url_for('index') }}">« Retour à la navigation par champ</a></p>
     </header>
 
-    <div class="container-sommaire">
-        <!-- Section affichant le détail des tâches pour chaque enseignant -->
-        <section class="section-sommaire">
-            <h2>Détail des Tâches par Enseignant</h2>
-            {% if enseignants %}
-            <table id="table-detail-enseignants">
-                <thead>
-                    <tr>
-                        <th>Champ</th>
-                        <th>Nom de l'Enseignant</th>
-                        <th>Pér. Cours</th>
-                        <th>Pér. Autres</th>
-                        <th>Total Pér.</th>
-                        <th>Compte pour Moyenne Champ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for ens in enseignants %}
-                    <tr data-enseignant-id="{{ ens.enseignantid }}"> {# Ajout d'un identifiant pour la mise à jour JS #}
-                        <td>{{ ens.champno }} - {{ ens.champnom }}</td>
-                        <td>{{ ens.nomcomplet }}</td>
-                        <td class="periodes-cours">{{ ens.periodes_cours }}</td>
-                        <td class="periodes-autres">{{ ens.periodes_autres }}</td>
-                        <td class="total-periodes">{{ ens.total_periodes }}</td>
-                        <td class="compte-moyenne">
-                            {% if ens.compte_pour_moyenne_champ %}
-                                Oui
-                            {% else %}
-                                <span class="statut-non-compte">Non
-                                {% if ens.estfictif %}(Fictif){% elif not ens.esttempsplein %}(Temps Partiel){% endif %}
-                                </span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p id="aucun-enseignant-message">Aucun enseignant à afficher.</p>
-            {% endif %}
-        </section>
+    <div class="container-principal-sommaire">
+        <div class="colonne-sommaire colonne-gauche">
+            <!-- Section affichant la moyenne générale (temps plein) - NOUVELLE POSITION ET FORMAT -->
+            <section class="section-sommaire section-moyenne-generale">
+                <div class="moyenne-generale-contenu">
+                    <span class="label">Moyenne générale (temps plein) :</span>
+                    <span class="valeur" id="moyenne-generale-etablissement">{{ "%.2f"|format(moyenne_generale) }} périodes</span>
+                </div>
+            </section>
 
-        <!-- Section affichant les moyennes des périodes par champ pour les enseignants à temps plein non fictifs -->
-        <section class="section-sommaire">
-            <h2>Moyennes des Périodes par Champ (Temps Plein non Fictifs)</h2>
-            {% if moyennes_par_champ %}
-            <table id="table-moyennes-par-champ">
-                <thead>
-                    <tr>
-                        <th>N° Champ</th>
-                        <th>Nom du Champ</th>
-                        <th>Moyenne Périodes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for champ_no, data in moyennes_par_champ.items() %}
-                    <tr data-champ-no="{{ champ_no }}"> {# Ajout d'un identifiant pour la mise à jour JS #}
-                        <td>{{ champ_no }}</td>
-                        <td>{{ data.champ_nom }}</td>
-                        <td class="moyenne-periodes">{{ "%.2f"|format(data.moyenne) }}</td> {# Affiche la moyenne avec 2 décimales #}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p id="aucune-moyenne-champ-message">Aucune donnée de moyenne par champ disponible.</p>
-            {% endif %}
-        </section>
+            <!-- Section affichant les moyennes des périodes par champ -->
+            <section class="section-sommaire">
+                <h2>Moyennes par champ (temps plein)</h2>
+                {% if moyennes_par_champ %}
+                <table id="table-moyennes-par-champ">
+                    <thead>
+                        <tr>
+                            <th>N° champ</th>
+                            <th>Nom du champ</th>
+                            <th>Moyenne périodes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Le contenu sera trié et inséré par JavaScript #}
+                    </tbody>
+                </table>
+                <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
+                {% else %}
+                <p>Aucune donnée de moyenne par champ disponible initialement.</p>
+                {% endif %}
+            </section>
+        </div>
 
-        <!-- Section affichant la moyenne générale de l'établissement pour les enseignants à temps plein non fictifs -->
-        <section class="section-sommaire highlight-moyenne">
-            <h2>Moyenne Générale de l'Établissement (Temps Plein non Fictifs)</h2>
-            <p id="moyenne-generale-etablissement" style="font-size: 1.5em; text-align: center;">
-                {{ "%.2f"|format(moyenne_generale) }} périodes {# Affiche la moyenne générale avec 2 décimales #}
-            </p>
-        </section>
+        <div class="colonne-sommaire colonne-droite">
+            <section class="section-sommaire">
+                <h2>Détail des tâches par champ</h2>
+                <table id="table-detail-enseignants">
+                    <tbody>
+                        {# Le contenu sera généré par JavaScript #}
+                    </tbody>
+                </table>
+                <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
+                {% if not enseignants_par_champ %}
+                <p>Aucun enseignant à afficher initialement.</p>
+                {% endif %}
+            </section>
+        </div>
     </div>
 
     <footer>
-        <p>© {{ SCRIPT_YEAR }} Votre École</p> {# SCRIPT_YEAR est passé depuis Flask #}
+        <p>© {{ SCRIPT_YEAR }} Votre École</p>
     </footer>
 
     <script>
-        const INTERVAL_MISE_A_JOUR = 7000; // Délai en millisecondes (7 secondes)
+        const INTERVAL_MISE_A_JOUR = 7000; 
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Lancer la mise à jour initiale au chargement de la page est optionnel, 
-            // car les données sont déjà rendues par le serveur.
-            // Si vous souhaitez forcer un premier rafraîchissement JS :
-            // mettreAJourDonneesSommaire(); 
-
-            // Configurer l'intervalle pour les mises à jour périodiques
+            mettreAJourDonneesSommaire(); 
             setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
         });
 
-        /**
-         * Récupère les données actualisées du sommaire depuis l'API et met à jour l'interface.
-         */
         async function mettreAJourDonneesSommaire() {
             try {
                 const response = await fetch('/api/sommaire/donnees');
@@ -129,135 +207,154 @@
                 }
                 const data = await response.json();
 
-                // Mise à jour du tableau des détails par enseignant
-                mettreAJourTableauEnseignants(data.enseignants);
-
-                // Mise à jour du tableau des moyennes par champ
-                mettreAJourTableauMoyennesChamp(data.moyennes_par_champ);
-
-                // Mise à jour de la moyenne générale
-                const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
-                if (elMoyenneGenerale) {
-                    elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
+                if (data.moyennes_par_champ) {
+                    mettreAJourTableauMoyennesChamp(data.moyennes_par_champ);
+                } else {
+                    console.warn("Données 'moyennes_par_champ' non trouvées.");
+                    mettreAJourTableauMoyennesChamp({});
                 }
 
+                if (data.enseignants_par_champ && Array.isArray(data.enseignants_par_champ)) {
+                    mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ);
+                } else {
+                    console.warn("Données 'enseignants_par_champ' non trouvées ou invalides.");
+                    mettreAJourTableauEnseignantsGroupes([]);
+                }
+
+                const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
+                if (elMoyenneGenerale && data.moyenne_generale !== undefined) {
+                    // Met à jour uniquement la valeur numérique, le texte "périodes" reste dans le HTML
+                    elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
+                } else if (elMoyenneGenerale) {
+                    elMoyenneGenerale.textContent = `N/A périodes`;
+                }
             } catch (error) {
-                console.error("Erreur lors de la mise à jour du sommaire:", error);
-                // Gérer l'erreur, par exemple, afficher un message à l'utilisateur si nécessaire
+                console.error("Erreur MàJ sommaire:", error);
             }
         }
-
-        /**
-         * Met à jour le contenu du tableau des détails des enseignants.
-         * @param {Array} enseignantsData Les données des enseignants récupérées de l'API.
-         */
-        function mettreAJourTableauEnseignants(enseignantsData) {
+        
+        function mettreAJourTableauEnseignantsGroupes(enseignantsParChampData) {
             const tbody = document.querySelector('#table-detail-enseignants tbody');
             const aucunEnseignantMsg = document.getElementById('aucun-enseignant-message');
+            const tableDetailEnseignants = document.getElementById('table-detail-enseignants');
 
-            if (!tbody) return; // Si le tableau n'existe pas, ne rien faire
-
-            // Vider le corps du tableau actuel
+            if (!tbody) return; 
             tbody.innerHTML = ''; 
 
-            if (enseignantsData && enseignantsData.length > 0) {
-                if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'none'; // Cacher le message "aucun enseignant"
+            if (enseignantsParChampData && enseignantsParChampData.length > 0) {
+                if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'none';
+                if (tableDetailEnseignants) tableDetailEnseignants.style.display = 'table';
 
-                enseignantsData.forEach(ens => {
-                    const row = tbody.insertRow();
-                    row.dataset.enseignantId = ens.enseignantid; // Conserver l'ID
+                enseignantsParChampData.forEach(champData => {
+                    const champHeaderRow = tbody.insertRow();
+                    champHeaderRow.classList.add('champ-header-row');
+                    const champTitleCell = document.createElement('th'); 
+                    champTitleCell.colSpan = 5; 
+                    champTitleCell.classList.add('champ-title-cell');
+                    champTitleCell.textContent = `Champ ${champData.champno} - ${champData.champnom}`;
+                    champHeaderRow.appendChild(champTitleCell);
 
-                    row.insertCell().textContent = `${ens.champno} - ${ens.champnom}`; // Colonne Champ
-                    row.insertCell().textContent = ens.nomcomplet; // Colonne Nom de l'Enseignant
-                    
-                    // Colonne Pér. Cours
-                    const cellPerCours = row.insertCell();
-                    cellPerCours.textContent = ens.periodes_cours;
-                    cellPerCours.classList.add('periodes-cours');
-                    
-                    // Colonne Pér. Autres
-                    const cellPerAutres = row.insertCell();
-                    cellPerAutres.textContent = ens.periodes_autres;
-                    cellPerAutres.classList.add('periodes-autres');
-                    
-                    // Colonne Total Pér.
-                    const cellTotalPer = row.insertCell();
-                    cellTotalPer.textContent = ens.total_periodes;
-                    cellTotalPer.classList.add('total-periodes');
-                    
-                    // Colonne Compte pour Moyenne Champ
-                    const cellCompteMoyenne = row.insertCell();
-                    cellCompteMoyenne.classList.add('compte-moyenne');
-                    if (ens.compte_pour_moyenne_champ) {
-                        cellCompteMoyenne.textContent = 'Oui';
-                    } else {
-                        let nonCompteText = 'Non';
-                        if (ens.estfictif) nonCompteText += ' (Fictif)';
-                        else if (!ens.esttempsplein) nonCompteText += ' (Temps Partiel)';
-                        cellCompteMoyenne.innerHTML = `<span class="statut-non-compte">${nonCompteText}</span>`;
-                    }
+                    const columnHeaderRow = tbody.insertRow();
+                    columnHeaderRow.classList.add('column-header-row');
+                    ['Nom de l\'enseignant', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte pour moyenne champ'].forEach(headerText => {
+                        const th = document.createElement('th');
+                        th.textContent = headerText;
+                        columnHeaderRow.appendChild(th);
+                    });
+
+                    champData.enseignants.forEach(ens => {
+                        const row = tbody.insertRow();
+                        row.dataset.enseignantId = ens.enseignantid;
+                        row.insertCell().textContent = ens.nomcomplet;
+                        row.insertCell().classList.add('periodes-cours');
+                        row.cells[1].textContent = ens.periodes_cours;
+                        row.insertCell().classList.add('periodes-autres');
+                        row.cells[2].textContent = ens.periodes_autres;
+                        row.insertCell().classList.add('total-periodes');
+                        row.cells[3].textContent = ens.total_periodes;
+                        
+                        const cellCompteMoyenne = row.insertCell();
+                        cellCompteMoyenne.classList.add('compte-moyenne');
+                        if (ens.compte_pour_moyenne_champ) {
+                            cellCompteMoyenne.textContent = 'Oui';
+                        } else {
+                            let nonCompteText = 'Non';
+                            if (ens.estfictif) nonCompteText += ' (Fictif)';
+                            else if (!ens.esttempsplein) nonCompteText += ' (Temps Partiel)';
+                            cellCompteMoyenne.innerHTML = `<span class="statut-non-compte">${nonCompteText}</span>`;
+                        }
+                    });
                 });
             } else {
-                // Afficher le message si aucun enseignant
+                if (tableDetailEnseignants) tableDetailEnseignants.style.display = 'none';
                 if (aucunEnseignantMsg) {
                     aucunEnseignantMsg.style.display = 'block';
-                } else { // Si le message n'existait pas, le créer et l'ajouter (robustesse)
+                } else {
                     const p = document.createElement('p');
                     p.id = 'aucun-enseignant-message';
                     p.textContent = 'Aucun enseignant à afficher.';
-                    const tableElement = document.querySelector('#table-detail-enseignants');
-                    if (tableElement) {
-                        tableElement.insertAdjacentElement('afterend', p);
-                    }
+                    const sectionElement = tableDetailEnseignants?.closest('.section-sommaire') || document.body;
+                    if (sectionElement) sectionElement.appendChild(p);
                 }
             }
         }
+        
+        function comparerNumerosChamp(a, b) {
+            const regex = /^(\d+)([a-zA-Z]*)$/; 
+            const matchA = a.match(regex);
+            const matchB = b.match(regex);
+            if (!matchA || !matchB) { 
+                return a.localeCompare(b);
+            }
+            const numA = parseInt(matchA[1], 10);
+            const letterA = matchA[2];
+            const numB = parseInt(matchB[1], 10);
+            const letterB = matchB[2];
+            if (numA !== numB) {
+                return numA - numB;
+            }
+            return letterA.localeCompare(letterB);
+        }
 
-        /**
-         * Met à jour le contenu du tableau des moyennes par champ.
-         * @param {Object} moyennesChampData Les données des moyennes par champ récupérées de l'API.
-         */
         function mettreAJourTableauMoyennesChamp(moyennesChampData) {
             const tbody = document.querySelector('#table-moyennes-par-champ tbody');
             const aucuneMoyenneMsg = document.getElementById('aucune-moyenne-champ-message');
+            const tableMoyennesChamp = document.getElementById('table-moyennes-par-champ');
 
             if (!tbody) return;
+            tbody.innerHTML = ''; 
+            const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
 
-            tbody.innerHTML = ''; // Vider
-
-            const champNos = Object.keys(moyennesChampData); // Récupère les clés (numéros de champ)
-
-            if (champNos.length > 0) {
+            if (champNosTries.length > 0) {
                  if (aucuneMoyenneMsg) aucuneMoyenneMsg.style.display = 'none';
+                 if (tableMoyennesChamp) tableMoyennesChamp.style.display = 'table';
 
-                champNos.forEach(champ_no => {
+                champNosTries.forEach(champ_no => { 
                     const data = moyennesChampData[champ_no];
                     const row = tbody.insertRow();
-                    row.dataset.champNo = champ_no; // Conserver l'ID du champ
-
-                    row.insertCell().textContent = champ_no; // Colonne N° Champ
-                    row.insertCell().textContent = data.champ_nom; // Colonne Nom du Champ
-                    
-                    // Colonne Moyenne Périodes
+                    row.dataset.champNo = champ_no;
+                    row.insertCell().textContent = champ_no;
+                    row.insertCell().textContent = data.champ_nom;
                     const cellMoyenne = row.insertCell();
                     cellMoyenne.classList.add('moyenne-periodes');
                     cellMoyenne.textContent = parseFloat(data.moyenne).toFixed(2);
                 });
             } else {
+                if (tableMoyennesChamp) tableMoyennesChamp.style.display = 'none';
                 if (aucuneMoyenneMsg) {
                     aucuneMoyenneMsg.style.display = 'block';
                 } else {
-                    const p = document.createElement('p');
-                    p.id = 'aucune-moyenne-champ-message';
-                    p.textContent = 'Aucune donnée de moyenne par champ disponible.';
-                    const tableElement = document.querySelector('#table-moyennes-par-champ');
-                    if (tableElement) {
-                        tableElement.insertAdjacentElement('afterend', p);
+                    const pExist = document.getElementById('aucune-moyenne-champ-message');
+                    if (!pExist) {
+                        const p = document.createElement('p');
+                        p.id = 'aucune-moyenne-champ-message';
+                        p.textContent = 'Aucune donnée de moyenne par champ disponible.';
+                        const sectionElement = tableMoyennesChamp?.closest('.section-sommaire') || document.body;
+                        if (sectionElement) sectionElement.appendChild(p);
                     }
                 }
             }
         }
-
     </script>
 </body>
 </html>
