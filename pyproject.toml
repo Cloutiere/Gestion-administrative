@@ -7,8 +7,9 @@ authors = [
 ]
 requires-python = ">=3.11" # Version minimale de Python requise
 dependencies = [
-    "flask>=3.0.0", # Dépendance principale pour le framework web Flask (version mise à jour si possible)
+    "flask>=3.0.0",          # Dépendance principale pour le framework web Flask
     "psycopg2-binary>=2.9.9", # Connecteur PostgreSQL (binaire pour faciliter l'installation)
+    "openpyxl>=3.1.0",       # Bibliothèque pour lire et écrire les fichiers Excel XLSX
 ]
 
 [project.optional-dependencies]
@@ -47,7 +48,6 @@ exclude = [
 ]
 
 # Longueur maximale des lignes (s'applique au linter et au formateur).
-# 150 est assez permissif ; 88, 100 ou 120 sont aussi des choix courants.
 line-length = 150
 
 # Définir la version Python cible pour Ruff.
@@ -66,39 +66,30 @@ target-version = "py311" # Correspond à Python 3.11
 select = ["E", "F", "W", "I", "UP"]
 
 # Règles spécifiques à ignorer.
-# Par exemple, si vous préférez gérer la longueur des lignes uniquement avec le formateur
-# et non avec le linter, vous pourriez ignorer E501.
-# Actuellement, aucune règle n'est ignorée globalement.
-# ignore = ["E501"]
+# Par exemple, E501 (longueur de ligne) est souvent géré par le formateur seul.
+# ignore = ["E501"] # Décommenter si vous souhaitez ignorer cette règle pour le linter.
 
 # Déclarer des variables globales que Ruff pourrait ne pas détecter,
 # afin d'éviter des erreurs F821 (undefined name).
-# Utile pour des variables injectées par des frameworks (ex: `g` et `request` de Flask dans les modules).
-# `g` et `request` sont typiquement importés dans Flask, donc pas toujours nécessaire ici
-# si les imports sont corrects dans chaque fichier.
 # globals = [
 #   "g",
-#   "request" # Si utilisé sans import explicite dans certains contextes
+#   "request"
 # ]
 
 # Configuration des règles "fixables" ou "non-fixables".
 # Généralement, la configuration par défaut de Ruff est suffisante.
-# fixable = ["A", "B"] # Sélectionne TOUTES les règles fixables des catégories A et B
-# unfixable = []       # Empêche la correction automatique de certaines règles
+# fixable = ["A", "B"]
+# unfixable = []
 
 
 # --- Configuration spécifique au Formateur de Ruff ([tool.ruff.format]) ---
 [tool.ruff.format]
 # Style de guillemets pour les chaînes de caractères.
-# "double" -> "chaîne"
-# "single" -> 'chaîne'
 quote-style = "double"
 
 # Type d'indentation : "space" ou "tab".
-indent-style = "space" # Utilise des espaces pour l'indentation (taille définie par le linter/éditeur)
+indent-style = "space"
 
 # `skip-magic-trailing-comma` (Commenté car la valeur par défaut `false` est souvent préférée)
-# Si `true`, Ruff (formateur) ne supprime pas la virgule finale "magique" (trailing comma)
-# dans les cas où elle pourrait rendre le formatage de f-strings multilignes complexe moins lisible.
 # Laisser à `false` (défaut) est généralement bien pour la cohérence.
 # skip-magic-trailing-comma = false
