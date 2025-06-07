@@ -83,24 +83,22 @@
             padding: 8px; 
             text-align: left; 
         }
+        #table-moyennes-par-champ th:last-child,
+        #table-moyennes-par-champ td:last-child {
+            text-align: center;
+            vertical-align: middle;
+        }
 
-        /* Styles pour la section moyenne générale reformatée */
         .section-moyenne-generale {
-            background-color: #e7f3fe; /* Fond bleu clair existant */
-            padding: 10px 15px; /* Padding ajusté */
+            background-color: #e7f3fe;
+            padding: 10px 15px;
         }
         .moyenne-generale-contenu {
-            display: flex; /* Pour aligner le label et la valeur sur une ligne */
-            justify-content: space-between; /* Espace entre label et valeur */
-            align-items: center; /* Alignement vertical */
-            font-size: 1.1em; /* Taille de police pour la ligne */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1.1em;
             font-weight: bold;
-        }
-        .moyenne-generale-contenu .label {
-            margin-right: 10px; /* Espace entre label et valeur */
-        }
-        .moyenne-generale-contenu .valeur {
-            /* Styles spécifiques pour la valeur si nécessaire */
         }
 
         .statut-non-compte { color: #6c757d; font-style: italic; }
@@ -121,25 +119,27 @@
             padding: 6px 8px; 
         }
 
-        /* Styles pour l'icône de verrouillage */
+        /* STYLES POUR LES ICÔNES SVG */
         .lock-icon {
             cursor: pointer;
-            font-size: 1.2em;
-            transition: color 0.3s;
+            display: inline-block;
+            width: 20px; /* Taille de l'icône */
+            height: 20px;
+            transition: transform 0.2s ease-in-out;
         }
-        .lock-icon.unlocked {
-            color: #28a745; /* Vert pour déverrouillé */
+        .lock-icon:hover {
+            transform: scale(1.15); /* Effet de grossissement au survol */
         }
-        .lock-icon.unlocked:hover {
-            color: #218838;
+        .lock-icon svg {
+            width: 100%;
+            height: 100%;
         }
-        .lock-icon.locked {
-            color: #dc3545; /* Rouge pour verrouillé */
+        .lock-icon.unlocked svg {
+            fill: #28a745; /* Vert pour déverrouillé */
         }
-        .lock-icon.locked:hover {
-            color: #c82333;
+        .lock-icon.locked svg {
+            fill: #dc3545; /* Rouge pour verrouillé */
         }
-
 
         footer {
             flex-shrink: 0; 
@@ -158,7 +158,6 @@
 
     <div class="container-principal-sommaire">
         <div class="colonne-sommaire colonne-gauche">
-            <!-- Section affichant la moyenne générale (temps plein) - NOUVELLE POSITION ET FORMAT -->
             <section class="section-sommaire section-moyenne-generale">
                 <div class="moyenne-generale-contenu">
                     <span class="label">Moyenne générale (temps plein) :</span>
@@ -166,7 +165,6 @@
                 </div>
             </section>
 
-            <!-- Section affichant les moyennes des périodes par champ -->
             <section class="section-sommaire">
                 <h2>Moyennes par champ (temps plein)</h2>
                 {% if moyennes_par_champ %}
@@ -213,6 +211,17 @@
     <script>
         const INTERVAL_MISE_A_JOUR = 7000; 
 
+        // DÉFINITION DES ICÔNES SVG POUR UNE UTILISATION UNIVERSELLE
+        const SVG_LOCKED = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
+            </svg>`;
+        const SVG_UNLOCKED = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
+            </svg>`;
+
+
         document.addEventListener('DOMContentLoaded', function() {
             mettreAJourDonneesSommaire(); 
             setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
@@ -220,9 +229,10 @@
             const tableMoyennes = document.getElementById('table-moyennes-par-champ');
             if(tableMoyennes) {
                 tableMoyennes.addEventListener('click', function(event) {
-                    if (event.target.classList.contains('lock-icon')) {
-                        const champNo = event.target.dataset.champNo;
-                        basculerVerrouChamp(champNo, event.target);
+                    const iconElement = event.target.closest('.lock-icon');
+                    if (iconElement) {
+                        const champNo = iconElement.dataset.champNo;
+                        basculerVerrouChamp(champNo, iconElement);
                     }
                 });
             }
@@ -243,18 +253,19 @@
                     mettreAJourTableauMoyennesChamp({});
                 }
 
-                if (data.enseignants_par_champ && Array.isArray(data.enseignants_par_champ)) {
+                if (data.enseignants_par_champ?.length) {
                     mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ);
                 } else {
-                    console.warn("Données 'enseignants_par_champ' non trouvées ou invalides.");
                     mettreAJourTableauEnseignantsGroupes([]);
                 }
 
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
-                if (elMoyenneGenerale && data.moyenne_generale !== undefined) {
-                    elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
-                } else if (elMoyenneGenerale) {
-                    elMoyenneGenerale.textContent = `N/A périodes`;
+                if (elMoyenneGenerale) {
+                    if (data.moyenne_generale !== undefined) {
+                        elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
+                    } else {
+                        elMoyenneGenerale.textContent = `N/A périodes`;
+                    }
                 }
             } catch (error) {
                 console.error("Erreur MàJ sommaire:", error);
@@ -262,6 +273,7 @@
         }
 
         async function basculerVerrouChamp(champNo, iconElement) {
+            iconElement.style.opacity = '0.5';
             try {
                 const response = await fetch(`/api/champs/${champNo}/basculer_verrou`, {
                     method: 'POST',
@@ -271,24 +283,30 @@
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
                 }
-                // Mettre à jour l'icône directement sans recharger toutes les données
                 mettreAJourIconeVerrou(iconElement, data.est_verrouille);
             } catch (error) {
                 console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
                 alert(error.message);
+            } finally {
+                iconElement.style.opacity = '1';
             }
         }
         
+        /**
+         * Met à jour l'icône de verrouillage SVG en fonction de son état.
+         * @param {HTMLElement} iconElement - L'élément conteneur de l'icône à mettre à jour.
+         * @param {boolean} estVerrouille - True si le champ est verrouillé, sinon false.
+         */
         function mettreAJourIconeVerrou(iconElement, estVerrouille) {
             if (estVerrouille) {
                 iconElement.classList.remove('unlocked');
                 iconElement.classList.add('locked');
-                iconElement.innerHTML = ''; // Cadenas fermé
+                iconElement.innerHTML = SVG_LOCKED;
                 iconElement.title = 'Champ verrouillé. Cliquer pour déverrouiller.';
             } else {
                 iconElement.classList.remove('locked');
                 iconElement.classList.add('unlocked');
-                iconElement.innerHTML = ''; // Cadenas ouvert
+                iconElement.innerHTML = SVG_UNLOCKED;
                 iconElement.title = 'Champ déverrouillé. Cliquer pour verrouiller.';
             }
         }
@@ -301,7 +319,7 @@
             if (!tbody) return; 
             tbody.innerHTML = ''; 
 
-            if (enseignantsParChampData && enseignantsParChampData.length > 0) {
+            if (enseignantsParChampData.length > 0) {
                 if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'none';
                 if (tableDetailEnseignants) tableDetailEnseignants.style.display = 'table';
 
@@ -316,7 +334,7 @@
 
                     const columnHeaderRow = tbody.insertRow();
                     columnHeaderRow.classList.add('column-header-row');
-                    ['Nom de l\'enseignant', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte pour moyenne champ'].forEach(headerText => {
+                    ['Nom', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte moyenne'].forEach(headerText => {
                         const th = document.createElement('th');
                         th.textContent = headerText;
                         columnHeaderRow.appendChild(th);
@@ -326,36 +344,24 @@
                         const row = tbody.insertRow();
                         row.dataset.enseignantId = ens.enseignantid;
                         row.insertCell().textContent = ens.nomcomplet;
-                        row.insertCell().classList.add('periodes-cours');
-                        row.cells[1].textContent = ens.periodes_cours;
-                        row.insertCell().classList.add('periodes-autres');
-                        row.cells[2].textContent = ens.periodes_autres;
-                        row.insertCell().classList.add('total-periodes');
-                        row.cells[3].textContent = ens.total_periodes;
+                        row.insertCell().textContent = ens.periodes_cours;
+                        row.insertCell().textContent = ens.periodes_autres;
+                        row.insertCell().textContent = ens.total_periodes;
                         
                         const cellCompteMoyenne = row.insertCell();
-                        cellCompteMoyenne.classList.add('compte-moyenne');
                         if (ens.compte_pour_moyenne_champ) {
                             cellCompteMoyenne.textContent = 'Oui';
                         } else {
                             let nonCompteText = 'Non';
                             if (ens.estfictif) nonCompteText += ' (Fictif)';
-                            else if (!ens.esttempsplein) nonCompteText += ' (Temps Partiel)';
+                            else if (!ens.esttempsplein) nonCompteText += ' (T. Partiel)';
                             cellCompteMoyenne.innerHTML = `<span class="statut-non-compte">${nonCompteText}</span>`;
                         }
                     });
                 });
             } else {
                 if (tableDetailEnseignants) tableDetailEnseignants.style.display = 'none';
-                if (aucunEnseignantMsg) {
-                    aucunEnseignantMsg.style.display = 'block';
-                } else {
-                    const p = document.createElement('p');
-                    p.id = 'aucun-enseignant-message';
-                    p.textContent = 'Aucun enseignant à afficher.';
-                    const sectionElement = tableDetailEnseignants?.closest('.section-sommaire') || document.body;
-                    if (sectionElement) sectionElement.appendChild(p);
-                }
+                if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'block';
             }
         }
         
@@ -395,32 +401,20 @@
                     row.dataset.champNo = champ_no;
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
-                    
-                    const cellMoyenne = row.insertCell();
-                    cellMoyenne.classList.add('moyenne-periodes');
-                    cellMoyenne.textContent = parseFloat(data.moyenne).toFixed(2);
+                    row.insertCell().textContent = parseFloat(data.moyenne).toFixed(2);
 
                     const cellStatut = row.insertCell();
                     const icon = document.createElement('span');
                     icon.className = 'lock-icon';
                     icon.dataset.champNo = champ_no;
+                    
                     mettreAJourIconeVerrou(icon, data.est_verrouille);
+                    
                     cellStatut.appendChild(icon);
                 });
             } else {
                 if (tableMoyennesChamp) tableMoyennesChamp.style.display = 'none';
-                if (aucuneMoyenneMsg) {
-                    aucuneMoyenneMsg.style.display = 'block';
-                } else {
-                    const pExist = document.getElementById('aucune-moyenne-champ-message');
-                    if (!pExist) {
-                        const p = document.createElement('p');
-                        p.id = 'aucune-moyenne-champ-message';
-                        p.textContent = 'Aucune donnée de moyenne par champ disponible.';
-                        const sectionElement = tableMoyennesChamp?.closest('.section-sommaire') || document.body;
-                        if (sectionElement) sectionElement.appendChild(p);
-                    }
-                }
+                if (aucuneMoyenneMsg) aucuneMoyenneMsg.style.display = 'block';
             }
         }
     </script>

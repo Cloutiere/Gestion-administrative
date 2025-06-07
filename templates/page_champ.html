@@ -213,7 +213,6 @@
                             <tr>
                                 <th>Code</th>
                                 <th>Cours choisi</th>
-                                <!-- MODIFIÉ : Ordre des colonnes inversé -->
                                 <th>Nb. grp.</th>
                                 <th>Pér.</th>
                                 <th>Pér. totale</th>
@@ -311,23 +310,17 @@
 
             initialiserTableauSommaire(); 
             regenererTableauCoursRestants(); 
-            appliquerStatutVerrouillageUI();
             
+            // Initialise les tableaux d'attributions pour chaque enseignant.
+            // La liste des cours à choisir sera chargée à la demande.
             G_ENSEIGNANTS_INITIAL_DATA.forEach(enseignant => {
                 regenererTableauAttributionsEnseignant(enseignant.enseignantid, enseignant.attributions || []);
-                const enseignantCard = document.getElementById(`enseignant-card-${enseignant.enseignantid}`);
-                if (enseignantCard) {
-                    const ulEnseignement = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
-                    if (ulEnseignement) {
-                        ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignant.enseignantid, 'enseignement');
-                    }
-                    const ulAutres = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
-                    if (ulAutres) {
-                        ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignant.enseignantid, 'autre');
-                    }
-                }
             });
 
+            // Applique le statut de verrouillage sur les éléments déjà présents
+            appliquerStatutVerrouillageUI();
+            
+            // Ajout des gestionnaires d'événements globaux
             const enseignantsSection = document.querySelector('.enseignants-section');
             if (enseignantsSection) {
                 enseignantsSection.addEventListener('click', gestionnaireClicsEnseignantsSection);
@@ -338,7 +331,6 @@
             });
             
             document.getElementById('btn-imprimer-champ')?.addEventListener('click', function() {
-                // S'assurer que les détails sont cachés pour l'impression, pour une vue "résumé" par défaut.
                 document.querySelectorAll('.enseignant-card.detail-visible').forEach(card => {
                     card.classList.remove('detail-visible');
                 });
@@ -346,37 +338,73 @@
                 window.print();
             });
 
-            document.querySelectorAll('.entete-enseignant').forEach(entete => {
-                entete.addEventListener('click', function() {
-                    const enseignantCard = this.closest('.enseignant-card');
-                    if (enseignantCard) {
-                        const etaitVisible = enseignantCard.classList.contains('detail-visible');
-                        // Optionnel: commenter la ligne suivante si on veut pouvoir ouvrir plusieurs cartes en même temps
-                        document.querySelectorAll('.enseignant-card.detail-visible').forEach(card => {
-                            if (card !== enseignantCard) card.classList.remove('detail-visible');
-                        });
-                        if (!etaitVisible) {
-                            enseignantCard.classList.add('detail-visible');
-                        } else {
-                            enseignantCard.classList.remove('detail-visible');
-                        }
-                    }
-                });
-            });
+            // Le gestionnaire pour déplier/replier les cartes est maintenant délégué à `gestionnaireClicsEnseignantsSection`
         });
 
-        function appliquerStatutVerrouillageUI() {
+        /**
+         * Applique le statut de verrouillage à une seule carte d'enseignant.
+         * @param {HTMLElement} card La carte d'enseignant à traiter.
+         */
+        function appliquerStatutVerrouillagePourCarte(card) {
             if (!G_CHAMP_EST_VERROUILLE) return;
+        
+            // On ne verrouille que les enseignants réels, pas les tâches restantes (fictifs)
+            if (!card.classList.contains('enseignant-fictif')) {
+                // `querySelectorAll` est utilisé pour cibler les boutons existants et futurs
+                card.querySelectorAll('.btn-retirer-cours, .cours-selection button').forEach(button => {
+                    button.disabled = true;
+                    button.title = "Les modifications sont désactivées car le champ est verrouillé.";
+                });
+            }
+        }
+        
+        /**
+         * Applique le statut de verrouillage à toutes les cartes d'enseignants sur la page.
+         */
+        function appliquerStatutVerrouillageUI() {
+            document.querySelectorAll('.enseignant-card').forEach(appliquerStatutVerrouillagePourCarte);
+        }
 
-            document.querySelectorAll('.enseignant-card').forEach(card => {
-                // On ne verrouille que les enseignants réels, pas les tâches restantes (fictifs)
-                if (!card.classList.contains('enseignant-fictif')) {
-                    card.querySelectorAll('.btn-retirer-cours, .cours-selection button').forEach(button => {
-                        button.disabled = true;
-                        button.title = "Les modifications sont désactivées car le champ est verrouillé.";
-                    });
-                }
+        /**
+         * Gère le basculement de l'affichage des détails d'une carte enseignant.
+         * Charge les listes de cours disponibles à la demande lors du premier affichage.
+         * @param {HTMLElement} enseignantCard La carte d'enseignant concernée.
+         */
+        function toggleEnseignantDetails(enseignantCard) {
+            if (!enseignantCard) return;
+        
+            const etaitVisible = enseignantCard.classList.contains('detail-visible');
+        
+            // Ferme les autres cartes pour une meilleure lisibilité
+            document.querySelectorAll('.enseignant-card.detail-visible').forEach(card => {
+                if (card !== enseignantCard) card.classList.remove('detail-visible');
             });
+        
+            // Ouvre ou ferme la carte cliquée
+            if (!etaitVisible) {
+                enseignantCard.classList.add('detail-visible');
+        
+                // --- CHARGEMENT À LA DEMANDE ---
+                // Vérifie si les listes de cours ont déjà été chargées
+                const ulEnseignement = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
+                if (ulEnseignement && ulEnseignement.innerHTML.trim() === '') {
+                    const enseignantId = enseignantCard.id.split('-').pop();
+                    
+                    // Génère et insère le HTML pour les cours d'enseignement
+                    ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, 'enseignement');
+                    
+                    // Fait de même pour les autres tâches
+                    const ulAutres = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
+                    if (ulAutres) {
+                        ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, 'autre');
+                    }
+        
+                    // Applique l'état de verrouillage sur les nouveaux boutons créés
+                    appliquerStatutVerrouillagePourCarte(enseignantCard);
+                }
+            } else {
+                enseignantCard.classList.remove('detail-visible');
+            }
         }
         
         function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray) {
@@ -392,8 +420,7 @@
             let totalPeriodesEnseignantCalcule = 0;
             let contenuAjoute = false;
 
-            // Constantes pour le nombre de colonnes, important pour colSpan et la cellule d'action
-            const NOMBRE_COLONNES_TABLEAU = 6; // Code, Cours, Nb. grp., Pér., Pér. totale, Action
+            const NOMBRE_COLONNES_TABLEAU = 6; 
 
             if (attributionsEnseignement.length > 0) {
                 const titreEnsRow = tbody.insertRow();
@@ -407,7 +434,6 @@
                     const row = tbody.insertRow();
                     const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
                     totalPeriodesEnseignantCalcule += totalPeriodesAttr;
-                    // MODIFIÉ : Ordre des cellules de données inversé pour correspondre à l'en-tête
                     row.innerHTML = `
                         <td>${attr.codecours}</td>
                         <td>${attr.coursdescriptif}</td>
@@ -431,7 +457,6 @@
                     const row = tbody.insertRow();
                     const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
                     totalPeriodesEnseignantCalcule += totalPeriodesAttr;
-                    // MODIFIÉ : Ordre des cellules de données inversé pour correspondre à l'en-tête
                     row.innerHTML = `
                         <td>${attr.codecours}</td>
                         <td>${attr.coursdescriptif}</td>
@@ -455,7 +480,7 @@
             const totalRow = tbody.insertRow();
             totalRow.classList.add('total-attributions-row');
             const totalLabelCell = totalRow.insertCell();
-            totalLabelCell.colSpan = NOMBRE_COLONNES_TABLEAU - 2; // Laisse 2 cellules pour la valeur et l'action
+            totalLabelCell.colSpan = NOMBRE_COLONNES_TABLEAU - 2;
             totalLabelCell.textContent = "Total Périodes Attribuées:";
             
             const totalValueCell = totalRow.insertCell();
@@ -466,13 +491,22 @@
 
         function gestionnaireClicsEnseignantsSection(event) {
             const target = event.target; 
+            
+            // Clic sur l'en-tête pour déplier/replier la carte
+            const entete = target.closest('.entete-enseignant');
+            if (entete) {
+                toggleEnseignantDetails(entete.closest('.enseignant-card'));
+                return; // Action principale, on ne traite rien d'autre
+            }
+            
+            // Clic pour attribuer un cours
             if (target.matches('.contenu-selection-cours .cours-selection button[data-enseignant-id][data-cours-code]')) {
                 attribuerCours(target.dataset.enseignantId, target.dataset.coursCode, target);
             } 
+            // Clic pour retirer un cours
             else if (target.classList.contains('btn-retirer-cours')) {
-                // Vérifier si le champ est verrouillé et si l'enseignant n'est pas fictif
                 const card = target.closest('.enseignant-card');
-                const estFictif = card && card.classList.contains('enseignant-fictif');
+                const estFictif = card?.classList.contains('enseignant-fictif');
                 if (G_CHAMP_EST_VERROUILLE && !estFictif) {
                     alert("Les modifications sont désactivées car le champ est verrouillé.");
                     return;
@@ -481,8 +515,8 @@
                     retirerCours(target.dataset.attributionId, target);
                 }
             } 
+            // Clic pour supprimer une tâche fictive
             else if (target.classList.contains('btn-supprimer-enseignant')) {
-                // La suppression de tâches fictives est toujours autorisée, même si le champ est verrouillé
                 if (confirm('Êtes-vous sûr de vouloir supprimer cette tâche restante et tous ses cours attribués ?')) {
                     supprimerEnseignantFictif(target.dataset.enseignantId, target);
                 }
@@ -490,9 +524,8 @@
         }
 
         async function attribuerCours(enseignantId, codeCours, boutonClique) {
-            // Vérifier si le champ est verrouillé et si l'enseignant n'est pas fictif
             const card = boutonClique.closest('.enseignant-card');
-            const estFictif = card && card.classList.contains('enseignant-fictif');
+            const estFictif = card?.classList.contains('enseignant-fictif');
             if (G_CHAMP_EST_VERROUILLE && !estFictif) {
                 alert("Les modifications sont désactivées car le champ est verrouillé.");
                 return;
@@ -515,8 +548,6 @@
                 recalculerEtAfficherMoyenneChamp();
                 
                 regenererTableauAttributionsEnseignant(enseignantId, data.attributions_enseignant || []);
-                // Si l'enseignant est fictif, les boutons d'attribution et de retrait restent actifs.
-                // Si l'enseignant est réel et champ verrouillé, le bouton attribuer aurait dû être bloqué avant.
 
                 mettreAJourDonneesGlobalesCours(codeCours, data.groupes_restants_cours);
                 regenererTableauCoursRestants();
@@ -526,9 +557,6 @@
             } catch (error) {
                 console.error('Erreur attribuerCours:', error);
                 alert(error.message);
-            } finally {
-                // Le bouton est recréé/mis à jour par regenererToutesLesListesDeCoursAChoisirGlobale,
-                // donc pas besoin de le réactiver manuellement ici, sauf en cas d'erreur où la liste n'est pas regénérée.
                 if (document.body.contains(boutonClique)) {
                     boutonClique.disabled = false; 
                     boutonClique.textContent = 'Attribuer';
@@ -536,10 +564,7 @@
             }
         }
 
-        async function retirerCours(attributionId, boutonClique) {
-            // Pas besoin de vérifier le verrouillage ici, car gestionnaireClicsEnseignantsSection le fait déjà.
-            boutonClique.disabled = true; 
-            boutonClique.textContent = '...'; 
+        async function retirerCours(attributionId, _boutonClique) {
             try {
                 const response = await fetch('/api/attributions/supprimer', {
                     method: 'POST', 
@@ -563,12 +588,10 @@
             } catch (error) {
                 console.error('Erreur retirerCours:', error);
                 alert(error.message);
-                 // Le bouton est retiré du DOM par regenererTableauAttributionsEnseignant, donc pas besoin de le réactiver.
             }
         }
 
         async function creerTacheRestante(boutonClique) {
-            // La création de tâches restantes est toujours autorisée
             boutonClique.disabled = true;
             boutonClique.textContent = 'Création...';
             try {
@@ -598,7 +621,6 @@
         }
 
         async function supprimerEnseignantFictif(enseignantId, boutonClique) {
-            // La suppression de tâches fictives est toujours autorisée
             boutonClique.disabled = true;
             boutonClique.textContent = 'Suppression...';
             try {
@@ -616,7 +638,7 @@
 
                 G_ENSEIGNANTS_INITIAL_DATA = G_ENSEIGNANTS_INITIAL_DATA.filter(e => e.enseignantid !== parseInt(enseignantId));
 
-                if (data.cours_liberes_details && data.cours_liberes_details.length > 0) {
+                if (data.cours_liberes_details?.length > 0) {
                     data.cours_liberes_details.forEach(cours_maj => {
                         mettreAJourDonneesGlobalesCours(cours_maj.code_cours, cours_maj.nouveaux_groupes_restants);
                     });
@@ -648,9 +670,6 @@
             if (!tbody) return;
             tbody.innerHTML = ''; 
 
-            let contenuGenereEnseignement = false;
-            let contenuGenereAutres = false;
-
             const titreEnsRow = tbody.insertRow();
             titreEnsRow.classList.add('sous-titre-cours-restants');
             const titreEnsCell = titreEnsRow.insertCell();
@@ -666,10 +685,8 @@
                                      <td>${cours.nbperiodes}</td>
                                      <td id="grp-restant-${cours.codecours}">${cours.grprestant}</td>
                                      <td>${periodesRestantes}</td>`;
-                    contenuGenereEnseignement = true;
                 });
-            }
-            if (!contenuGenereEnseignement) {
+            } else {
                 const row = tbody.insertRow();
                 row.innerHTML = `<td colspan="5" style="text-align:center; font-style:italic;">Aucun cours d'enseignement disponible.</td>`;
             }
@@ -689,10 +706,8 @@
                                      <td>${cours.nbperiodes}</td>
                                      <td id="grp-restant-${cours.codecours}">${cours.grprestant}</td>
                                      <td>${periodesRestantes}</td>`;
-                    contenuGenereAutres = true;
                 });
-            }
-            if (!contenuGenereAutres) {
+            } else {
                 const row = tbody.insertRow();
                 row.innerHTML = `<td colspan="5" style="text-align:center; font-style:italic;">Aucune autre tâche disponible.</td>`;
             }
@@ -706,17 +721,22 @@
             document.querySelectorAll('.enseignant-card').forEach(card => {
                 const enseignantId = card.id.split('-').pop();
                 
-                const ulEnseignement = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
-                if (ulEnseignement) {
-                    ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, 'enseignement');
-                }
-
-                const ulAutres = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
-                if (ulAutres) {
-                    ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, 'autre');
+                // On ne regénère que les listes qui sont déjà visibles (dépliées)
+                // pour ne pas perdre l'optimisation du chargement à la demande.
+                if (card.classList.contains('detail-visible')) {
+                    const ulEnseignement = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
+                    if (ulEnseignement) {
+                        ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, 'enseignement');
+                    }
+    
+                    const ulAutres = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
+                    if (ulAutres) {
+                        ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, 'autre');
+                    }
+                    // Réapplique le statut de verrouillage sur les nouveaux boutons
+                    appliquerStatutVerrouillagePourCarte(card);
                 }
             });
-            appliquerStatutVerrouillageUI();
         }
 
 
@@ -757,6 +777,7 @@
             card.className = `enseignant-card ${!enseignant.esttempsplein ? 'enseignant-temps-partiel' : ''} ${enseignant.estfictif ? 'enseignant-fictif' : ''}`;
             card.id = `enseignant-card-${enseignant.enseignantid}`;
 
+            // MODIFIÉ: Les listes ul sont maintenant vides par défaut. Elles seront remplies à la demande.
             card.innerHTML = `
                 <div class="entete-enseignant">
                     <h3 class="titre-enseignant-bascule nom-enseignant-texte">
@@ -774,7 +795,6 @@
                 <div class="cours-attribues">
                     <table id="table-attributions-${enseignant.enseignantid}">
                         <thead>
-                            <!-- MODIFIÉ : Ordre des colonnes inversé -->
                             <tr><th>Code</th><th>Cours choisi</th><th>Nb. grp.</th><th>Pér.</th><th>Pér. totale</th><th>Action</th></tr>
                         </thead>
                         <tbody id="tbody-attributions-${enseignant.enseignantid}"></tbody>
@@ -782,8 +802,8 @@
                 </div>
                 <div class="signature-line print-only">Signature de l'enseignant :</div>
                 <div class="contenu-selection-cours no-print">
-                    <div class="cours-selection"><h4>Cours d'enseignement disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement">${genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignant.enseignantid, 'enseignement')}</ul></div>
-                    <div class="cours-selection"><h4>Autres tâches disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre">${genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignant.enseignantid, 'autre')}</ul></div>
+                    <div class="cours-selection"><h4>Cours d'enseignement disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div>
+                    <div class="cours-selection"><h4>Autres tâches disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div>
                 </div>
             `;
 
@@ -794,23 +814,7 @@
             }
             
             regenererTableauAttributionsEnseignant(enseignant.enseignantid, enseignant.attributions || []);
-
-            card.querySelector('.entete-enseignant')?.addEventListener('click', function() {
-                const currentCard = this.closest('.enseignant-card');
-                if (currentCard) {
-                    const etaitVisible = currentCard.classList.contains('detail-visible');
-                    // Optionnel: décommenter pour fermer les autres cartes
-                    // document.querySelectorAll('.enseignant-card.detail-visible').forEach(openCard => {
-                    //    if (openCard !== currentCard) openCard.classList.remove('detail-visible');
-                    // });
-                    if (!etaitVisible) {
-                        currentCard.classList.add('detail-visible');
-                    } else {
-                        currentCard.classList.remove('detail-visible');
-                    }
-                }
-            });
-            appliquerStatutVerrouillageUI();
+            appliquerStatutVerrouillagePourCarte(card);
         }
 
         function ajouterAuTableauSommaire(enseignant, periodes) {
@@ -820,7 +824,6 @@
             const row = tbody.insertRow();
             row.dataset.enseignantId = enseignant.enseignantid; 
 
-            // Appliquer les classes pour le calcul de la moyenne
             if (enseignant.estfictif) {
                 row.classList.add('enseignant-fictif-sommaire');
             } else if (!enseignant.esttempsplein) {
@@ -845,7 +848,7 @@
                 if (!row.classList.contains('enseignant-fictif-sommaire')) {
                     const totalCell = row.querySelector('.sum-total-val');
                     if (totalCell) {
-                        totalPeriodes += parseInt(totalCell.textContent) || 0;
+                        totalPeriodes += parseInt(totalCell.textContent, 10) || 0;
                     }
                     countTempsPleinNonFictif++;
                 }
@@ -859,7 +862,6 @@
         }
 
         function initialiserTableauSommaire() {
-            // Assigne les classes correctes aux lignes du sommaire basées sur G_ENSEIGNANTS_INITIAL_DATA
             const lignesSommaire = document.querySelectorAll('#tableau-sommaire-champ tbody tr');
             const enseignantsDataMap = new Map(G_ENSEIGNANTS_INITIAL_DATA.map(e => [String(e.enseignantid), e]));
 
