@@ -6,6 +6,10 @@
     <title>Tâches - Champ {{ champ.champnom }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
         /* Styles spécifiques pour la page de gestion d'un champ */
         .container { 
             display: flex; 
@@ -34,6 +38,12 @@
             max-height: calc(100vh - 200px); /* Hauteur maximale pour ces sections aussi */
             overflow-y: auto; /* Permettre le défilement si le contenu est trop grand */
         }
+        
+        #lock-status-indicator {
+            font-size: 0.8em;
+            color: #dc3545;
+            margin-left: 10px;
+        }
 
         .enseignant-card { 
             border: 1px solid #ddd; 
@@ -60,60 +70,28 @@
         .entete-enseignant .arrow-indicator { margin-left: 10px; transition: transform 0.3s ease; }
         .enseignant-card.detail-visible .entete-enseignant .arrow-indicator { transform: rotate(90deg); }
 
-        /* Réduction de la marge inférieure du h3 pour le rapprocher du tableau */
-        .entete-enseignant h3.titre-enseignant-bascule {
-            margin-bottom: 5px; /* Ajusté pour moins d'espace */
-        }
+        .entete-enseignant h3.titre-enseignant-bascule { margin-bottom: 5px; }
+        .nom-enseignant-texte { flex-grow: 1; }
+        .action-enseignant-fictif { text-align: right; margin-top: 0; margin-bottom: 5px; }
 
-        .nom-enseignant-texte {
-            flex-grow: 1;
-        }
-
-        .action-enseignant-fictif {
-            text-align: right; 
-            margin-top: 0; /* Réduit pour coller */
-            margin-bottom: 5px; /* Espace avant le tableau des attributions */
-        }
-
-        .contenu-selection-cours { 
-            display: none; 
-            margin-top: 10px; 
-            padding-top: 10px; 
-            border-top: 1px dashed #eee; 
-        }
+        .contenu-selection-cours { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #eee; }
         .enseignant-card.detail-visible .contenu-selection-cours { display: block; }
 
-        /* Style global pour les tables, sauf si surchargé */
         table { width: 100%; border-collapse: collapse; margin-top:10px; font-size: 0.9em; }
-        
-        /* Surcharge pour les tables d'attribution pour réduire l'espace supérieur */
-        div.cours-attribues > table {
-            margin-top: 5px; /* Réduit pour coller au nom/bouton */
-        }
+        div.cours-attribues > table { margin-top: 5px; }
 
         th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
         th { background-color: #e9ecef; }
         
         .sous-titre-cours-restants td, .sous-titre-attributions td {
-            background-color: #f0f0f0;
-            font-weight: bold;
-            text-align: center;
-            border-top: 2px solid #ccc;
-            border-bottom: 1px solid #ccc;
+            background-color: #f0f0f0; font-weight: bold; text-align: center;
+            border-top: 2px solid #ccc; border-bottom: 1px solid #ccc;
         }
         
-        .total-attributions-row td {
-            font-weight: bold;
-            background-color: #e9ecef; 
-            text-align: right; 
-        }
-        .total-attributions-row td:first-child {
-             text-align: left; 
-        }
+        .total-attributions-row td { font-weight: bold; background-color: #e9ecef; text-align: right; }
+        .total-attributions-row td:first-child { text-align: left; }
 
-        .cours-attribues {
-            margin-top: 0px; /* Réduit pour coller aux éléments précédents */
-        }
+        .cours-attribues { margin-top: 0px; }
 
         .cours-selection button, .btn-retirer-cours, .btn-supprimer-enseignant {
             margin-left:5px; cursor:pointer; padding: 3px 8px; font-size: 0.85em;
@@ -124,24 +102,91 @@
         
         .cours-selection { margin-top: 15px; }
         .cours-selection ul { list-style-type: none; padding-left: 0; margin-top: 5px; margin-bottom: 5px; }
-        .cours-selection li { 
-            margin-bottom: 2px; 
-            padding: 3px 5px; 
-            border-bottom: 1px dashed #eee; 
-        }
+        .cours-selection li { margin-bottom: 2px; padding: 3px 5px; border-bottom: 1px dashed #eee; }
         .cours-selection li:last-child { border-bottom: none; }
+        
+        /* Styles pour le verrouillage */
+        .champ-verrouille .btn-retirer-cours:disabled,
+        .champ-verrouille .cours-selection button:disabled {
+            background-color: #e9ecef;
+            color: #6c757d;
+            border-color: #ddd;
+            cursor: not-allowed;
+        }
+
+        /* Styles pour l'impression */
+        .print-only { display: none; }
+        .no-print { display: block; } /* ou flex, etc. selon l'élément en mode normal */
+
+        @media print {
+            body * { visibility: hidden; }
+            .print-area, .print-area * { visibility: visible; }
+            .print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                right: 0;
+                width: 98%; 
+                margin: 0 auto;
+            }
+            
+            /* Cache les éléments non désirés à l'impression. */
+            header, 
+            .container > section:not(.enseignants-section), 
+            #btn-creer-tache-restante, 
+            .no-print,
+            button.no-print,
+            span.no-print
+             { display: none !important; }
+            
+            .container { display: block; }
+            .enseignants-section { display: block; width: 100%; max-height: none; overflow: visible; border: none; }
+            
+            .enseignant-card { border: 1px solid #000; padding: 15px; margin-bottom: 20px; page-break-inside: avoid; }
+            .entete-enseignant { cursor: default; }
+            .entete-enseignant .arrow-indicator { display: none; }
+            .contenu-selection-cours { display: none !important; } /* Caché car c'est pour l'interaction UI */
+            .action-enseignant-fictif { display: none; } /* Caché car c'est pour l'interaction UI */
+            
+            table { font-size: 9pt; border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #000; padding: 4px; text-align: left; }
+            .total-attributions-row { border-top: 2px solid #000; }
+
+            /* Masque complètement la dernière colonne (Action) à l'impression. */
+            th:last-child,
+            td:last-child {
+                display: none !important;
+            }
+            
+            .print-only { display: block; }
+            
+            .signature-line {
+                margin-top: 40px;
+                border-top: 1px solid #000;
+                padding-top: 5px;
+                font-style: italic;
+            }
+            #print-report-cours-restants { margin-top: 30px; page-break-before: always; }
+            #print-report-cours-restants h2 { font-size: 14pt; }
+        }
 
     </style>
 </head>
-<body>
-    <header>
-        <h1>Gestion des Tâches - Champ : {{ champ.champnom }} ({{ champ.champno }})</h1>
+<body class="{{ 'champ-verrouille' if champ.estverrouille else '' }}">
+    <header class="no-print">
+        <h1>
+            Gestion des Tâches - Champ : {{ champ.champnom }} ({{ champ.champno }})
+            {% if champ.estverrouille %}
+                <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées."> Verrouillé</span>
+            {% endif %}
+        </h1>
         <p><a href="{{ url_for('index') }}">« Retour à la liste des champs</a></p>
+        <p><button id="btn-imprimer-champ">Imprimer ce champ</button></p>
     </header>
 
-    <div class="container">
+    <div class="container print-area">
         <section class="enseignants-section">
-            <h2 class="section-title">Attribution des Tâches aux Enseignants</h2>
+            <h2 class="section-title no-print">Attribution des Tâches aux Enseignants</h2>
             {% for enseignant in enseignants %}
             <div class="enseignant-card {% if not enseignant.esttempsplein %}enseignant-temps-partiel{% endif %} {% if enseignant.estfictif %}enseignant-fictif{% endif %}"
                  id="enseignant-card-{{ enseignant.enseignantid }}">
@@ -153,14 +198,14 @@
                         {% if enseignant.estfictif %}<small>(Tâche Restante)</small>{% endif %}
                         {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
                     </h3>
-                    <span class="arrow-indicator">▶</span>
+                    <span class="arrow-indicator no-print">▶</span>
                 </div>
 
-                {% if enseignant.estfictif %}
-                <div class="action-enseignant-fictif">
-                    <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer Tâche</button>
+                <div class="action-enseignant-fictif no-print">
+                    {% if enseignant.estfictif %}
+                        <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer Tâche</button>
+                    {% endif %}
                 </div>
-                {% endif %}
                 
                 <div class="cours-attribues">
                     <table id="table-attributions-{{ enseignant.enseignantid }}">
@@ -168,8 +213,9 @@
                             <tr>
                                 <th>Code</th>
                                 <th>Cours choisi</th>
-                                <th>Pér.</th>
+                                <!-- MODIFIÉ : Ordre des colonnes inversé -->
                                 <th>Nb. grp.</th>
+                                <th>Pér.</th>
                                 <th>Pér. totale</th>
                                 <th>Action</th>
                             </tr>
@@ -180,7 +226,11 @@
                     </table>
                 </div>
 
-                <div class="contenu-selection-cours">
+                <div class="signature-line print-only">
+                    Signature de l'enseignant :
+                </div>
+
+                <div class="contenu-selection-cours no-print">
                     <div class="cours-selection">
                         <h4>Cours d'enseignement disponibles à l'attribution :</h4>
                         <ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul>
@@ -195,10 +245,10 @@
             {% if not enseignants %}
             <p>Aucun enseignant dans ce champ.</p>
             {% endif %}
-            <button id="btn-creer-tache-restante" style="margin-top:15px;">Créer une Tâche Restante</button>
+            <button id="btn-creer-tache-restante" class="no-print" style="margin-top:15px;">Créer une Tâche Restante</button>
         </section>
 
-        <section class="cours-restants-section">
+        <section class="cours-restants-section no-print">
             <h2 class="section-title">Périodes Restantes dans ce Champ</h2>
             <table id="tableau-cours-restants">
                 <thead>
@@ -216,7 +266,7 @@
             </table>
         </section>
 
-        <section class="sommaire-champ-section">
+        <section class="sommaire-champ-section no-print">
             <h2 class="section-title">Tâches du champ : {{ champ.champno }}</h2>
             <table id="tableau-sommaire-champ">
                 <thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead>
@@ -236,12 +286,18 @@
             {% endif %}
         </section>
     </div>
+    
+    <div id="print-report-cours-restants" class="print-only">
+        <!-- Contenu généré par JS avant impression -->
+    </div>
+
 
     <script>
         let G_COURS_ENSEIGNEMENT_CHAMP = []; 
         let G_COURS_AUTRES_TACHES_CHAMP = []; 
         let G_ENSEIGNANTS_INITIAL_DATA = []; 
         const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}"; 
+        const G_CHAMP_EST_VERROUILLE = {{ champ.estverrouille|tojson }};
 
         document.addEventListener('DOMContentLoaded', function () {
             try {
@@ -255,6 +311,7 @@
 
             initialiserTableauSommaire(); 
             regenererTableauCoursRestants(); 
+            appliquerStatutVerrouillageUI();
             
             G_ENSEIGNANTS_INITIAL_DATA.forEach(enseignant => {
                 regenererTableauAttributionsEnseignant(enseignant.enseignantid, enseignant.attributions || []);
@@ -279,22 +336,48 @@
             document.getElementById('btn-creer-tache-restante')?.addEventListener('click', async function() {
                 await creerTacheRestante(this);
             });
+            
+            document.getElementById('btn-imprimer-champ')?.addEventListener('click', function() {
+                // S'assurer que les détails sont cachés pour l'impression, pour une vue "résumé" par défaut.
+                document.querySelectorAll('.enseignant-card.detail-visible').forEach(card => {
+                    card.classList.remove('detail-visible');
+                });
+                genererRapportCoursRestantsPourImpression();
+                window.print();
+            });
 
             document.querySelectorAll('.entete-enseignant').forEach(entete => {
                 entete.addEventListener('click', function() {
                     const enseignantCard = this.closest('.enseignant-card');
                     if (enseignantCard) {
                         const etaitVisible = enseignantCard.classList.contains('detail-visible');
+                        // Optionnel: commenter la ligne suivante si on veut pouvoir ouvrir plusieurs cartes en même temps
                         document.querySelectorAll('.enseignant-card.detail-visible').forEach(card => {
-                            card.classList.remove('detail-visible');
+                            if (card !== enseignantCard) card.classList.remove('detail-visible');
                         });
                         if (!etaitVisible) {
                             enseignantCard.classList.add('detail-visible');
+                        } else {
+                            enseignantCard.classList.remove('detail-visible');
                         }
                     }
                 });
             });
         });
+
+        function appliquerStatutVerrouillageUI() {
+            if (!G_CHAMP_EST_VERROUILLE) return;
+
+            document.querySelectorAll('.enseignant-card').forEach(card => {
+                // On ne verrouille que les enseignants réels, pas les tâches restantes (fictifs)
+                if (!card.classList.contains('enseignant-fictif')) {
+                    card.querySelectorAll('.btn-retirer-cours, .cours-selection button').forEach(button => {
+                        button.disabled = true;
+                        button.title = "Les modifications sont désactivées car le champ est verrouillé.";
+                    });
+                }
+            });
+        }
         
         function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray) {
             const tbody = document.getElementById(`tbody-attributions-${enseignantId}`);
@@ -307,13 +390,16 @@
                 .sort((a,b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
 
             let totalPeriodesEnseignantCalcule = 0;
-            let contenuAjoute = false; // Pour savoir si on a ajouté au moins une ligne de cours
+            let contenuAjoute = false;
+
+            // Constantes pour le nombre de colonnes, important pour colSpan et la cellule d'action
+            const NOMBRE_COLONNES_TABLEAU = 6; // Code, Cours, Nb. grp., Pér., Pér. totale, Action
 
             if (attributionsEnseignement.length > 0) {
                 const titreEnsRow = tbody.insertRow();
                 titreEnsRow.classList.add('sous-titre-attributions');
                 const titreEnsCell = titreEnsRow.insertCell();
-                titreEnsCell.colSpan = 6; 
+                titreEnsCell.colSpan = NOMBRE_COLONNES_TABLEAU; 
                 titreEnsCell.textContent = "Périodes d'enseignement attribuées";
                 contenuAjoute = true;
                 
@@ -321,11 +407,12 @@
                     const row = tbody.insertRow();
                     const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
                     totalPeriodesEnseignantCalcule += totalPeriodesAttr;
+                    // MODIFIÉ : Ordre des cellules de données inversé pour correspondre à l'en-tête
                     row.innerHTML = `
                         <td>${attr.codecours}</td>
                         <td>${attr.coursdescriptif}</td>
-                        <td>${attr.nbperiodes}</td>
                         <td>${attr.nbgroupespris}</td>
+                        <td>${attr.nbperiodes}</td>
                         <td>${totalPeriodesAttr}</td>
                         <td><button class="btn-retirer-cours" data-attribution-id="${attr.attributionid}">Retirer</button></td>
                     `;
@@ -336,7 +423,7 @@
                 const titreAutresRow = tbody.insertRow();
                 titreAutresRow.classList.add('sous-titre-attributions');
                 const titreAutresCell = titreAutresRow.insertCell();
-                titreAutresCell.colSpan = 6;
+                titreAutresCell.colSpan = NOMBRE_COLONNES_TABLEAU;
                 titreAutresCell.textContent = "Autres tâches attribuées";
                 contenuAjoute = true;
 
@@ -344,26 +431,31 @@
                     const row = tbody.insertRow();
                     const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
                     totalPeriodesEnseignantCalcule += totalPeriodesAttr;
+                    // MODIFIÉ : Ordre des cellules de données inversé pour correspondre à l'en-tête
                     row.innerHTML = `
                         <td>${attr.codecours}</td>
                         <td>${attr.coursdescriptif}</td>
-                        <td>${attr.nbperiodes}</td>
                         <td>${attr.nbgroupespris}</td>
+                        <td>${attr.nbperiodes}</td>
                         <td>${totalPeriodesAttr}</td>
                         <td><button class="btn-retirer-cours" data-attribution-id="${attr.attributionid}">Retirer</button></td>
                     `;
                 });
             }
             
-            if (!contenuAjoute) { // Si aucune attribution (ni enseignement, ni autre)
+            if (!contenuAjoute) {
                  const row = tbody.insertRow();
-                 row.innerHTML = `<td colspan="6" style="text-align:center; font-style:italic;">Aucune période attribuée pour le moment.</td>`;
+                 const cellMessage = row.insertCell();
+                 cellMessage.colSpan = NOMBRE_COLONNES_TABLEAU;
+                 cellMessage.style.textAlign = "center";
+                 cellMessage.style.fontStyle = "italic";
+                 cellMessage.textContent = "Aucune période attribuée pour le moment.";
             }
             
             const totalRow = tbody.insertRow();
             totalRow.classList.add('total-attributions-row');
             const totalLabelCell = totalRow.insertCell();
-            totalLabelCell.colSpan = 4; 
+            totalLabelCell.colSpan = NOMBRE_COLONNES_TABLEAU - 2; // Laisse 2 cellules pour la valeur et l'action
             totalLabelCell.textContent = "Total Périodes Attribuées:";
             
             const totalValueCell = totalRow.insertCell();
@@ -375,21 +467,37 @@
         function gestionnaireClicsEnseignantsSection(event) {
             const target = event.target; 
             if (target.matches('.contenu-selection-cours .cours-selection button[data-enseignant-id][data-cours-code]')) {
-                attribuerCours(target.dataset.enseignantId, target.dataset.coursCode, target.dataset.nbPeriodes, target);
+                attribuerCours(target.dataset.enseignantId, target.dataset.coursCode, target);
             } 
             else if (target.classList.contains('btn-retirer-cours')) {
+                // Vérifier si le champ est verrouillé et si l'enseignant n'est pas fictif
+                const card = target.closest('.enseignant-card');
+                const estFictif = card && card.classList.contains('enseignant-fictif');
+                if (G_CHAMP_EST_VERROUILLE && !estFictif) {
+                    alert("Les modifications sont désactivées car le champ est verrouillé.");
+                    return;
+                }
                 if (confirm('Êtes-vous sûr de vouloir retirer ce cours ?')) {
                     retirerCours(target.dataset.attributionId, target);
                 }
             } 
             else if (target.classList.contains('btn-supprimer-enseignant')) {
+                // La suppression de tâches fictives est toujours autorisée, même si le champ est verrouillé
                 if (confirm('Êtes-vous sûr de vouloir supprimer cette tâche restante et tous ses cours attribués ?')) {
                     supprimerEnseignantFictif(target.dataset.enseignantId, target);
                 }
             }
         }
 
-        async function attribuerCours(enseignantId, codeCours, _nbPeriodesCours, boutonClique) {
+        async function attribuerCours(enseignantId, codeCours, boutonClique) {
+            // Vérifier si le champ est verrouillé et si l'enseignant n'est pas fictif
+            const card = boutonClique.closest('.enseignant-card');
+            const estFictif = card && card.classList.contains('enseignant-fictif');
+            if (G_CHAMP_EST_VERROUILLE && !estFictif) {
+                alert("Les modifications sont désactivées car le champ est verrouillé.");
+                return;
+            }
+
             boutonClique.disabled = true; 
             boutonClique.textContent = '...'; 
             try {
@@ -407,6 +515,8 @@
                 recalculerEtAfficherMoyenneChamp();
                 
                 regenererTableauAttributionsEnseignant(enseignantId, data.attributions_enseignant || []);
+                // Si l'enseignant est fictif, les boutons d'attribution et de retrait restent actifs.
+                // Si l'enseignant est réel et champ verrouillé, le bouton attribuer aurait dû être bloqué avant.
 
                 mettreAJourDonneesGlobalesCours(codeCours, data.groupes_restants_cours);
                 regenererTableauCoursRestants();
@@ -417,12 +527,17 @@
                 console.error('Erreur attribuerCours:', error);
                 alert(error.message);
             } finally {
-                boutonClique.disabled = false; 
-                boutonClique.textContent = 'Attribuer';
+                // Le bouton est recréé/mis à jour par regenererToutesLesListesDeCoursAChoisirGlobale,
+                // donc pas besoin de le réactiver manuellement ici, sauf en cas d'erreur où la liste n'est pas regénérée.
+                if (document.body.contains(boutonClique)) {
+                    boutonClique.disabled = false; 
+                    boutonClique.textContent = 'Attribuer';
+                }
             }
         }
 
         async function retirerCours(attributionId, boutonClique) {
+            // Pas besoin de vérifier le verrouillage ici, car gestionnaireClicsEnseignantsSection le fait déjà.
             boutonClique.disabled = true; 
             boutonClique.textContent = '...'; 
             try {
@@ -448,13 +563,12 @@
             } catch (error) {
                 console.error('Erreur retirerCours:', error);
                 alert(error.message);
-            } finally {
-                 boutonClique.disabled = false; 
-                 boutonClique.textContent = 'Retirer';
+                 // Le bouton est retiré du DOM par regenererTableauAttributionsEnseignant, donc pas besoin de le réactiver.
             }
         }
 
         async function creerTacheRestante(boutonClique) {
+            // La création de tâches restantes est toujours autorisée
             boutonClique.disabled = true;
             boutonClique.textContent = 'Création...';
             try {
@@ -471,9 +585,6 @@
                 G_ENSEIGNANTS_INITIAL_DATA.push(nouvelEnseignant); 
                 ajouterEnseignantDynamiquement(nouvelEnseignant); 
                 
-                // Initialiser le tableau des attributions pour le nouvel enseignant (il sera vide)
-                regenererTableauAttributionsEnseignant(nouvelEnseignant.enseignantid, []);
-                
                 const periodesInitiales = data.periodes_actuelles || {periodes_cours:0, periodes_autres:0, total_periodes:0};
                 ajouterAuTableauSommaire(nouvelEnseignant, periodesInitiales);
                 recalculerEtAfficherMoyenneChamp(); 
@@ -487,6 +598,7 @@
         }
 
         async function supprimerEnseignantFictif(enseignantId, boutonClique) {
+            // La suppression de tâches fictives est toujours autorisée
             boutonClique.disabled = true;
             boutonClique.textContent = 'Suppression...';
             try {
@@ -536,7 +648,8 @@
             if (!tbody) return;
             tbody.innerHTML = ''; 
 
-            let contenuGenere = false;
+            let contenuGenereEnseignement = false;
+            let contenuGenereAutres = false;
 
             const titreEnsRow = tbody.insertRow();
             titreEnsRow.classList.add('sous-titre-cours-restants');
@@ -553,9 +666,10 @@
                                      <td>${cours.nbperiodes}</td>
                                      <td id="grp-restant-${cours.codecours}">${cours.grprestant}</td>
                                      <td>${periodesRestantes}</td>`;
-                    contenuGenere = true;
+                    contenuGenereEnseignement = true;
                 });
-            } else {
+            }
+            if (!contenuGenereEnseignement) {
                 const row = tbody.insertRow();
                 row.innerHTML = `<td colspan="5" style="text-align:center; font-style:italic;">Aucun cours d'enseignement disponible.</td>`;
             }
@@ -575,34 +689,34 @@
                                      <td>${cours.nbperiodes}</td>
                                      <td id="grp-restant-${cours.codecours}">${cours.grprestant}</td>
                                      <td>${periodesRestantes}</td>`;
-                    contenuGenere = true;
+                    contenuGenereAutres = true;
                 });
-            } else {
+            }
+            if (!contenuGenereAutres) {
                 const row = tbody.insertRow();
                 row.innerHTML = `<td colspan="5" style="text-align:center; font-style:italic;">Aucune autre tâche disponible.</td>`;
             }
 
-            if (!contenuGenere && G_COURS_ENSEIGNEMENT_CHAMP.length === 0 && G_COURS_AUTRES_TACHES_CHAMP.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Aucun cours disponible dans ce champ.</td></tr>';
+            if (G_COURS_ENSEIGNEMENT_CHAMP.length === 0 && G_COURS_AUTRES_TACHES_CHAMP.length === 0) {
+                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Aucun cours disponible dans ce champ.</td></tr>';
             }
         }
 
         function regenererToutesLesListesDeCoursAChoisirGlobale() {
             document.querySelectorAll('.enseignant-card').forEach(card => {
-                const enseignantId = card.id.split('-').pop(); 
-                const enseignantCard = document.getElementById(`enseignant-card-${enseignantId}`);
-                if (enseignantCard) {
-                    const ulEnseignement = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
-                    if (ulEnseignement) {
-                        ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, 'enseignement');
-                    }
+                const enseignantId = card.id.split('-').pop();
+                
+                const ulEnseignement = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
+                if (ulEnseignement) {
+                    ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, 'enseignement');
+                }
 
-                    const ulAutres = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
-                    if (ulAutres) {
-                        ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, 'autre');
-                    }
+                const ulAutres = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
+                if (ulAutres) {
+                    ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, 'autre');
                 }
             });
+            appliquerStatutVerrouillageUI();
         }
 
 
@@ -651,22 +765,23 @@
                         ${enseignant.estfictif ? '<small>(Tâche Restante)</small>' : ''}
                         ${enseignant.peutchoisirhorschampprincipal ? '<small>(Peut choisir hors champ)</small>' : ''}
                     </h3>
-                    <span class="arrow-indicator">▶</span>
+                    <span class="arrow-indicator no-print">▶</span>
                 </div>
+                <div class="action-enseignant-fictif no-print">
                 ${enseignant.estfictif ? 
-                    `<div class="action-enseignant-fictif">
-                        <button class="btn-supprimer-enseignant" data-enseignant-id="${enseignant.enseignantid}">Supprimer Tâche</button>
-                    </div>` : ''}
+                    `<button class="btn-supprimer-enseignant" data-enseignant-id="${enseignant.enseignantid}">Supprimer Tâche</button>` : ''}
+                </div>
                 <div class="cours-attribues">
                     <table id="table-attributions-${enseignant.enseignantid}">
                         <thead>
-                            <tr><th>Code</th><th>Cours choisi</th><th>Pér.</th><th>Nb. grp.</th><th>Pér. totale</th><th>Action</th></tr>
+                            <!-- MODIFIÉ : Ordre des colonnes inversé -->
+                            <tr><th>Code</th><th>Cours choisi</th><th>Nb. grp.</th><th>Pér.</th><th>Pér. totale</th><th>Action</th></tr>
                         </thead>
-                        <tbody id="tbody-attributions-${enseignant.enseignantid}">
-                            </tbody>
+                        <tbody id="tbody-attributions-${enseignant.enseignantid}"></tbody>
                     </table>
                 </div>
-                <div class="contenu-selection-cours">
+                <div class="signature-line print-only">Signature de l'enseignant :</div>
+                <div class="contenu-selection-cours no-print">
                     <div class="cours-selection"><h4>Cours d'enseignement disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement">${genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignant.enseignantid, 'enseignement')}</ul></div>
                     <div class="cours-selection"><h4>Autres tâches disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre">${genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignant.enseignantid, 'autre')}</ul></div>
                 </div>
@@ -678,21 +793,24 @@
                 container.appendChild(card);
             }
             
-            // Initialiser le tableau des attributions pour la nouvelle carte
-            regenererTableauAttributionsEnseignant(enseignant.enseignantid, []);
+            regenererTableauAttributionsEnseignant(enseignant.enseignantid, enseignant.attributions || []);
 
             card.querySelector('.entete-enseignant')?.addEventListener('click', function() {
                 const currentCard = this.closest('.enseignant-card');
                 if (currentCard) {
                     const etaitVisible = currentCard.classList.contains('detail-visible');
-                    document.querySelectorAll('.enseignant-card.detail-visible').forEach(openCard => {
-                        openCard.classList.remove('detail-visible');
-                    });
+                    // Optionnel: décommenter pour fermer les autres cartes
+                    // document.querySelectorAll('.enseignant-card.detail-visible').forEach(openCard => {
+                    //    if (openCard !== currentCard) openCard.classList.remove('detail-visible');
+                    // });
                     if (!etaitVisible) {
                         currentCard.classList.add('detail-visible');
+                    } else {
+                        currentCard.classList.remove('detail-visible');
                     }
                 }
             });
+            appliquerStatutVerrouillageUI();
         }
 
         function ajouterAuTableauSommaire(enseignant, periodes) {
@@ -702,12 +820,13 @@
             const row = tbody.insertRow();
             row.dataset.enseignantId = enseignant.enseignantid; 
 
+            // Appliquer les classes pour le calcul de la moyenne
             if (enseignant.estfictif) {
                 row.classList.add('enseignant-fictif-sommaire');
             } else if (!enseignant.esttempsplein) {
                 row.classList.add('enseignant-temps-partiel-sommaire');
-            } else {
-                row.classList.add('enseignant-temps-plein-sommaire'); 
+            } else { 
+                row.classList.add('enseignant-temps-plein-sommaire');
             }
 
             row.innerHTML = `
@@ -721,11 +840,9 @@
         function recalculerEtAfficherMoyenneChamp() {
             let totalPeriodes = 0;
             let countTempsPleinNonFictif = 0;
-
-            document.querySelectorAll('#tableau-sommaire-champ tbody tr').forEach(row => {
-                const estFictif = row.classList.contains('enseignant-fictif-sommaire');
-                const estTempsPartiel = row.classList.contains('enseignant-temps-partiel-sommaire');
-                if (!estFictif && !estTempsPartiel) { 
+            
+            document.querySelectorAll('#tableau-sommaire-champ tbody tr.enseignant-temps-plein-sommaire').forEach(row => {
+                if (!row.classList.contains('enseignant-fictif-sommaire')) {
                     const totalCell = row.querySelector('.sum-total-val');
                     if (totalCell) {
                         totalPeriodes += parseInt(totalCell.textContent) || 0;
@@ -735,40 +852,57 @@
             });
 
             const moyenne = countTempsPleinNonFictif > 0 ? (totalPeriodes / countTempsPleinNonFictif) : 0;
-            document.getElementById('moyenne-champ-val').textContent = moyenne.toFixed(2);
+            const moyenneCell = document.getElementById('moyenne-champ-val');
+            if (moyenneCell) {
+                 moyenneCell.textContent = moyenne.toFixed(2);
+            }
         }
 
         function initialiserTableauSommaire() {
+            // Assigne les classes correctes aux lignes du sommaire basées sur G_ENSEIGNANTS_INITIAL_DATA
             const lignesSommaire = document.querySelectorAll('#tableau-sommaire-champ tbody tr');
-            const enseignantsData = G_ENSEIGNANTS_INITIAL_DATA; 
+            const enseignantsDataMap = new Map(G_ENSEIGNANTS_INITIAL_DATA.map(e => [String(e.enseignantid), e]));
 
             lignesSommaire.forEach(row => {
-                const enseignantIdAttendu = row.dataset.enseignantId; 
-                let enseignantAssocie;
+                const enseignantId = row.dataset.enseignantId;
+                const enseignant = enseignantId ? enseignantsDataMap.get(enseignantId) : undefined;
 
-                if (enseignantIdAttendu) {
-                     enseignantAssocie = enseignantsData.find(ens => String(ens.enseignantid) === enseignantIdAttendu);
-                } else { 
-                    const nomEnseignantSommaire = row.cells[0].textContent.trim();
-                    enseignantAssocie = enseignantsData.find(ens => ens.nomcomplet === nomEnseignantSommaire);
-                    if (enseignantAssocie) row.dataset.enseignantId = enseignantAssocie.enseignantid;
-                }
-
-                if (enseignantAssocie) {
+                if (enseignant) {
                     row.classList.remove('enseignant-fictif-sommaire', 'enseignant-temps-partiel-sommaire', 'enseignant-temps-plein-sommaire');
-                    if (enseignantAssocie.estfictif) {
+                    if (enseignant.estfictif) {
                         row.classList.add('enseignant-fictif-sommaire');
-                    } else if (!enseignantAssocie.esttempsplein) {
+                    } else if (!enseignant.esttempsplein) {
                         row.classList.add('enseignant-temps-partiel-sommaire');
                     } else { 
                         row.classList.add('enseignant-temps-plein-sommaire');
                     }
                 } else {
-                    console.warn(`Aucun enseignant correspondant trouvé dans G_ENSEIGNANTS_INITIAL_DATA pour la ligne de sommaire (ID attendu: ${enseignantIdAttendu}, Nom: ${row.cells[0].textContent.trim()})`);
+                    console.warn(`Aucun enseignant correspondant trouvé pour la ligne de sommaire avec ID: ${enseignantId}`);
                 }
             });
             recalculerEtAfficherMoyenneChamp();
         }
+        
+        function genererRapportCoursRestantsPourImpression() {
+            const container = document.getElementById('print-report-cours-restants');
+            if (!container) return;
+
+            let html = '<h2>Rapport des cours et tâches restants</h2>';
+            const tousLesCours = [...G_COURS_ENSEIGNEMENT_CHAMP, ...G_COURS_AUTRES_TACHES_CHAMP];
+            const coursRestantsSignificatifs = tousLesCours.filter(c => c.grprestant > 0);
+
+            if (coursRestantsSignificatifs.length > 0) {
+                html += '<table style="width:100%; border-collapse: collapse; margin-top:10px;"><thead><tr><th style="border:1px solid #000; padding:4px; background-color:#e9ecef;">Code</th><th style="border:1px solid #000; padding:4px; background-color:#e9ecef;">Descriptif</th><th style="border:1px solid #000; padding:4px; background-color:#e9ecef;">Pér./Grp.</th><th style="border:1px solid #000; padding:4px; background-color:#e9ecef;">Grp. Restants</th></tr></thead><tbody>';
+                coursRestantsSignificatifs.forEach(c => {
+                    html += `<tr><td style="border:1px solid #000; padding:4px;">${c.codecours}</td><td style="border:1px solid #000; padding:4px;">${c.coursdescriptif}</td><td style="border:1px solid #000; padding:4px;">${c.nbperiodes}</td><td style="border:1px solid #000; padding:4px;">${c.grprestant}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            } else {
+                html += '<p>Aucun cours ou tâche restante dans ce champ.</p>';
+            }
+            container.innerHTML = html;
+        }
+
     </script>
 </body>
 </html>

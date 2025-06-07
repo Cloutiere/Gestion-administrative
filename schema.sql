@@ -63,7 +63,8 @@ ALTER SEQUENCE public.attributionscours_attributionid_seq OWNED BY public.attrib
 
 CREATE TABLE public.champs (
     champno text NOT NULL,
-    champnom text NOT NULL
+    champnom text NOT NULL,
+    estverrouille boolean DEFAULT false NOT NULL
 );
 
 
@@ -241,4 +242,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON TABL
 --
 -- PostgreSQL database dump complete
 --
-

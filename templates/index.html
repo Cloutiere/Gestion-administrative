@@ -6,6 +6,13 @@
     <title>Gestion des Tâches Enseignants</title>
     <!-- Lien vers la feuille de style CSS globale -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .locked-indicator {
+            color: #888;
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -27,6 +34,9 @@
                     <a href="{{ url_for('page_champ', champ_no=champ.champno) }}">
                         {{ champ.champno }} - {{ champ.champnom }}
                     </a>
+                    {% if champ.estverrouille %}
+                        <span class="locked-indicator" title="Ce champ est verrouillé">🔒</span>
+                    {% endif %}
                 </li>
                 {% endfor %}
             {% else %}

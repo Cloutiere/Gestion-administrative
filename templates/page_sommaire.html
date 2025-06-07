@@ -32,7 +32,6 @@
             margin-right: 20px;
         }
 
-
         .container-principal-sommaire {
             display: flex;
             flex-grow: 1; 
@@ -104,7 +103,6 @@
             /* Styles spécifiques pour la valeur si nécessaire */
         }
 
-
         .statut-non-compte { color: #6c757d; font-style: italic; }
         
         .champ-header-row th.champ-title-cell {
@@ -122,6 +120,26 @@
             font-size: 0.85em; 
             padding: 6px 8px; 
         }
+
+        /* Styles pour l'icône de verrouillage */
+        .lock-icon {
+            cursor: pointer;
+            font-size: 1.2em;
+            transition: color 0.3s;
+        }
+        .lock-icon.unlocked {
+            color: #28a745; /* Vert pour déverrouillé */
+        }
+        .lock-icon.unlocked:hover {
+            color: #218838;
+        }
+        .lock-icon.locked {
+            color: #dc3545; /* Rouge pour verrouillé */
+        }
+        .lock-icon.locked:hover {
+            color: #c82333;
+        }
+
 
         footer {
             flex-shrink: 0; 
@@ -157,7 +175,8 @@
                         <tr>
                             <th>N° champ</th>
                             <th>Nom du champ</th>
-                            <th>Moyenne périodes</th>
+                            <th>Moyenne</th>
+                            <th>Statut</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -197,6 +216,16 @@
         document.addEventListener('DOMContentLoaded', function() {
             mettreAJourDonneesSommaire(); 
             setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
+            
+            const tableMoyennes = document.getElementById('table-moyennes-par-champ');
+            if(tableMoyennes) {
+                tableMoyennes.addEventListener('click', function(event) {
+                    if (event.target.classList.contains('lock-icon')) {
+                        const champNo = event.target.dataset.champNo;
+                        basculerVerrouChamp(champNo, event.target);
+                    }
+                });
+            }
         });
 
         async function mettreAJourDonneesSommaire() {
@@ -223,13 +252,44 @@
 
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale && data.moyenne_generale !== undefined) {
-                    // Met à jour uniquement la valeur numérique, le texte "périodes" reste dans le HTML
                     elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
                 } else if (elMoyenneGenerale) {
                     elMoyenneGenerale.textContent = `N/A périodes`;
                 }
             } catch (error) {
                 console.error("Erreur MàJ sommaire:", error);
+            }
+        }
+
+        async function basculerVerrouChamp(champNo, iconElement) {
+            try {
+                const response = await fetch(`/api/champs/${champNo}/basculer_verrou`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
+                }
+                // Mettre à jour l'icône directement sans recharger toutes les données
+                mettreAJourIconeVerrou(iconElement, data.est_verrouille);
+            } catch (error) {
+                console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
+                alert(error.message);
+            }
+        }
+        
+        function mettreAJourIconeVerrou(iconElement, estVerrouille) {
+            if (estVerrouille) {
+                iconElement.classList.remove('unlocked');
+                iconElement.classList.add('locked');
+                iconElement.innerHTML = ''; // Cadenas fermé
+                iconElement.title = 'Champ verrouillé. Cliquer pour déverrouiller.';
+            } else {
+                iconElement.classList.remove('locked');
+                iconElement.classList.add('unlocked');
+                iconElement.innerHTML = ''; // Cadenas ouvert
+                iconElement.title = 'Champ déverrouillé. Cliquer pour verrouiller.';
             }
         }
         
@@ -335,9 +395,17 @@
                     row.dataset.champNo = champ_no;
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
+                    
                     const cellMoyenne = row.insertCell();
                     cellMoyenne.classList.add('moyenne-periodes');
                     cellMoyenne.textContent = parseFloat(data.moyenne).toFixed(2);
+
+                    const cellStatut = row.insertCell();
+                    const icon = document.createElement('span');
+                    icon.className = 'lock-icon';
+                    icon.dataset.champNo = champ_no;
+                    mettreAJourIconeVerrou(icon, data.est_verrouille);
+                    cellStatut.appendChild(icon);
                 });
             } else {
                 if (tableMoyennesChamp) tableMoyennesChamp.style.display = 'none';
