@@ -135,8 +135,15 @@ def get_all_enseignants_avec_details():
             )
             enseignants_bruts = [dict(row) for row in cur.fetchall()]
 
+        # Récupération optimisée de toutes les attributions en une seule fois
+        toutes_les_attributions = get_toutes_les_attributions()
+        attributions_par_enseignant = {}
+        for attr in toutes_les_attributions:
+            attributions_par_enseignant.setdefault(attr["enseignantid"], []).append(attr)
+
         for ens_brut in enseignants_bruts:
-            periodes = calculer_periodes_enseignant(ens_brut["enseignantid"])
+            attributions_de_l_enseignant = attributions_par_enseignant.get(ens_brut["enseignantid"], [])
+            periodes = calculer_periodes_pour_attributions(attributions_de_l_enseignant)
             compte_pour_moyenne_champ = ens_brut["esttempsplein"] and not ens_brut["estfictif"]
             enseignants_complets.append(
                 {
@@ -206,9 +213,35 @@ def get_attributions_enseignant(enseignant_id):
         return []
 
 
-def calculer_periodes_enseignant(enseignant_id):
-    """Calcule le total des périodes de cours et autres pour un enseignant."""
-    attributions = get_attributions_enseignant(enseignant_id)
+def get_toutes_les_attributions():
+    """
+    NOUVELLE FONCTION OPTIMISÉE: Récupère toutes les attributions de tous les enseignants en une seule requête.
+    """
+    db = get_db()
+    if not db:
+        return []
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT ac.AttributionID, ac.EnseignantID, ac.CodeCours, ac.NbGroupesPris,
+                       c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre
+                FROM AttributionsCours ac JOIN Cours c ON ac.CodeCours = c.CodeCours
+                ORDER BY ac.EnseignantID, c.EstCoursAutre, c.CoursDescriptif;
+                """
+            )
+            return [dict(a) for a in cur.fetchall()]
+    except psycopg2.Error as e:
+        app.logger.error(f"Erreur DAO get_toutes_les_attributions: {e}")
+        if db and not db.closed:
+            db.rollback()
+        return []
+
+
+def calculer_periodes_pour_attributions(attributions):
+    """
+    NOUVELLE FONCTION UTILITAIRE: Calcule les totaux de périodes à partir d'une liste d'attributions fournie.
+    """
     periodes_enseignement = sum(a["nbperiodes"] * a["nbgroupespris"] for a in attributions if not a["estcoursautre"])
     periodes_autres = sum(a["nbperiodes"] * a["nbgroupespris"] for a in attributions if a["estcoursautre"])
     return {
@@ -216,6 +249,12 @@ def calculer_periodes_enseignant(enseignant_id):
         "periodes_autres": periodes_autres,
         "total_periodes": periodes_enseignement + periodes_autres,
     }
+
+
+def calculer_periodes_enseignant(enseignant_id):
+    """Calcule le total des périodes de cours et autres pour un enseignant en interrogeant la DB."""
+    attributions = get_attributions_enseignant(enseignant_id)
+    return calculer_periodes_pour_attributions(attributions)
 
 
 def get_groupes_restants_pour_cours(code_cours):
@@ -300,54 +339,67 @@ def index():
 
 @app.route("/champ/<string:champ_no>")
 def page_champ(champ_no):
-    """Affiche la page détaillée d'un champ."""
+    """
+    Affiche la page détaillée d'un champ.
+    Cette fonction a été refactorisée pour être plus performante en réduisant
+    le nombre de requêtes à la base de données (suppression du problème N+1).
+    """
     champ_details = get_champ_details(champ_no)
     if not champ_details:
         flash(f"Le champ {champ_no} n'a pas été trouvé.", "error")
         return redirect(url_for("index"))
 
-    enseignants_bruts = get_enseignants_par_champ(champ_no)
+    # Récupération de toutes les données nécessaires en un minimum de requêtes
+    enseignants_du_champ = get_enseignants_par_champ(champ_no)
     cours_disponibles_bruts = get_cours_disponibles_par_champ(champ_no)
 
-    cours_enseignement_champ = [c for c in cours_disponibles_bruts if not c["estcoursautre"]]
-    cours_autres_taches_champ = [c for c in cours_disponibles_bruts if c["estcoursautre"]]
+    # Récupération optimisée de toutes les attributions en une seule fois
+    ids_enseignants = [e["enseignantid"] for e in enseignants_du_champ]
+    toutes_les_attributions = get_toutes_les_attributions()  # Idéalement, on pourrait filtrer par ids_enseignants ici
+    attributions_par_enseignant = {}
+    for attr in toutes_les_attributions:
+        if attr["enseignantid"] in ids_enseignants:
+            attributions_par_enseignant.setdefault(attr["enseignantid"], []).append(attr)
 
-    enseignants_complets_pour_template = []
-    sommaire_champ_data_pour_template = []
+    # Construction de la structure de données complète pour les enseignants
+    enseignants_complets = []
     total_periodes_tp_pour_moyenne = 0
     nb_enseignants_tp_pour_moyenne = 0
 
-    for ens_brut in enseignants_bruts:
-        periodes = calculer_periodes_enseignant(ens_brut["enseignantid"])
-        attributions = get_attributions_enseignant(ens_brut["enseignantid"])
-        enseignants_complets_pour_template.append({**ens_brut, "attributions": attributions, "periodes_actuelles": periodes})
+    for ens in enseignants_du_champ:
+        enseignant_id = ens["enseignantid"]
+        attributions_de_l_enseignant = attributions_par_enseignant.get(enseignant_id, [])
+        periodes = calculer_periodes_pour_attributions(attributions_de_l_enseignant)
 
-        sommaire_champ_data_pour_template.append(
+        enseignants_complets.append(
             {
-                "enseignant_id": ens_brut["enseignantid"],
-                "nom": ens_brut["nomcomplet"],
-                "periodes_cours": periodes["periodes_cours"],
-                "periodes_autres": periodes["periodes_autres"],
-                "total_periodes": periodes["total_periodes"],
-                "est_temps_plein": ens_brut["esttempsplein"],
-                "est_fictif": ens_brut["estfictif"],
+                **ens,
+                "attributions": attributions_de_l_enseignant,
+                "periodes_actuelles": periodes,
             }
         )
-        if ens_brut["esttempsplein"] and not ens_brut["estfictif"]:
+
+        # Calcul pour la moyenne du champ
+        if ens["esttempsplein"] and not ens["estfictif"]:
             total_periodes_tp_pour_moyenne += periodes["total_periodes"]
             nb_enseignants_tp_pour_moyenne += 1
 
+    # Calcul de la moyenne du champ
     moyenne_champ = (total_periodes_tp_pour_moyenne / nb_enseignants_tp_pour_moyenne) if nb_enseignants_tp_pour_moyenne > 0 else 0
+
+    # Séparation des cours pour l'affichage
+    cours_enseignement_champ = [c for c in cours_disponibles_bruts if not c["estcoursautre"]]
+    cours_autres_taches_champ = [c for c in cours_disponibles_bruts if c["estcoursautre"]]
+
     current_year = datetime.datetime.now().year
 
     return render_template(
         "page_champ.html",
         champ=champ_details,
-        enseignants=enseignants_complets_pour_template,
+        enseignants_data=enseignants_complets,  # Une seule structure de données claire
         cours_enseignement_champ=cours_enseignement_champ,
         cours_autres_taches_champ=cours_autres_taches_champ,
         cours_disponibles_pour_tableau_restant=cours_disponibles_bruts,
-        taches_sommaire_champ=sommaire_champ_data_pour_template,
         moyenne_champ_initiale=moyenne_champ,
         SCRIPT_YEAR=current_year,
     )
@@ -915,8 +967,10 @@ def api_reassigner_champ_cours():
             jsonify(
                 {
                     "success": True,
-                    "message": f"Le cours {code_cours_a_reassigner} a été réassigné avec succès au champ {nouveau_champ_no_destination}\
-                    ({nom_nouveau_champ}).",
+                    "message": (
+                        f"Le cours {code_cours_a_reassigner} a été réassigné avec succès au champ {nouveau_champ_no_destination}"
+                        f"({nom_nouveau_champ})."
+                    ),
                     "code_cours": code_cours_a_reassigner,
                     "nouveau_champ_no": nouveau_champ_no_destination,
                     "nouveau_champ_nom": nom_nouveau_champ,
@@ -1024,8 +1078,8 @@ def api_importer_cours_excel():
                     nb_groupe_initial = int(nb_groupe_initial_raw.strip())
                 elif nb_groupe_initial_raw is not None:
                     flash(
-                        f"Ligne {row_idx} (Cours): Valeur non numérique ou incorrecte pour 'Nb Groupes Prévus' ('{nb_groupe_initial_raw}'). \
-                        Ligne ignorée.",
+                        f"Ligne {row_idx} (Cours): Valeur non numérique ou incorrecte pour 'Nb Groupes Prévus' ('{nb_groupe_initial_raw}'). "
+                        "Ligne ignorée.",
                         "warning",
                     )
                     lignes_ignorees_compt += 1
