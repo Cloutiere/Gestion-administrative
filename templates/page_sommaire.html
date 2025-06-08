@@ -161,7 +161,7 @@
             <section class="section-sommaire section-moyenne-generale">
                 <div class="moyenne-generale-contenu">
                     <span class="label">Moyenne générale (temps plein) :</span>
-                    <span class="valeur" id="moyenne-generale-etablissement">{{ "%.2f"|format(moyenne_generale) }} périodes</span>
+                    <span class="valeur" id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
                 </div>
             </section>
 
@@ -212,6 +212,22 @@
     <script>
         const INTERVAL_MISE_A_JOUR = 7000;
 
+        // Fonction utilitaire pour formater les nombres de périodes.
+        // Affiche les décimales uniquement si elles sont non nulles, et évite les zéros superflus.
+        // Par exemple : 5.00 -> "5", 1.50 -> "1.5", 0.75 -> "0.75".
+        // Utilise Intl.NumberFormat pour gérer la localisation et les décimales significatives.
+        function formatPeriodes(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            const formatter = new Intl.NumberFormat('fr-CA', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2,
+                useGrouping: false
+            });
+            return formatter.format(value);
+        }
+
         // DÉFINITION DES ICÔNES SVG POUR UNE UTILISATION UNIVERSELLE
         const SVG_LOCKED = `
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -224,7 +240,9 @@
 
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Mise à jour initiale après le chargement du DOM.
             mettreAJourDonneesSommaire();
+            // Puis met à jour à intervalles réguliers.
             setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
 
             const tableMoyennes = document.getElementById('table-moyennes-par-champ');
@@ -267,7 +285,8 @@
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale) {
                     if (data.moyenne_generale !== undefined && data.moyenne_generale !== null) {
-                        elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
+                        // Utilise la fonction de formatage pour la moyenne générale
+                        elMoyenneGenerale.textContent = `${formatPeriodes(data.moyenne_generale)} périodes`;
                     } else {
                         elMoyenneGenerale.textContent = `N/A périodes`;
                     }
@@ -364,9 +383,10 @@
                             nomCell.textContent = ens.nomcomplet; // Pour les tâches fictives
                         }
 
-                        row.insertCell().textContent = ens.periodes_cours;
-                        row.insertCell().textContent = ens.periodes_autres;
-                        row.insertCell().textContent = ens.total_periodes;
+                        // Appliquer le formatage des périodes
+                        row.insertCell().textContent = formatPeriodes(ens.periodes_cours);
+                        row.insertCell().textContent = formatPeriodes(ens.periodes_autres);
+                        row.insertCell().textContent = formatPeriodes(ens.total_periodes);
 
                         const cellCompteMoyenne = row.insertCell();
                         if (ens.compte_pour_moyenne_champ) {
@@ -421,7 +441,8 @@
                     row.dataset.champNo = champ_no;
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
-                    row.insertCell().textContent = parseFloat(data.moyenne).toFixed(2);
+                    // Appliquer le formatage des périodes pour la moyenne
+                    row.insertCell().textContent = formatPeriodes(data.moyenne);
 
                     const cellStatut = row.insertCell();
                     const icon = document.createElement('span');

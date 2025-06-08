@@ -78,10 +78,14 @@ CREATE TABLE public.cours (
     codecours text NOT NULL,
     champno text NOT NULL,
     coursdescriptif text NOT NULL,
-    nbperiodes integer NOT NULL,
+    -- Modification: Changement de 'integer' à 'NUMERIC(5, 2)' pour supporter les fractions de périodes.
+    -- NUMERIC(5, 2) signifie un maximum de 5 chiffres au total, avec 2 chiffres après la virgule.
+    -- Par exemple: 123.45. Ajustez la précision si vous avez besoin de plus ou moins de décimales.
+    nbperiodes NUMERIC(5, 2) NOT NULL,
     nbgroupeinitial integer NOT NULL,
     estcoursautre boolean DEFAULT false NOT NULL,
     CONSTRAINT cours_nbgroupeinitial_check CHECK ((nbgroupeinitial >= 0)),
+    -- La contrainte de vérification reste valide même avec NUMERIC.
     CONSTRAINT cours_nbperiodes_check CHECK ((nbperiodes >= 0))
 );
 
@@ -251,4 +255,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON TABL
 
 --
 -- PostgreSQL database dump complete
---

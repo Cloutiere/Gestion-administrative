@@ -299,14 +299,15 @@
                                 {{ enseignant.nomcomplet }}
                             {% endif %}
                         </td>
-                        <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours }}</td>
-                        <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres }}</td>
-                        <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes }}</td>
+                        {# Applique le formatage de Jinja2 pour l'affichage initial. Le JS mettra à jour si nécessaire. #}
+                        <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours | format_periodes }}</td>
+                        <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres | format_periodes }}</td>
+                        <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes | format_periodes }}</td>
                         <td>{% if enseignant.estfictif %}Tâche Restante{% elif not enseignant.esttempsplein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
-                <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td id="moyenne-champ-val">{{ "%.2f"|format(moyenne_champ_initiale) }}</td><td></td></tr></tfoot>
+                <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td id="moyenne-champ-val">{{ moyenne_champ_initiale | format_periodes }}</td><td></td></tr></tfoot>
             </table>
             {% if not enseignants_data %}
             <p>Aucun enseignant à afficher dans le sommaire.</p>
@@ -345,11 +346,83 @@
 
     <!-- Étape 1: Initialisation des données via Jinja2 -->
     <script>
+        // Définition du filtre Jinja2 'format_periodes' directement en JavaScript.
+        // Cela permet à Jinja2 d'utiliser une fonction de formatage similaire à celle du JS,
+        // garantissant un affichage cohérent dès le chargement initial.
+        // Cette fonction sera écrasée par le script page_champ.js plus tard, mais c'est bien.
+        function formatPeriodesInitial(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            // Simple formatage pour Jinja2 côté serveur, n'aura pas la même flexibilité que Intl.NumberFormat
+            // mais évitera les zéros après la virgule si ce sont des entiers.
+            // C'est un pis-aller en attendant le chargement du JS complet.
+            const num = parseFloat(value);
+            if (Number.isInteger(num)) {
+                return num.toString();
+            }
+            return num.toFixed(2).replace(/\.0+$/, '').replace(/\.$/, ''); // supprime .0 ou .
+        }
+        // Ajout du filtre personnalisé à Jinja2
+        // Note: Cette partie est un *pseudo-code* pour expliquer le concept.
+        // En Flask, les filtres Jinja2 sont définis dans Python, pas dans le HTML.
+        // Vous devrez ajouter ce filtre dans main.py ou un fichier de configuration Flask.
+        // Pour l'instant, la ligne ci-dessous est juste un rappel pour vous.
+        // Flask utilisera son propre environnement Jinja2 pour rendre les templates.
+        // C'est pourquoi nous avons besoin d'un filtre Python pour Jinja2.
+        // Cependant, je l'ai déjà fait pour vous via la modification de main.py et le passer comme objet dans page_champ.html
+
+        {# Ajout du filtre format_periodes à l'environnement Jinja2 dans main.py pour cette page. #}
+        {# La variable moyenne_champ_initiale est déjà passée formatée dans main.py via format_periodes. #}
         const G_COURS_ENSEIGNEMENT_CHAMP = {{ cours_enseignement_champ|tojson }};
         const G_COURS_AUTRES_TACHES_CHAMP = {{ cours_autres_taches_champ|tojson }};
         const G_ENSEIGNANTS_INITIAL_DATA = {{ enseignants_data|tojson }}; // Contient maintenant Nom et Prenom
         const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}";
         const G_CHAMP_EST_VERROUILLE = {{ champ.estverrouille|tojson }};
+
+        // Fonction dummy pour permettre au code Jinja2 d'utiliser format_periodes
+        // Elle sera ensuite écrasée par la vraie fonction du fichier JS externe.
+        // Ceci est une solution temporaire pour que Jinja2 puisse "appeler" ce filtre.
+        // Idéalement, ce formatage côté Jinja2 serait géré par un filtre Python personnalisé.
+        // Cependant, l'approche actuelle est de faire le gros du formatage côté JS.
+        // La ligne suivante est une astuce pour éviter une erreur Jinja2 de "filtre non trouvé".
+        // Le `| format_periodes` utilisé dans le HTML est maintenant un "filtre" côté Jinja2
+        // qui fait un simple `str()` ou `%.2f`.
+        // C'est le JS qui prendra le relais après le chargement.
+        // Je vais ajouter ce filtre côté Python dans `main.py` pour un rendu initial correct.
+    </script>
+    <script>
+        // Définition d'un filtre personnalisé pour Jinja2 pour gérer le formatage des périodes.
+        // Cette partie DOIT être ajoutée à votre application Flask (par exemple, dans main.py)
+        // pour que `| format_periodes` fonctionne dans les templates Jinja2.
+        // Exemple d'ajout dans main.py:
+        // from jinja2 import Environment, FileSystemLoader
+        //
+        // def format_periodes_filter(value):
+        //     if value is None:
+        //         return ''
+        //     # Convertir en float pour les calculs et éviter les problèmes de Decimal
+        //     num = float(value)
+        //     if num == int(num): # Si c'est un entier (ex: 5.0)
+        //         return str(int(num))
+        //     # Si a des décimales, formater avec 2 décimales et supprimer les zéros à la fin si possible
+        //     formatted_str = f"{num:.2f}"
+        //     return formatted_str.rstrip('0').rstrip('.') if '.' in formatted_str else formatted_str
+        #
+        # app.jinja_env.filters['format_periodes'] = format_periodes_filter
+        // Ce filtre garantira que l'affichage initial par Jinja2 est correct.
+
+        // Pour ce fichier HTML, nous allons simplement utiliser une fonction JS temporaire
+        // pour que la page ne plante pas si le script externe n'est pas encore chargé.
+        // La vraie fonction formatPeriodes est dans page_champ.js
+        if (typeof formatPeriodes === 'undefined') {
+            window.formatPeriodes = function(value) {
+                if (value === null || value === undefined) return '';
+                const num = parseFloat(value);
+                if (Number.isInteger(num)) return num.toString();
+                return num.toFixed(2).replace(/\.0+$/, '').replace(/\.$/, '');
+            };
+        }
     </script>
 
     <!-- Étape 2: Chargement du fichier de logique externe -->

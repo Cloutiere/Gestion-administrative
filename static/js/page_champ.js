@@ -8,6 +8,31 @@
 // - G_CHAMP_NO_ACTUEL
 // - G_CHAMP_EST_VERROUILLE
 
+/**
+ * Fonction utilitaire pour formater les nombres de périodes.
+ * Affiche les décimales uniquement si elles sont non nulles, et évite les zéros superflus.
+ * Par exemple : 5.00 -> "5", 1.50 -> "1.5", 0.75 -> "0.75".
+ * @param {number} value Le nombre à formater.
+ * @returns {string} Le nombre formaté en tant que chaîne de caractères.
+ */
+function formatPeriodes(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    // Utilise Intl.NumberFormat pour gérer la localisation et les décimales significatives.
+    // 'fr-CA' assure l'utilisation de la virgule comme séparateur décimal si nécessaire.
+    // minimumFractionDigits: 0 pour s'assurer que les nombres entiers n'ont pas de décimales forcées (ex: 5.00 -> 5).
+    // maximumFractionDigits: 2 pour permettre jusqu'à deux décimales (ex: 0.75), ajustez si besoin d'une plus grande précision.
+    // useGrouping: false pour ne pas utiliser de séparateur de milliers.
+    const formatter = new Intl.NumberFormat('fr-CA', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+        useGrouping: false
+    });
+    return formatter.format(value);
+}
+
+
 document.addEventListener("DOMContentLoaded", function () {
     // Le rendu HTML initial est déjà fait par Jinja2.
     // On se contente d'initialiser les parties dynamiques et de lier les événements.
@@ -171,8 +196,8 @@ function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray)
                 <td>${attr.codecours}</td>
                 <td>${attr.coursdescriptif}</td>
                 <td>${attr.nbgroupespris}</td>
-                <td>${attr.nbperiodes}</td>
-                <td>${totalPeriodesAttr}</td>
+                <td>${formatPeriodes(attr.nbperiodes)}</td>
+                <td>${formatPeriodes(totalPeriodesAttr)}</td>
                 <td class="no-print"><button class="btn-retirer-cours" data-attribution-id="${lastAttributionId}">Retirer</button></td>
             `;
         });
@@ -204,7 +229,7 @@ function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray)
     totalLabelCell.colSpan = NOMBRE_COLONNES_CONTENU - 1; // Ajuste le colspan
     totalLabelCell.textContent = "Total périodes choisies:";
     const totalValueCell = totalRow.insertCell();
-    totalValueCell.textContent = totalPeriodesEnseignantCalcule;
+    totalValueCell.textContent = formatPeriodes(totalPeriodesEnseignantCalcule);
     totalRow.insertCell().classList.add("no-print"); // Cellule vide pour le bouton d'action.
 }
 
@@ -455,7 +480,7 @@ function genererHtmlLignesCoursRestants() {
     if (coursEnseignementRestants.length > 0) {
         coursEnseignementRestants.forEach((cours) => {
             const periodesRestantes = cours.nbperiodes * cours.grprestant;
-            html += `<tr><td>${cours.codecours}</td><td>${cours.coursdescriptif}</td><td id="grp-restant-${cours.codecours}">${cours.grprestant}</td><td>${cours.nbperiodes}</td><td>${periodesRestantes}</td></tr>`;
+            html += `<tr><td>${cours.codecours}</td><td>${cours.coursdescriptif}</td><td id="grp-restant-${cours.codecours}">${cours.grprestant}</td><td>${formatPeriodes(cours.nbperiodes)}</td><td>${formatPeriodes(periodesRestantes)}</td></tr>`;
         });
     } else {
         html += `<tr><td colspan="5" style="text-align:center; font-style:italic;">Toutes les périodes d'enseignement ont été choisies.</td></tr>`;
@@ -466,7 +491,7 @@ function genererHtmlLignesCoursRestants() {
     if (coursAutresRestants.length > 0) {
         coursAutresRestants.forEach((cours) => {
             const periodesRestantes = cours.nbperiodes * cours.grprestant;
-            html += `<tr><td>${cours.codecours}</td><td>${cours.coursdescriptif}</td><td id="grp-restant-${cours.codecours}">${cours.grprestant}</td><td>${cours.nbperiodes}</td><td>${periodesRestantes}</td></tr>`;
+            html += `<tr><td>${cours.codecours}</td><td>${cours.coursdescriptif}</td><td id="grp-restant-${cours.codecours}">${cours.grprestant}</td><td>${formatPeriodes(cours.nbperiodes)}</td><td>${formatPeriodes(periodesRestantes)}</td></tr>`;
         });
     } else {
         html += `<tr><td colspan="5" style="text-align:center; font-style:italic;">Toutes les autres tâches ont été choisies.</td></tr>`;
@@ -521,7 +546,7 @@ function genererListeHTMLCoursDispo(listeCoursGlobale, enseignantId, typeCours) 
     if (coursAffichables.length > 0) {
         coursAffichables.forEach((cours) => {
             html += `<li>
-                        ${cours.codecours} - ${cours.coursdescriptif} (${cours.nbperiodes} pér. - ${cours.grprestant} grp. rest.)
+                        ${cours.codecours} - ${cours.coursdescriptif} (${formatPeriodes(cours.nbperiodes)} pér. - ${cours.grprestant} grp. rest.)
                         <button data-enseignant-id="${enseignantId}" data-cours-code="${cours.codecours}" data-type="${typeCours}" data-nb-periodes="${cours.nbperiodes}">Choisir</button>
                      </li>`;
         });
@@ -541,9 +566,9 @@ function mettreAJourLigneSommaire(enseignantId, periodes) {
     // 1. Mettre à jour le DOM pour l'affichage en direct
     const ligne = document.querySelector(`.sommaire-champ-section tbody tr[data-enseignant-id="${enseignantId}"]`);
     if (ligne) {
-        ligne.querySelector(".sum-cours-val").textContent = periodes.periodes_cours;
-        ligne.querySelector(".sum-autres-val").textContent = periodes.periodes_autres;
-        ligne.querySelector(".sum-total-val").textContent = periodes.total_periodes;
+        ligne.querySelector(".sum-cours-val").textContent = formatPeriodes(periodes.periodes_cours);
+        ligne.querySelector(".sum-autres-val").textContent = formatPeriodes(periodes.periodes_autres);
+        ligne.querySelector(".sum-total-val").textContent = formatPeriodes(periodes.total_periodes);
     }
 
     // 2. Mettre à jour la variable de données globale G_ENSEIGNANTS_INITIAL_DATA.
@@ -644,9 +669,9 @@ function ajouterAuTableauSommaire(enseignant, periodes) {
 
     row.innerHTML = `
         <td>${nomPourSommaire}</td>
-        <td class="sum-cours-val">${periodes.periodes_cours}</td>
-        <td class="sum-autres-val">${periodes.periodes_autres}</td>
-        <td class="sum-total-val">${periodes.total_periodes}</td>
+        <td class="sum-cours-val">${formatPeriodes(periodes.periodes_cours)}</td>
+        <td class="sum-autres-val">${formatPeriodes(periodes.periodes_autres)}</td>
+        <td class="sum-total-val">${formatPeriodes(periodes.total_periodes)}</td>
         <td>${statutTexte}</td>`;
 }
 
@@ -673,7 +698,7 @@ function recalculerEtAfficherMoyenneChamp() {
     const moyenne = countTempsPleinNonFictif > 0 ? totalPeriodes / countTempsPleinNonFictif : 0;
     const moyenneCell = document.getElementById("moyenne-champ-val");
     if (moyenneCell) {
-        moyenneCell.textContent = moyenne.toFixed(2); // Affiche la moyenne avec 2 décimales.
+        moyenneCell.textContent = formatPeriodes(moyenne); // Utilise la fonction de formatage ici
     }
 }
 
@@ -744,9 +769,9 @@ function genererHtmlTableauSommaireChamp() {
         tbodyHtml += `
             <tr class="${statutClass}" data-enseignant-id="${enseignant.enseignantid}">
                 <td>${nomPourAffichage}</td>
-                <td class="sum-cours-val">${periodes.periodes_cours}</td>
-                <td class="sum-autres-val">${periodes.periodes_autres}</td>
-                <td class="sum-total-val">${periodes.total_periodes}</td>
+                <td class="sum-cours-val">${formatPeriodes(periodes.periodes_cours)}</td>
+                <td class="sum-autres-val">${formatPeriodes(periodes.periodes_autres)}</td>
+                <td class="sum-total-val">${formatPeriodes(periodes.total_periodes)}</td>
                 <td>${statutText}</td>
             </tr>`;
     });

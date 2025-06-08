@@ -1,5 +1,6 @@
 import datetime
 import os
+from decimal import Decimal # Importation pour gérer les types Decimal de PostgreSQL
 
 import openpyxl  # Pour la manipulation des fichiers Excel
 import psycopg2
@@ -20,6 +21,32 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 # Crée le répertoire d'upload s'il n'existe pas déjà
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+# --- Filtre Jinja2 personnalisé pour formater les périodes ---
+def format_periodes_filter(value):
+    """
+    Formate un nombre de périodes pour l'affichage dans les templates Jinja2.
+    Affiche les décimales uniquement si elles sont non nulles, et évite les zéros superflus.
+    Exemples: 5.00 -> "5", 1.50 -> "1.5", 0.75 -> "0.75".
+    """
+    if value is None:
+        return ''
+    # Convertir en float pour s'assurer que les opérations de formatage sont cohérentes.
+    # Gère également les types Decimal potentiellement retournés par psycopg2.
+    num = float(value)
+
+    # Si le nombre est un entier (e.g., 5.0, 7.0), le convertir en chaîne d'entier.
+    if num == int(num):
+        return str(int(num))
+    # Sinon, formater avec deux décimales, puis supprimer les zéros superflus à la fin.
+    # .rstrip('0') enlève les zéros de fin, .rstrip('.') enlève le point si tous les zéros ont été enlevés.
+    formatted_str = f"{num:.2f}"
+    return formatted_str.rstrip('0').rstrip('.')
+
+
+# Enregistre le filtre personnalisé dans l'environnement Jinja2 de l'application Flask.
+app.jinja_env.filters['format_periodes'] = format_periodes_filter
 
 
 # --- Configuration de la base de données ---
@@ -213,6 +240,7 @@ def get_cours_disponibles_par_champ(champ_no):
                 """,
                 (champ_no,),
             )
+            # Convertit les résultats en dictionnaires. NbPeriodes sera un Decimal de PostgreSQL.
             return [dict(cr) for cr in cur.fetchall()]
     except psycopg2.Error as e:
         app.logger.error(f"Erreur DAO get_cours_disponibles_par_champ pour {champ_no}: {e}")
@@ -282,9 +310,10 @@ def calculer_periodes_pour_attributions(attributions):
     Calcule le total des périodes de cours (enseignement) et des périodes d'autres tâches
     à partir d'une liste d'attributions fournie.
     Cette fonction est générique et peut être utilisée avec des listes d'attributions déjà chargées en mémoire.
+    Utilise des floats pour les calculs de périodes.
     """
-    periodes_enseignement = sum(a["nbperiodes"] * a["nbgroupespris"] for a in attributions if not a["estcoursautre"])
-    periodes_autres = sum(a["nbperiodes"] * a["nbgroupespris"] for a in attributions if a["estcoursautre"])
+    periodes_enseignement = sum(float(a["nbperiodes"]) * a["nbgroupespris"] for a in attributions if not a["estcoursautre"])
+    periodes_autres = sum(float(a["nbperiodes"]) * a["nbgroupespris"] for a in attributions if a["estcoursautre"])
     return {
         "periodes_cours": periodes_enseignement,
         "periodes_autres": periodes_autres,
@@ -421,7 +450,7 @@ def page_champ(champ_no):
 
     # Construction de la structure de données complète pour les enseignants du champ.
     enseignants_complets = []
-    total_periodes_tp_pour_moyenne = 0
+    total_periodes_tp_pour_moyenne = 0.0 # Initialisation en float
     nb_enseignants_tp_pour_moyenne = 0
 
     for ens in enseignants_du_champ:
@@ -443,7 +472,7 @@ def page_champ(champ_no):
             nb_enseignants_tp_pour_moyenne += 1
 
     # Calcul de la moyenne du champ.
-    moyenne_champ = (total_periodes_tp_pour_moyenne / nb_enseignants_tp_pour_moyenne) if nb_enseignants_tp_pour_moyenne > 0 else 0
+    moyenne_champ = (total_periodes_tp_pour_moyenne / nb_enseignants_tp_pour_moyenne) if nb_enseignants_tp_pour_moyenne > 0 else 0.0 # Retourne 0.0 si aucun enseignant
 
     # Séparation des cours par catégorie pour l'affichage dans les listes de sélection.
     cours_enseignement_champ = [c for c in cours_disponibles_bruts if not c["estcoursautre"]]
@@ -510,7 +539,7 @@ def calculer_donnees_sommaire():
     tous_enseignants_details = get_all_enseignants_avec_details()
     enseignants_par_champ_temp = {}
     moyennes_par_champ_calculees = {}
-    total_periodes_global_tp = 0
+    total_periodes_global_tp = 0.0 # Initialisation en float
     nb_enseignants_tp_global = 0
 
     for ens in tous_enseignants_details:
@@ -524,9 +553,9 @@ def calculer_donnees_sommaire():
                 "champno": champ_no,
                 "champnom": champ_nom,
                 "enseignants": [],
-                "total_periodes_cours_champ": 0,
-                "total_periodes_autres_champ": 0,
-                "total_periodes_champ": 0,
+                "total_periodes_cours_champ": 0.0,
+                "total_periodes_autres_champ": 0.0,
+                "total_periodes_champ": 0.0,
             }
 
         # Ajoute l'enseignant aux données de son champ et met à jour les totaux du champ.
@@ -540,7 +569,7 @@ def calculer_donnees_sommaire():
             if champ_no not in moyennes_par_champ_calculees:
                 moyennes_par_champ_calculees[champ_no] = {
                     "champ_nom": champ_nom,
-                    "total_periodes": 0,
+                    "total_periodes": 0.0, # Initialisation en float
                     "nb_enseignants": 0,
                     "moyenne": 0.0,  # Valeur initiale
                     "est_verrouille": est_verrouille,
@@ -560,7 +589,7 @@ def calculer_donnees_sommaire():
         del data_champ["nb_enseignants"]
 
     # Calcule la moyenne générale de l'établissement.
-    moyenne_generale_calculee = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0
+    moyenne_generale_calculee = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0 # Retourne 0.0
     # Convertit le dictionnaire temporaire en une liste pour le retour.
     enseignants_par_champ_final = list(enseignants_par_champ_temp.values())
 
@@ -757,7 +786,7 @@ def api_supprimer_attribution():
     enseignant_id_concerne, code_cours_concerne = None, None
     periodes_enseignant_maj, groupes_restants_cours_maj = {}, 0
     attributions_enseignant_maj = []
-    periodes_liberees_par_suppression = 0
+    periodes_liberees_par_suppression = 0.0 # Initialisation en float
     infos_enseignant_pour_reponse = {}
 
     try:
@@ -787,7 +816,8 @@ def api_supprimer_attribution():
 
             enseignant_id_concerne = attribution_info["enseignantid"]
             code_cours_concerne = attribution_info["codecours"]
-            periodes_liberees_par_suppression = attribution_info.get("periodesducours", 0) * attribution_info.get("nbgroupespris", 0)
+            # S'assurer que le calcul utilise float pour NbPeriodes
+            periodes_liberees_par_suppression = float(attribution_info.get("periodesducours", 0.0)) * attribution_info.get("nbgroupespris", 0)
 
             # Supprime l'attribution.
             cur.execute("DELETE FROM AttributionsCours WHERE AttributionID = %s;", (attribution_id_a_supprimer,))
@@ -859,8 +889,9 @@ def api_supprimer_attribution():
     except Exception as e_gen:  # pylint: disable=broad-except
         if db and not db.closed:
             db.rollback()
-        app.logger.error(f"Erreur générale Exception API supprimer attribution: {e_gen}")
-        return jsonify({"success": False, "message": f"Erreur serveur inattendue lors de la suppression: {str(e_gen)}"}), 500
+        app.logger.error(f"Erreur générale Exception API supprimer enseignant: {e_gen}")
+        msg = f"Erreur serveur inattendue lors de la suppression: {str(e_gen)}"
+        return jsonify({"success": False, "message": msg}), 500
 
 
 @app.route("/api/champs/<string:champ_no>/taches_restantes/creer", methods=["POST"])
@@ -875,7 +906,7 @@ def api_creer_tache_restante(champ_no):
 
     nouvel_enseignant_fictif_cree = {}
     # Les tâches restantes commencent avec 0 période.
-    periodes_initiales_tache = {"periodes_cours": 0, "periodes_autres": 0, "total_periodes": 0}
+    periodes_initiales_tache = {"periodes_cours": 0.0, "periodes_autres": 0.0, "total_periodes": 0.0} # Initialisation en float
 
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
@@ -1001,7 +1032,8 @@ def api_supprimer_enseignant(enseignant_id):
                 for code_cours_unique in codes_cours_uniques:
                     groupes_restants_maj = get_groupes_restants_pour_cours(code_cours_unique)
                     # Récupère le nombre de périodes du cours pour le retour d'information.
-                    nb_periodes = next((c["nbperiodes"] for c in cours_affectes_avant_suppression if c["codecours"] == code_cours_unique), 0)
+                    # S'assurer que NbPeriodes est bien converti en float.
+                    nb_periodes = float(next((c["nbperiodes"] for c in cours_affectes_avant_suppression if c["codecours"] == code_cours_unique), 0.0))
                     cours_liberes_apres_suppression.append(
                         {
                             "code_cours": code_cours_unique,
@@ -1204,7 +1236,7 @@ def api_importer_cours_excel():
         # Parcourt les lignes restantes du fichier Excel pour extraire les données des cours.
         for row_idx, row in enumerate(iter_rows, start=2):  # row_idx commence à 2 pour correspondre aux numéros de ligne Excel.
             try:
-                # Lecture des valeurs des cellules en utilisant les indices de colonne (base 0).
+                # Reading cell values using 0-based column indices.
                 # Colonne A: ChampNo
                 champ_no_raw = row[0].value
                 # Colonne B: CodeCours
@@ -1244,19 +1276,29 @@ def api_importer_cours_excel():
                     lignes_ignorees_compt += 1
                     continue
 
-                # Conversion de NbPeriodes en entier, avec validation.
-                nb_periodes = 0
+                # Conversion de NbPeriodes en float, avec validation.
+                # Gère les entiers, les flottants et les chaînes qui peuvent être converties en float.
+                nb_periodes = 0.0 # Initialisation en float
                 if isinstance(nb_periodes_raw, int | float):
-                    nb_periodes = int(nb_periodes_raw)
-                elif isinstance(nb_periodes_raw, str) and nb_periodes_raw.strip().isdigit():
-                    nb_periodes = int(nb_periodes_raw.strip())
+                    nb_periodes = float(nb_periodes_raw)
+                elif isinstance(nb_periodes_raw, str):
+                    try:
+                        # Remplace les virgules par des points pour la conversion en float, si applicable.
+                        nb_periodes = float(nb_periodes_raw.replace(',', '.').strip())
+                    except ValueError:
+                        flash(
+                            f"Ligne {row_idx} (Cours): Valeur non numérique ou incorrecte pour 'Périodes/GR' ('{nb_periodes_raw}'). Ligne ignorée.",
+                            "warning",
+                        )
+                        lignes_ignorees_compt += 1
+                        continue
                 elif nb_periodes_raw is not None:
                     flash(
-                        f"Ligne {row_idx} (Cours): Valeur non numérique ou incorrecte pour 'Périodes/GR' ('{nb_periodes_raw}'). Ligne ignorée.",
+                        f"Ligne {row_idx} (Cours): Valeur inattendue pour 'Périodes/GR' ('{nb_periodes_raw}'). Assumée 0.0.",
                         "warning",
                     )
-                    lignes_ignorees_compt += 1
-                    continue
+                    nb_periodes = 0.0 # S'assurer que la valeur est un float valide.
+
 
                 # Conversion de EstCoursAutre en booléen, avec gestion des différents formats (VRAI/FAUX, TRUE/FALSE, 1/0, OUI/NON).
                 est_cours_autre = False
@@ -1279,7 +1321,7 @@ def api_importer_cours_excel():
                         "codecours": code_cours,
                         "champno": champ_no,
                         "coursdescriptif": cours_descriptif,
-                        "nbperiodes": nb_periodes,
+                        "nbperiodes": nb_periodes, # Sera maintenant un float
                         "nbgroupeinitial": nb_groupe_initial,
                         "estcoursautre": est_cours_autre,
                     }
@@ -1394,8 +1436,7 @@ def api_importer_enseignants_excel():
         # Parcourt les lignes restantes du fichier Excel pour extraire les données des enseignants.
         for row_idx, row in enumerate(iter_rows, start=2):
             try:
-                # Lecture des valeurs des cellules en utilisant les indices de colonne (base 0).
-                # Correction ici pour correspondre à votre structure Excel:
+                # Reading cell values using 0-based column indices.
                 # Colonne A: ChampNo
                 champ_no_raw = row[0].value
                 # Colonne C: NOM (Nom de famille)
