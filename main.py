@@ -1,7 +1,7 @@
 import datetime
 import os
 from functools import wraps
-from typing import Any  # Importation de Any pour les types génériques
+from typing import Any
 
 import openpyxl
 import psycopg2
@@ -261,7 +261,9 @@ def get_all_users_with_access_info() -> list[dict]:
                 user_dict = dict(row)
                 # ARRAY_AGG retourne un tableau Python, il peut contenir None si pas d'accès
                 if user_dict["is_admin"]:
-                    user_dict["allowed_champs"] = []  # Les admins ont tout par défaut.
+                    # Les admins ont accès à tous les champs, donc leur liste d'accès est vide ici.
+                    # La logique de permission dans User.can_access_champ gère cela.
+                    user_dict["allowed_champs"] = []
                 else:
                     user_dict["allowed_champs"] = (
                         [c for c in user_dict["allowed_champs"] if c is not None] if user_dict["allowed_champs"] else []
@@ -706,13 +708,12 @@ def login() -> Any:
     """
     Gère la connexion des utilisateurs.
     GET: Affiche le formulaire de connexion.
-    POST: Traite les données de connexion.
+    POST: Traite les données de connexion et redirige intelligemment.
     """
     if current_user.is_authenticated:
         flash("Vous êtes déjà connecté(e).", "info")
         return redirect(url_for("index"))
 
-    # Déterminer si c'est le tout premier utilisateur à créer dans la base de données.
     _first_user_check = get_users_count() == 0
 
     if request.method == "POST":
@@ -722,14 +723,21 @@ def login() -> Any:
         user_data = get_user_by_username(username)
 
         if user_data and check_hashed_password(user_data["password_hash"], password):
-            # Lors de la connexion, recharger l'utilisateur via get_user_by_id pour obtenir ses allowed_champs
             user = get_user_by_id(user_data["id"])
             if user:
                 login_user(user)
                 flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
-                # Redirige vers la page demandée avant la connexion, ou vers l'accueil
+
+                # Logique de redirection intelligente
+                # Si l'utilisateur n'est pas admin et a accès à un seul champ, le rediriger directement.
+                if not current_user.is_admin and len(current_user.allowed_champs) == 1:
+                    champ_no_redirect = current_user.allowed_champs[0]
+                    return redirect(url_for("page_champ", champ_no=champ_no_redirect))
+
+                # Logique de redirection standard pour les admins ou utilisateurs avec 0 ou >1 champs.
                 next_page = request.args.get("next")
                 return redirect(next_page or url_for("index"))
+
             flash("Erreur lors du chargement des informations utilisateur.", "error")
         else:
             flash("Nom d'utilisateur ou mot de passe invalide.", "error")
@@ -768,7 +776,7 @@ def register() -> Any:
 
     # Logique pour le tout premier utilisateur (sera ADMIN d'office)
     _username = request.form.get("username", "").strip()  # pour réafficher le nom d'utilisateur en cas d'erreur
-    # _is_admin_checked = True # Le premier utilisateur est toujours admin, cette variable n'est pas vraiment utilisée.
+    # La variable _is_admin_checked n'est pas nécessaire ici, le premier utilisateur est toujours admin.
 
     if request.method == "POST":
         username = request.form["username"].strip()
@@ -881,10 +889,12 @@ def page_champ(champ_no: str) -> Any:
 
 
 @app.route("/sommaire")
-@login_required  # Protection de la route
+@login_required  # Requiert une connexion
+@admin_required  # Requiert des droits d'administrateur
 def page_sommaire() -> Any:
     """
     Affiche la page du sommaire global des tâches des enseignants.
+    Cette page est accessible uniquement aux administrateurs.
     """
     enseignants_par_champ_data, moyennes_champs, moyenne_gen = calculer_donnees_sommaire()
     return render_template(
@@ -972,12 +982,14 @@ def calculer_donnees_sommaire() -> tuple[list[dict], dict[str, dict], float]:
     for data_champ in moyennes_par_champ_calculees.values():
         if data_champ["nb_enseignants"] > 0:
             data_champ["moyenne"] = data_champ["total_periodes"] / data_champ["nb_enseignants"]
+        # Supprimer les clés intermédiaires non nécessaires pour l'affichage final
         del data_champ["total_periodes"]
         del data_champ["nb_enseignants"]
 
     moyenne_generale_calculee = (
         (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
     )
+    # Convertir le dictionnaire temporaire en liste pour l'itération dans le template
     enseignants_par_champ_final = list(enseignants_par_champ_temp.values())
 
     return enseignants_par_champ_final, moyennes_par_champ_calculees, moyenne_generale_calculee
@@ -986,9 +998,11 @@ def calculer_donnees_sommaire() -> tuple[list[dict], dict[str, dict], float]:
 # --- API ENDPOINTS ---
 @app.route("/api/sommaire/donnees", methods=["GET"])
 @login_required  # Protection de la route API
+@admin_required  # Requiert des droits d'administrateur
 def api_get_donnees_sommaire() -> Any:
     """
     API pour récupérer les données actualisées du sommaire global de l'établissement.
+    Cette API est accessible uniquement aux administrateurs.
     """
     enseignants_groupes, moyennes_champs, moyenne_gen = calculer_donnees_sommaire()
     return jsonify(
@@ -1488,9 +1502,13 @@ def api_get_all_users() -> Any:
     db = get_db()
     admin_count = 0
     if db:
-        with db.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
-            admin_count = cur.fetchone()[0]
+        try:
+            with db.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
+                admin_count = cur.fetchone()[0]
+        except psycopg2.Error as e:
+            app.logger.error(f"Erreur lors du comptage des administrateurs: {e}")
+            # En cas d'erreur DB, le nombre d'admins reste 0, ce qui est une dégradation acceptable.
     return jsonify({"users": users_info, "admin_count": admin_count})
 
 
@@ -1554,7 +1572,8 @@ def api_update_user_access(user_id: int) -> Any:
         return jsonify(
             {
                 "success": False,
-                "message": "Vous ne pouvez pas modifier vos propres droits d'accès aux champs si vous êtes administrateur. Les administrateurs ont accès à tous les champs par défaut.",
+                "message": "Vous ne pouvez pas modifier vos propres droits d'accès aux champs si vous êtes administrateur. \
+                Les administrateurs ont accès à tous les champs par défaut.",
             }
         ), 403
 
@@ -1566,7 +1585,8 @@ def api_update_user_access(user_id: int) -> Any:
         return jsonify(
             {
                 "success": False,
-                "message": "Vous ne pouvez pas modifier les droits d'accès aux champs d'un autre administrateur. Les administrateurs ont accès à tous les champs par défaut.",
+                "message": "Vous ne pouvez pas modifier les droits d'accès aux champs d'un autre administrateur. \
+                Les administrateurs ont accès à tous les champs par défaut.",
             }
         ), 403
 
@@ -1662,6 +1682,7 @@ def api_importer_cours_excel() -> Any:
         lignes_ignorees_compt = 0
         for row_idx, row in enumerate(iter_rows, start=2):
             try:
+                # Accès aux cellules par index (0-based)
                 champ_no_raw = row[0].value
                 code_cours_raw = row[1].value
                 # row[2].value est la grille (ignorée)
@@ -1715,7 +1736,7 @@ def api_importer_cours_excel() -> Any:
                         f"Ligne {row_idx} (Cours): Valeur inattendue pour 'Périodes/GR' ('{nb_periodes_raw}'). Assumée 0.0.",
                         "warning",
                     )
-                    nb_periodes = 0.0
+                    # nb_periodes = 0.0 # Déjà initialisé à 0.0
 
                 est_cours_autre = False
                 if isinstance(est_cours_autre_raw, bool):
@@ -1758,6 +1779,8 @@ def api_importer_cours_excel() -> Any:
             return redirect(url_for("page_administration_donnees"))
 
         with db.cursor() as cur:
+            # Suppression des attributions et cours existants avant l'insertion des nouveaux.
+            # L'ordre est important car AttributionsCours dépend de Cours.
             cur.execute("DELETE FROM AttributionsCours;")
             cur.execute("DELETE FROM Cours;")
 
@@ -1845,11 +1868,11 @@ def api_importer_enseignants_excel() -> Any:
         lignes_ignorees_compt = 0
         for row_idx, row in enumerate(iter_rows, start=2):
             try:
+                # Accès aux cellules par index (0-based)
                 champ_no_raw = row[0].value
-                # row[1].value est le "Champ Nom" (ignoré)
-                nom_famille_raw = row[2].value
-                prenom_raw = row[3].value
-                temps_plein_raw = row[4].value
+                nom_famille_raw = row[1].value  # Corrigé: Index 1 pour "NOM"
+                prenom_raw = row[2].value  # Corrigé: Index 2 pour "PRÉNOM"
+                temps_plein_raw = row[3].value  # Corrigé: Index 3 pour "Temps plein"
 
                 champ_no = str(champ_no_raw).strip() if champ_no_raw is not None else None
                 nom_famille = str(nom_famille_raw).strip() if nom_famille_raw is not None else None
@@ -1907,6 +1930,8 @@ def api_importer_enseignants_excel() -> Any:
             return redirect(url_for("page_administration_donnees"))
 
         with db.cursor() as cur:
+            # Suppression des attributions et enseignants existants avant l'insertion des nouveaux.
+            # L'ordre est important car AttributionsCours dépend de Enseignants.
             cur.execute("DELETE FROM AttributionsCours;")
             cur.execute("DELETE FROM Enseignants;")
 
@@ -1915,7 +1940,8 @@ def api_importer_enseignants_excel() -> Any:
                 try:
                     cur.execute(
                         """INSERT INTO Enseignants (NomComplet, Nom, Prenom, ChampNo, EstTempsPlein, EstFictif, PeutChoisirHorsChampPrincipal)
-                           VALUES (%(nomcomplet)s, %(nom)s, %(prenom)s, %(champno)s, %(esttempsplein)s, %(estfictif)s, %(peutchoisirhorschampprincipal)s);""",
+                           VALUES (%(nomcomplet)s, %(nom)s, %(prenom)s, %(champno)s, \
+                           %(esttempsplein)s, %(estfictif)s, %(peutchoisirhorschampprincipal)s);""",
                         ens_data,
                     )
                     ens_importes_count += 1
@@ -1949,6 +1975,67 @@ def api_importer_enseignants_excel() -> Any:
         msg_err_inatt = f"Une erreur inattendue est survenue lors de l'importation des enseignants: {type(e).__name__}. L'opération a été annulée."
         flash(msg_err_inatt, "error")
     return redirect(url_for("page_administration_donnees"))
+
+
+# --- Nouvelle API pour réassigner un cours à un autre champ ---
+@app.route("/api/cours/reassigner_champ", methods=["POST"])
+@login_required
+@admin_required
+def api_reassigner_cours_champ() -> Any:
+    """
+    Endpoint API pour réassigner un cours à un nouveau champ.
+    Accessible uniquement aux administrateurs.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "Aucune donnée JSON reçue."}), 400
+
+    code_cours = data.get("code_cours")
+    nouveau_champ_no = data.get("nouveau_champ_no")
+
+    if not code_cours or not nouveau_champ_no:
+        return jsonify({"success": False, "message": "Code cours ou nouveau champ manquant."}), 400
+
+    db = get_db()
+    if not db:
+        return jsonify({"success": False, "message": "Erreur de connexion à la base de données."}), 500
+
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            # Vérifier si le cours et le nouveau champ existent
+            cur.execute("SELECT CoursDescriptif FROM Cours WHERE CodeCours = %s;", (code_cours,))
+            cours_exist = cur.fetchone()
+            if not cours_exist:
+                return jsonify({"success": False, "message": f"Le cours '{code_cours}' n'existe pas."}), 404
+
+            cur.execute("SELECT ChampNom FROM Champs WHERE ChampNo = %s;", (nouveau_champ_no,))
+            new_champ_exist = cur.fetchone()
+            if not new_champ_exist:
+                return jsonify({"success": False, "message": f"Le champ '{nouveau_champ_no}' n'existe pas."}), 404
+
+            # Réassigner le cours
+            cur.execute(
+                "UPDATE Cours SET ChampNo = %s WHERE CodeCours = %s;",
+                (nouveau_champ_no, code_cours),
+            )
+            db.commit()
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"Le cours '{code_cours}' a été réassigné au champ '{nouveau_champ_no}' avec succès.",
+                    "nouveau_champ_no": nouveau_champ_no,
+                    "nouveau_champ_nom": new_champ_exist["champnom"],
+                }
+            ), 200
+    except psycopg2.Error as e:
+        db.rollback()
+        app.logger.error(f"Erreur DAO reassign_cours_champ pour {code_cours} vers {nouveau_champ_no}: {e}")
+        return jsonify({"success": False, "message": "Erreur de base de données lors de la réassignation du cours."}), 500
+    except Exception as e:
+        db.rollback()
+        app.logger.error(f"Erreur générale API reassign_cours_champ: {e}")
+        return jsonify({"success": False, "message": "Erreur serveur inattendue lors de la réassignation."}), 500
 
 
 # --- Démarrage de l'application ---

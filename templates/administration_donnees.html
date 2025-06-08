@@ -1,393 +1,260 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Administration - Gestion des données</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        /* Styles existants pour la réassignation des cours */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            margin-bottom: 30px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        .select-champ {
-            min-width: 150px;
-        }
-        .btn-reassigner {
-            padding: 5px 10px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .btn-reassigner:hover {
-            background-color: #0056b3;
-        }
-        .btn-reassigner:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
+ <!DOCTYPE html>
+ <html lang="fr">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Administration - Gestion des données</title>
+     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+ </head>
+ <body>
+     <header>
+         <h1>Administration - Gestion des données</h1>
+         <nav>
+             <ul>
+                 <li><a href="{{ url_for('index') }}">Accueil</a></li>
+                 {% if current_user.is_authenticated and current_user.is_admin %}
+                     <li><a href="{{ url_for('page_sommaire') }}">Sommaire Global</a></li>
+                 {% endif %}
+                 {% if current_user.is_authenticated %}
+                     <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                 {% else %}
+                     <li><a href="{{ url_for('login') }}">Connexion</a></li>
+                     <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                 {% endif %}
+             </ul>
+         </nav>
+     </header>
 
-        /* Styles pour les messages flash et les sections d'importation */
-        .flash-messages {
-            list-style-type: none;
-            padding: 0;
-            margin-bottom: 20px;
-        }
-        .flash-messages li {
-            padding: 10px 15px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-            font-weight: bold;
-        }
-        .flash-messages .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .flash-messages .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .flash-messages .warning {
-            background-color: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
-        }
-        .flash-messages .info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
+     <main>
+         {% with messages = get_flashed_messages(with_categories=true) %}
+             {% if messages %}
+                 <ul class="flash-messages">
+                 {% for category, message in messages %}
+                     <li class="{{ category }}">{{ message }}</li>
+                 {% endfor %}
+                 </ul>
+             {% endif %}
+         {% endwith %}
 
-        .admin-section { /* Classe commune pour les sections d'administration */
-            background-color: #f9f9f9;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            margin-bottom: 30px;
-        }
-        .admin-section h2 {
-            margin-top: 0;
-        }
-        .admin-section label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-        }
-        .admin-section input[type="file"] {
-            margin-bottom: 15px;
-        }
-        .admin-section .btn-importer {
-            padding: 8px 15px;
-            background-color: #28a745; /* Vert pour importer */
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .admin-section .btn-importer:hover {
-            background-color: #218838;
-        }
-        .note-importation {
-            font-size: 0.9em;
-            color: #555;
-            margin-top: 10px;
-        }
-        .note-importation ul {
-            padding-left: 20px; /* Indentation pour la liste des colonnes */
-        }
-        .warning-text {
-            color: #dc3545;
-            font-weight: bold;
-        }
+         <!-- Section pour l'importation des ENSEIGNANTS via Excel -->
+         <section class="admin-section">
+             <h2>Importer des Enseignants depuis un Fichier Excel</h2>
+             <form method="POST" action="{{ url_for('api_importer_enseignants_excel') }}" enctype="multipart/form-data">
+                 <div>
+                     <label for="fichier_enseignants">Sélectionner un fichier Excel (.xlsx) :</label>
+                     <input type="file" id="fichier_enseignants" name="fichier_enseignants" accept=".xlsx" required>
+                 </div>
+                 <button type="submit" class="btn-importer">Importer les Enseignants</button>
+             </form>
+             <div class="note-importation">
+                 <p>Le fichier Excel doit respecter le format suivant :</p>
+                 <ul>
+                     <li>Colonne A : Champ (Numéro du champ, ex: 01)</li>
+                     <li>Colonne B : NOM (Nom de famille de l'enseignant)</li>
+                     <li>Colonne C : PRÉNOM (Prénom de l'enseignant)</li>
+                     <li>Colonne D : Temps plein (VRAI ou FAUX)</li>
+                 </ul>
+                 <p>
+                     Les colonnes `EstFictif` et `PeutChoisirHorsChampPrincipal` seront initialisées à `FAUX` pour tous les enseignants importés.
+                     La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.
+                 </p>
+                 <p class="warning-text">
+                     ATTENTION : L'importation écrasera TOUS les enseignants et TOUTES les attributions de cours existants dans la base de données.
+                 </p>
+             </div>
+         </section>
 
-        /* Message area pour les retours d'API de réassignation */
-        .message-area {
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 4px;
-            display: none;
-        }
-        .message-success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .message-error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .message-info { /* Ajout pour les messages d'information */
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
+         <hr>
 
-    </style>
-</head>
-<body>
-    <header>
-        <h1>Administration - Gestion des données</h1>
-        <nav>
-            <ul>
-                <li><a href="{{ url_for('index') }}">Accueil</a></li>
-                <li><a href="{{ url_for('page_sommaire') }}">Sommaire Global</a></li>
-                {% if current_user.is_authenticated %}
-                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
-                {% else %}
-                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
-                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
-                {% endif %}
-            </ul>
-        </nav>
-    </header>
+         <!-- Section pour l'importation des COURS via Excel -->
+         <section class="admin-section">
+             <h2>Importer des Cours depuis un Fichier Excel</h2>
+             <form method="POST" action="{{ url_for('api_importer_cours_excel') }}" enctype="multipart/form-data">
+                 <div>
+                     <label for="fichier_cours">Sélectionner un fichier Excel (.xlsx) :</label>
+                     <input type="file" id="fichier_cours" name="fichier_cours" accept=".xlsx" required>
+                 </div>
+                 <button type="submit" class="btn-importer">Importer les Cours</button>
+             </form>
+             <div class="note-importation">
+                 <p>Le fichier Excel doit respecter le format suivant :</p>
+                 <ul>
+                     <li>Colonne A : Champ (Numéro du champ)</li>
+                     <li>Colonne B : Code Cours</li>
+                     <li>Colonne C : Grille (Ignorée)</li>
+                     <li>Colonne D : Cours (Descriptif)</li>
+                     <li>Colonne E : Groupes prévus</li>
+                     <li>Colonne F : Périodes par cycle</li>
+                     <li>Colonne G : Total période (Ignoré)</li>
+                     <li>Colonne H : Cours Autre (VRAI ou FAUX)</li>
+                 </ul>
+                 <p>La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.</p>
+                 <p class="warning-text">
+                     ATTENTION : L'importation écrasera TOUS les cours et TOUTES les attributions de cours existants.
+                 </p>
+             </div>
+         </section>
 
-    <main>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <ul class="flash-messages">
-                {% for category, message in messages %}
-                    <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
+         <hr>
 
-        <!-- Section pour l'importation des ENSEIGNANTS via Excel -->
-        <section class="admin-section">
-            <h2>Importer des Enseignants depuis un Fichier Excel</h2>
-            <form method="POST" action="{{ url_for('api_importer_enseignants_excel') }}" enctype="multipart/form-data">
-                <div>
-                    <label for="fichier_enseignants">Sélectionner un fichier Excel (.xlsx) :</label>
-                    <input type="file" id="fichier_enseignants" name="fichier_enseignants" accept=".xlsx" required>
-                </div>
-                <button type="submit" class="btn-importer">Importer les Enseignants</button>
-            </form>
-            <p class="note-importation">
-                Le fichier Excel doit respecter le format suivant :
-                <ul>
-                    <li>Colonne A : Champ (Numéro du champ, ex: 01)</li>
-                    <li>Colonne B : NOM (Nom de famille de l'enseignant)</li>
-                    <li>Colonne C : PRÉNOM (Prénom de l'enseignant)</li>
-                    <li>Colonne D : Temps plein (VRAI ou FAUX)</li>
-                </ul>
-                Les colonnes `EstFictif` et `PeutChoisirHorsChampPrincipal` seront initialisées à `FAUX` pour tous les enseignants importés.
-                La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.
-            </p>
-            <p class="warning-text">
-                ATTENTION : L'importation écrasera TOUS les enseignants et TOUTES les attributions de cours existants dans la base de données.
-            </p>
-        </section>
+         <!-- Section existante pour la réassignation des cours -->
+         <section class="admin-section">
+             <h2>Réassigner un Cours à un Champ</h2>
+             <div id="message-container-reassign" class="message-area"></div>
+             {% if cours_a_reassigner and champs_destination %}
+                 <table>
+                     <thead>
+                         <tr>
+                             <th>Code Cours</th>
+                             <th>Descriptif</th>
+                             <th>Champ Actuel (No)</th>
+                             <th>Champ Actuel (Nom)</th>
+                             <th>Nouveau Champ</th>
+                             <th>Action</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {% for cours in cours_a_reassigner %}
+                         <tr id="cours-row-{{ cours.codecours }}">
+                             <td>{{ cours.codecours }}</td>
+                             <td>{{ cours.coursdescriptif }}</td>
+                             <td class="champ-actuel-no" data-champno="{{ cours.champno }}">{{ cours.champno }}</td>
+                             <td class="champ-actuel-nom">{{ cours.champnom }}</td>
+                             <td>
+                                 <select id="select-champ-{{ cours.codecours }}" class="select-champ" data-codecours="{{ cours.codecours }}">
+                                     <option value="">-- Sélectionner un nouveau champ --</option>
+                                     {% for champ_dest in champs_destination %}
+                                         {% if champ_dest.champno != cours.champno %}
+                                             <option value="{{ champ_dest.champno }}">{{ champ_dest.champnom }} ({{ champ_dest.champno }})</option>
+                                         {% endif %}
+                                     {% endfor %}
+                                 </select>
+                             </td>
+                             <td>
+                                 <button class="btn-reassigner" data-codecours="{{ cours.codecours }}">Réassigner</button>
+                             </td>
+                         </tr>
+                         {% endfor %}
+                     </tbody>
+                 </table>
+             {% elif not cours_a_reassigner %}
+                 <p>Aucun cours n'a été trouvé dans la base de données pour la réassignation.</p>
+             {% elif not champs_destination %}
+                 <p>Aucun champ de destination n'a été trouvé. Impossible de réassigner les cours.</p>
+             {% else %}
+                 <p>Un problème est survenu lors du chargement des données pour la réassignation.</p>
+             {% endif %}
+         </section>
+     </main>
 
-        <hr>
+     <footer>
+         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
+     </footer>
 
-        <!-- Section pour l'importation des COURS via Excel -->
-        <section class="admin-section">
-            <h2>Importer des Cours depuis un Fichier Excel</h2>
-            <form method="POST" action="{{ url_for('api_importer_cours_excel') }}" enctype="multipart/form-data">
-                <div>
-                    <label for="fichier_cours">Sélectionner un fichier Excel (.xlsx) :</label>
-                    <input type="file" id="fichier_cours" name="fichier_cours" accept=".xlsx" required>
-                </div>
-                <button type="submit" class="btn-importer">Importer les Cours</button>
-            </form>
-            <p class="note-importation">
-                Le fichier Excel doit respecter le format suivant :
-                <ul>
-                    <li>Colonne A : Champ (Numéro du champ)</li>
-                    <li>Colonne B : Code Cours</li>
-                    <li>Colonne C : Grille (Ignorée)</li>
-                    <li>Colonne D : Cours (Descriptif)</li>
-                    <li>Colonne E : Groupes prévus</li>
-                    <li>Colonne F : Périodes par cycle</li>
-                    <li>Colonne G : Total période (Ignoré)</li>
-                    <li>Colonne H : Cours Autre (VRAI ou FAUX)</li>
-                </ul>
-                La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.
-            </p>
-            <p class="warning-text">
-                ATTENTION : L'importation écrasera TOUS les cours et TOUTES les attributions de cours existants.
-            </p>
-        </section>
+     <script>
+         document.addEventListener('DOMContentLoaded', function() {
+             const messageContainerReassign = document.getElementById('message-container-reassign');
+             const champsDestinationData = JSON.parse('{{ champs_destination | tojson | safe }}');
 
-        <hr>
+             document.querySelectorAll('.btn-reassigner').forEach(button => {
+                 button.addEventListener('click', function() {
+                     const codeCours = this.dataset.codecours;
+                     const selectElement = document.getElementById(`select-champ-${codeCours}`);
+                     const nouveauChampNo = selectElement.value;
+                     const ancienChampNoCell = document.querySelector(`#cours-row-${codeCours} .champ-actuel-no`);
+                     const ancienChampNo = ancienChampNoCell.dataset.champno;
 
-        <!-- Section existante pour la réassignation des cours -->
-        <section class="admin-section">
-            <h2>Réassigner un Cours à un Champ</h2>
-            <div id="message-container-reassign" class="message-area"></div>
-            {% if cours_a_reassigner and champs_destination %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Code Cours</th>
-                            <th>Descriptif</th>
-                            <th>Champ Actuel (No)</th>
-                            <th>Champ Actuel (Nom)</th>
-                            <th>Nouveau Champ</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cours in cours_a_reassigner %}
-                        <tr id="cours-row-{{ cours.codecours }}">
-                            <td>{{ cours.codecours }}</td>
-                            <td>{{ cours.coursdescriptif }}</td>
-                            <td class="champ-actuel-no" data-champno="{{ cours.champno }}">{{ cours.champno }}</td>
-                            <td class="champ-actuel-nom">{{ cours.champnom }}</td>
-                            <td>
-                                <select id="select-champ-{{ cours.codecours }}" class="select-champ" data-codecours="{{ cours.codecours }}">
-                                    <option value="">-- Sélectionner un nouveau champ --</option>
-                                    {% for champ_dest in champs_destination %}
-                                        {% if champ_dest.champno != cours.champno %}
-                                            <option value="{{ champ_dest.champno }}">{{ champ_dest.champnom }} ({{ champ_dest.champno }})</option>
-                                        {% endif %}
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td>
-                                <button class="btn-reassigner" data-codecours="{{ cours.codecours }}">Réassigner</button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% elif not cours_a_reassigner %}
-                <p>Aucun cours n'a été trouvé dans la base de données pour la réassignation.</p>
-            {% elif not champs_destination %}
-                <p>Aucun champ de destination n'a été trouvé. Impossible de réassigner les cours.</p>
-            {% else %}
-                <p>Un problème est survenu lors du chargement des données pour la réassignation.</p>
-            {% endif %}
-        </section>
-    </main>
+                     if (!nouveauChampNo) {
+                         displayReassignMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
+                         return;
+                     }
 
-    <footer>
-        <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
-    </footer>
+                     if (nouveauChampNo === ancienChampNo) {
+                          displayReassignMessage('Le cours est déjà assigné à ce champ. Aucune action effectuée.', 'info');
+                         return;
+                     }
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const messageContainerReassign = document.getElementById('message-container-reassign');
-            const champsDestinationData = JSON.parse('{{ champs_destination | tojson | safe }}');
+                     const nomCoursEl = document.querySelector(`#cours-row-${codeCours} td:nth-child(2)`);
+                     const nomCours = nomCoursEl ? nomCoursEl.textContent : "Inconnu";
+                     const nomNouveauChamp = selectElement.options[selectElement.selectedIndex].text;
 
-            document.querySelectorAll('.btn-reassigner').forEach(button => {
-                button.addEventListener('click', function() {
-                    const codeCours = this.dataset.codecours;
-                    const selectElement = document.getElementById(`select-champ-${codeCours}`);
-                    const nouveauChampNo = selectElement.value;
-                    const ancienChampNoCell = document.querySelector(`#cours-row-${codeCours} .champ-actuel-no`);
-                    const ancienChampNo = ancienChampNoCell.dataset.champno;
+                     if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${nomCours}" (${codeCours}) au champ "${nomNouveauChamp}" ?`)) {
+                         return;
+                     }
 
-                    if (!nouveauChampNo) {
-                        displayReassignMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
-                        return;
-                    }
+                     this.disabled = true;
 
-                    if (nouveauChampNo === ancienChampNo) {
-                         displayReassignMessage('Le cours est déjà assigné à ce champ. Aucune action effectuée.', 'info');
-                        return;
-                    }
+                     fetch('/api/cours/reassigner_champ', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({
+                             code_cours: codeCours,
+                             nouveau_champ_no: nouveauChampNo
+                         })
+                     })
+                     .then(response => response.json())
+                     .then(data => {
+                         if (data.success) {
+                             displayReassignMessage(data.message, 'success');
+                             const row = document.getElementById(`cours-row-${codeCours}`);
+                             const champNoCell = row.querySelector('.champ-actuel-no');
+                             const champNomCell = row.querySelector('.champ-actuel-nom');
 
-                    const nomCoursEl = document.querySelector(`#cours-row-${codeCours} td:nth-child(2)`);
-                    const nomCours = nomCoursEl ? nomCoursEl.textContent : "Inconnu";
-                    const nomNouveauChamp = selectElement.options[selectElement.selectedIndex].text;
+                             champNoCell.textContent = data.nouveau_champ_no;
+                             champNomCell.textContent = data.nouveau_champ_nom;
+                             champNoCell.dataset.champno = data.nouveau_champ_no;
 
-                    if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${nomCours}" (${codeCours}) au champ "${nomNouveauChamp}" ?`)) {
-                        return;
-                    }
+                             updateSelectOptions(selectElement, data.nouveau_champ_no, ancienChampNo);
+                         } else {
+                             let errorMessage = data.message || 'Une erreur est survenue lors de la réassignation.';
+                             displayReassignMessage(errorMessage, 'error');
+                         }
+                     })
+                     .catch(error => {
+                         console.error('Erreur lors de la réassignation:', error);
+                         displayReassignMessage('Erreur de communication avec le serveur.', 'error');
+                     })
+                     .finally(() => {
+                         this.disabled = false;
+                     });
+                 });
+             });
 
-                    this.disabled = true;
+             function displayReassignMessage(message, type) {
+                 messageContainerReassign.textContent = message;
+                 messageContainerReassign.className = 'message-area';
+                 messageContainerReassign.classList.add(`message-${type}`);
+                 messageContainerReassign.style.display = 'block';
 
-                    fetch('/api/cours/reassigner_champ', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            code_cours: codeCours,
-                            nouveau_champ_no: nouveauChampNo
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            displayReassignMessage(data.message, 'success');
-                            const row = document.getElementById(`cours-row-${codeCours}`);
-                            const champNoCell = row.querySelector('.champ-actuel-no');
-                            const champNomCell = row.querySelector('.champ-actuel-nom');
+                 setTimeout(() => {
+                     messageContainerReassign.style.display = 'none';
+                 }, 7000);
+             }
 
-                            champNoCell.textContent = data.nouveau_champ_no;
-                            champNomCell.textContent = data.nouveau_champ_nom;
-                            champNoCell.dataset.champno = data.nouveau_champ_no;
+             function updateSelectOptions(selectElement, nouveauChampNoActuel, ancienChampNoPrecedent) {
+                 while (selectElement.options.length > 1) {
+                     selectElement.remove(1);
+                 }
 
-                            updateSelectOptions(selectElement, data.nouveau_champ_no, ancienChampNo);
-                        } else {
-                            let errorMessage = data.message || 'Une erreur est survenue lors de la réassignation.';
-                            displayReassignMessage(errorMessage, 'error');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Erreur lors de la réassignation:', error);
-                        displayReassignMessage('Erreur de communication avec le serveur.', 'error');
-                    })
-                    .finally(() => {
-                        this.disabled = false;
-                    });
-                });
-            });
+                 const champPrecedentInfo = champsDestinationData.find(ch => ch.champno === ancienChampNoPrecedent);
+                 if (champPrecedentInfo && String(champPrecedentInfo.champno) !== String(nouveauChampNoActuel)) {
+                     const optionAncien = document.createElement('option');
+                     optionAncien.value = champPrecedentInfo.champno;
+                     optionAncien.textContent = `${champPrecedentInfo.champnom} (${champPrecedentInfo.champno})`;
+                     selectElement.appendChild(optionAncien);
+                 }
 
-            function displayReassignMessage(message, type) {
-                messageContainerReassign.textContent = message;
-                // Assurer que la classe de type est bien appliquée et que les autres sont retirées
-                messageContainerReassign.className = 'message-area'; // Reset
-                messageContainerReassign.classList.add(`message-${type}`); // Appliquer le type spécifique
-                messageContainerReassign.style.display = 'block';
-
-                setTimeout(() => {
-                    messageContainerReassign.style.display = 'none';
-                }, 7000);
-            }
-
-            function updateSelectOptions(selectElement, nouveauChampNoActuel, ancienChampNoPrecedent) {
-                while (selectElement.options.length > 1) { // Conserver la première option "-- Sélectionner..."
-                    selectElement.remove(1);
-                }
-
-                // Ajouter l'ancien champ à la liste si différent du nouveau champ actuel
-                const champPrecedentInfo = champsDestinationData.find(ch => ch.champno === ancienChampNoPrecedent);
-                if (champPrecedentInfo && String(champPrecedentInfo.champno) !== String(nouveauChampNoActuel)) {
-                    const optionAncien = document.createElement('option');
-                    optionAncien.value = champPrecedentInfo.champno;
-                    optionAncien.textContent = `${champPrecedentInfo.champnom} (${champPrecedentInfo.champno})`;
-                    selectElement.appendChild(optionAncien);
-                }
-                
-                // Ajouter les autres champs de destination, en excluant le nouveau champ actuel et l'ancien (s'il a déjà été ajouté)
-                champsDestinationData.forEach(champ => {
-                    if (String(champ.champno) !== String(nouveauChampNoActuel) && String(champ.champno) !== String(ancienChampNoPrecedent)) {
-                        const option = document.createElement('option');
-                        option.value = champ.champno;
-                        option.textContent = `${champ.champnom} (${champ.champno})`;
-                        selectElement.appendChild(option);
-                    }
-                });
-                selectElement.value = ""; // Réinitialiser la sélection
-            }
-        });
-    </script>
-</body>
-</html>
+                 champsDestinationData.forEach(champ => {
+                     if (String(champ.champno) !== String(nouveauChampNoActuel) && String(champ.champno) !== String(ancienChampNoPrecedent)) {
+                         const option = document.createElement('option');
+                         option.value = champ.champno;
+                         option.textContent = `${champ.champnom} (${champ.champno})`;
+                         selectElement.appendChild(option);
+                     }
+                 });
+                 selectElement.value = "";
+             }
+         });
+     </script>
+ </body>
+ </html>

@@ -32,7 +32,8 @@ class User(UserMixin):
         self.is_admin = is_admin
         # Si l'utilisateur est admin, il a accès à tous les champs.
         # Sinon, l'accès est limité par la liste fournie.
-        self.allowed_champs = allowed_champs if not is_admin else [] # La liste sera vide pour les admins pour simplifier la logique de vérification, puisque is_admin sera prioritaire.
+        self.allowed_champs = allowed_champs if not is_admin else []
+        # La liste sera vide pour les admins pour simplifier la logique de vérification, puisque is_admin sera prioritaire.
 
     def get_id(self):
         """

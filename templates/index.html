@@ -37,8 +37,8 @@
             <hr>
 
             <!-- Liens principaux de l'application -->
-            <li><a href="{{ url_for('page_sommaire') }}"><strong>Voir le Sommaire Global</strong></a></li>
             {% if current_user.is_authenticated and current_user.is_admin %}
+                <li><a href="{{ url_for('page_sommaire') }}"><strong>Voir le Sommaire Global</strong></a></li>
                 <li><a href="{{ url_for('page_administration_donnees') }}"><strong>Administration - Gestion des données</strong></a></li>
                 <li><a href="{{ url_for('page_administration_utilisateurs') }}"><strong>Administration - Gestion des utilisateurs</strong></a></li>
             {% endif %}
