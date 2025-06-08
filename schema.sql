@@ -78,14 +78,10 @@ CREATE TABLE public.cours (
     codecours text NOT NULL,
     champno text NOT NULL,
     coursdescriptif text NOT NULL,
-    -- Modification: Changement de 'integer' à 'NUMERIC(5, 2)' pour supporter les fractions de périodes.
-    -- NUMERIC(5, 2) signifie un maximum de 5 chiffres au total, avec 2 chiffres après la virgule.
-    -- Par exemple: 123.45. Ajustez la précision si vous avez besoin de plus ou moins de décimales.
     nbperiodes NUMERIC(5, 2) NOT NULL,
     nbgroupeinitial integer NOT NULL,
     estcoursautre boolean DEFAULT false NOT NULL,
     CONSTRAINT cours_nbgroupeinitial_check CHECK ((nbgroupeinitial >= 0)),
-    -- La contrainte de vérification reste valide même avec NUMERIC.
     CONSTRAINT cours_nbperiodes_check CHECK ((nbperiodes >= 0))
 );
 
@@ -98,9 +94,9 @@ ALTER TABLE public.cours OWNER TO neondb_owner;
 
 CREATE TABLE public.enseignants (
     enseignantid integer NOT NULL,
-    nomcomplet text NOT NULL, -- Maintenu pour "Prénom Nom" ou nom de tâche fictive
-    nom text, -- Nom de famille
-    prenom text, -- Prénom
+    nomcomplet text NOT NULL,
+    nom text,
+    prenom text,
     champno text NOT NULL,
     esttempsplein boolean DEFAULT true NOT NULL,
     estfictif boolean DEFAULT false NOT NULL,
@@ -134,6 +130,43 @@ ALTER SEQUENCE public.enseignants_enseignantid_seq OWNED BY public.enseignants.e
 
 
 --
+-- Name: users; Type: TABLE; Schema: public; Owner: neondb_owner
+--
+
+-- Table pour stocker les informations des utilisateurs pour l'authentification
+CREATE TABLE public.users (
+    id integer NOT NULL,
+    username text NOT NULL, -- Nom d'utilisateur unique
+    password_hash text NOT NULL, -- Hachage du mot de passe (ne jamais stocker en clair!)
+    is_admin boolean DEFAULT false NOT NULL -- Indique si l'utilisateur a des privilèges d'administrateur
+);
+
+
+ALTER TABLE public.users OWNER TO neondb_owner;
+
+--
+-- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
+--
+
+CREATE SEQUENCE public.users_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.users_id_seq OWNER TO neondb_owner;
+
+--
+-- Name: users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
+--
+
+ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
+
+
+--
 -- Name: attributionscours attributionid; Type: DEFAULT; Schema: public; Owner: neondb_owner
 --
 
@@ -145,6 +178,13 @@ ALTER TABLE ONLY public.attributionscours ALTER COLUMN attributionid SET DEFAULT
 --
 
 ALTER TABLE ONLY public.enseignants ALTER COLUMN enseignantid SET DEFAULT nextval('public.enseignants_enseignantid_seq'::regclass);
+
+
+--
+-- Name: users id; Type: DEFAULT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
 
 
 --
@@ -177,6 +217,22 @@ ALTER TABLE ONLY public.cours
 
 ALTER TABLE ONLY public.enseignants
     ADD CONSTRAINT enseignants_pkey PRIMARY KEY (enseignantid);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_username_key; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_username_key UNIQUE (username);
 
 
 --

@@ -147,6 +147,12 @@
             <ul>
                 <li><a href="{{ url_for('index') }}">Accueil</a></li>
                 <li><a href="{{ url_for('page_sommaire') }}">Sommaire Global</a></li>
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
+                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                {% endif %}
             </ul>
         </nav>
     </header>
@@ -168,7 +174,6 @@
             <form method="POST" action="{{ url_for('api_importer_enseignants_excel') }}" enctype="multipart/form-data">
                 <div>
                     <label for="fichier_enseignants">Sélectionner un fichier Excel (.xlsx) :</label>
-                    <!-- Le nom 'fichier_enseignants' doit correspondre à la clé attendue dans main.py -->
                     <input type="file" id="fichier_enseignants" name="fichier_enseignants" accept=".xlsx" required>
                 </div>
                 <button type="submit" class="btn-importer">Importer les Enseignants</button>
@@ -273,7 +278,7 @@
     </main>
 
     <footer>
-        <p>© {{ SCRIPT_YEAR if SCRIPT_YEAR else "2024" }} Votre Application de Gestion</p>
+        <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
 
     <script>

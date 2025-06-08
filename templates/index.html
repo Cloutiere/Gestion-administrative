@@ -12,6 +12,51 @@
             font-size: 0.8em;
             margin-left: 5px;
         }
+        /* Styles pour les messages flash (copier du login.html si non déjà présent dans style.css) */
+        .flash-messages {
+            list-style-type: none;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+        .flash-messages li {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-align: left;
+        }
+        .flash-messages .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .flash-messages .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .flash-messages .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .flash-messages .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        /* Style pour les liens de navigation principaux */
+        nav ul strong {
+            display: block; /* Pour s'assurer que les titres prennent toute la largeur disponible */
+            margin-top: 10px;
+            margin-bottom: 5px;
+        }
+        nav ul hr {
+            border: 0;
+            height: 1px;
+            background: #eee;
+            margin: 15px 0;
+        }
     </style>
 </head>
 <body>
@@ -21,10 +66,34 @@
     <nav>
         <h2>Navigation</h2>
         <ul>
-            <!-- Lien vers la page de sommaire global -->
+            <!-- Affichage des messages flash -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <ul class="flash-messages">
+                    {% for category, message in messages %}
+                        <li class="{{ category }}">{{ message }}</li>
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Liens d'authentification -->
+            {% if current_user.is_authenticated %}
+                <li>Connecté(e) en tant que: <strong>{{ current_user.username }}</strong></li>
+                <li><a href="{{ url_for('logout') }}">Déconnexion</a></li>
+            {% else %}
+                <li><a href="{{ url_for('login') }}"><strong>Connexion</strong></a></li>
+                <li><a href="{{ url_for('register') }}"><strong>S'inscrire</strong></a></li>
+            {% endif %}
+
+            <hr>
+
+            <!-- Liens principaux de l'application -->
             <li><a href="{{ url_for('page_sommaire') }}"><strong>Voir le Sommaire Global</strong></a></li>
-            <!-- Lien mis à jour vers la page d'administration -->
-            <li><a href="{{ url_for('page_administration_donnees') }}"><strong>Administration - Gestion des données</strong></a></li>
+            {% if current_user.is_authenticated and current_user.is_admin %}
+                <li><a href="{{ url_for('page_administration_donnees') }}"><strong>Administration - Gestion des données</strong></a></li>
+            {% endif %}
+            
             <hr>
             <li><strong>Navigation par Champ :</strong></li>
             <!-- Boucle pour afficher les liens vers chaque page de champ -->
@@ -49,7 +118,6 @@
         <p>Bienvenue ! Sélectionnez une option dans la navigation pour commencer.</p>
     </main>
     <footer>
-        <!-- Utilisation de SCRIPT_YEAR qui est maintenant fourni par la route -->
         <p>© {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
     </footer>
 </body>

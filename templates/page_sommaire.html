@@ -148,62 +148,118 @@
             background-color: #f1f1f1;
             border-top: 1px solid #ddd;
         }
+        /* Styles pour les messages flash */
+        .flash-messages {
+            list-style-type: none;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+        .flash-messages li {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-align: left;
+        }
+        .flash-messages .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .flash-messages .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .flash-messages .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .flash-messages .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
     </style>
 </head>
 <body>
     <header>
         <h1>Sommaire global des tâches des enseignants</h1>
-        <p><a href="{{ url_for('index') }}">« Retour à la navigation par champ</a></p>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('index') }}">« Retour à la navigation par champ</a></li>
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('page_administration_donnees') }}">Administration</a></li>
+                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
+                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                {% endif %}
+            </ul>
+        </nav>
     </header>
 
-    <div class="container-principal-sommaire">
-        <div class="colonne-sommaire colonne-gauche">
-            <section class="section-sommaire section-moyenne-generale">
-                <div class="moyenne-generale-contenu">
-                    <span class="label">Moyenne générale (temps plein) :</span>
-                    <span class="valeur" id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
-                </div>
-            </section>
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
 
-            <section class="section-sommaire">
-                <h2>Moyennes par champ (temps plein)</h2>
-                {% if moyennes_par_champ %}
-                <table id="table-moyennes-par-champ">
-                    <thead>
-                        <tr>
-                            <th>N° champ</th>
-                            <th>Nom du champ</th>
-                            <th>Moyenne</th>
-                            <th>Statut</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {# Le contenu sera trié et inséré par JavaScript #}
-                    </tbody>
-                </table>
-                <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
-                {% else %}
-                <p>Aucune donnée de moyenne par champ disponible initialement.</p>
-                {% endif %}
-            </section>
-        </div>
+        <div class="container-principal-sommaire">
+            <div class="colonne-sommaire colonne-gauche">
+                <section class="section-sommaire section-moyenne-generale">
+                    <div class="moyenne-generale-contenu">
+                        <span class="label">Moyenne générale (temps plein) :</span>
+                        <span class="valeur" id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
+                    </div>
+                </section>
 
-        <div class="colonne-sommaire colonne-droite">
-            <section class="section-sommaire">
-                <h2>Détail des tâches par champ</h2>
-                <table id="table-detail-enseignants">
-                    <tbody>
-                        {# Le contenu sera généré par JavaScript #}
-                    </tbody>
-                </table>
-                <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
-                {# Affichage initial si pas de données, JavaScript cachera si des données sont chargées #}
-                {% if not enseignants_par_champ or not enseignants_par_champ | selectattr('enseignants') | list | join %}
-                <p>Aucun enseignant à afficher initialement.</p>
-                {% endif %}
-            </section>
+                <section class="section-sommaire">
+                    <h2>Moyennes par champ (temps plein)</h2>
+                    {% if moyennes_par_champ %}
+                    <table id="table-moyennes-par-champ">
+                        <thead>
+                            <tr>
+                                <th>N° champ</th>
+                                <th>Nom du champ</th>
+                                <th>Moyenne</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {# Le contenu sera trié et inséré par JavaScript #}
+                        </tbody>
+                    </table>
+                    <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
+                    {% else %}
+                    <p>Aucune donnée de moyenne par champ disponible initialement.</p>
+                    {% endif %}
+                </section>
+            </div>
+
+            <div class="colonne-sommaire colonne-droite">
+                <section class="section-sommaire">
+                    <h2>Détail des tâches par champ</h2>
+                    <table id="table-detail-enseignants">
+                        <tbody>
+                            {# Le contenu sera généré par JavaScript #}
+                        </tbody>
+                    </table>
+                    <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
+                    {# Affichage initial si pas de données, JavaScript cachera si des données sont chargées #}
+                    {% if not enseignants_par_champ or not enseignants_par_champ | selectattr('enseignants') | list | join %}
+                    <p>Aucun enseignant à afficher initialement.</p>
+                    {% endif %}
+                </section>
+            </div>
         </div>
-    </div>
+    </main>
 
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre École</p>
@@ -249,9 +305,13 @@
             if(tableMoyennes) {
                 tableMoyennes.addEventListener('click', function(event) {
                     const iconElement = event.target.closest('.lock-icon');
-                    if (iconElement) {
+                    // Vérifier si l'icône est cliquable (l'utilisateur est admin)
+                    if (iconElement && ({{ current_user.is_authenticated|tojson }} && {{ current_user.is_admin|tojson }})) {
                         const champNo = iconElement.dataset.champNo;
                         basculerVerrouChamp(champNo, iconElement);
+                    } else if (iconElement) {
+                        // Si l'utilisateur n'est pas admin, afficher un message d'erreur
+                        alert("Vous n'avez pas les permissions pour modifier le statut de verrouillage.");
                     }
                 });
             }
@@ -261,6 +321,13 @@
             try {
                 const response = await fetch('/api/sommaire/donnees');
                 if (!response.ok) {
+                    // Si l'API retourne une erreur (par exemple 401 Unauthorized),
+                    // cela peut indiquer que la session a expiré ou que l'utilisateur n'est plus connecté.
+                    // Dans ce cas, recharger la page pour rediriger vers le login.
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.reload(); // Force le rafraîchissement qui déclenchera la redirection
+                        return; // Arrête l'exécution de la fonction
+                    }
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }
                 const data = await response.json();
@@ -272,7 +339,6 @@
                     mettreAJourTableauMoyennesChamp({}); // Passer un objet vide pour vider le tableau
                 }
 
-                // Vérifier si enseignants_par_champ existe et a au moins un champ avec des enseignants
                 const aDesEnseignants = data.enseignants_par_champ && data.enseignants_par_champ.some(champ => champ.enseignants && champ.enseignants.length > 0);
                 if (aDesEnseignants) {
                     mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ);
@@ -285,7 +351,6 @@
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale) {
                     if (data.moyenne_generale !== undefined && data.moyenne_generale !== null) {
-                        // Utilise la fonction de formatage pour la moyenne générale
                         elMoyenneGenerale.textContent = `${formatPeriodes(data.moyenne_generale)} périodes`;
                     } else {
                         elMoyenneGenerale.textContent = `N/A périodes`;
@@ -293,7 +358,6 @@
                 }
             } catch (error) {
                 console.error("Erreur MàJ sommaire:", error);
-                // Optionnel: Afficher une notification à l'utilisateur ici
             }
         }
 
@@ -441,7 +505,6 @@
                     row.dataset.champNo = champ_no;
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
-                    // Appliquer le formatage des périodes pour la moyenne
                     row.insertCell().textContent = formatPeriodes(data.moyenne);
 
                     const cellStatut = row.insertCell();
