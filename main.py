@@ -1,6 +1,7 @@
 import datetime
 import os
 from functools import wraps
+from typing import Any  # Importation de Any pour les types génériques
 
 import openpyxl
 import psycopg2
@@ -38,7 +39,7 @@ login_manager.login_message_category = "info"
 
 
 @login_manager.user_loader
-def load_user(user_id):
+def load_user(user_id: int) -> User | None:
     """
     Fonction de rappel utilisée par Flask-Login pour recharger l'objet utilisateur
     à partir de l'ID stocké dans la session.
@@ -47,7 +48,7 @@ def load_user(user_id):
 
 
 # --- Filtre Jinja2 personnalisé pour formater les périodes ---
-def format_periodes_filter(value):
+def format_periodes_filter(value: float | None) -> str:
     """
     Formate un nombre de périodes pour l'affichage dans les templates Jinja2.
     Affiche les décimales uniquement si elles sont non nulles, et évite les zéros superflus.
@@ -73,7 +74,7 @@ app.jinja_env.filters["format_periodes"] = format_periodes_filter
 
 # --- Context Processor pour rendre current_user disponible dans tous les templates ---
 @app.context_processor
-def inject_global_data():
+def inject_global_data() -> dict[str, Any]:
     """
     Rend certaines variables globales disponibles dans tous les templates Jinja2.
     """
@@ -91,7 +92,7 @@ DB_PASS = os.environ.get("PGPASSWORD")
 DB_PORT = os.environ.get("PGPORT", "5432")
 
 
-def get_db_connection_string():
+def get_db_connection_string() -> str:
     """Construit la chaîne de connexion à la base de données en utilisant les variables d'environnement."""
     return f"dbname='{DB_NAME}' user='{DB_USER}' host='{DB_HOST}' password='{DB_PASS}' port='{DB_PORT}'"
 
@@ -129,22 +130,44 @@ def close_db(_exception=None):
 
 def get_user_by_id(user_id: int) -> User | None:
     """
-    Récupère un utilisateur par son ID depuis la base de données.
+    Récupère un utilisateur par son ID depuis la base de données,
+    y compris ses permissions d'accès aux champs.
     """
     db = get_db()
     if not db:
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT id, username, is_admin FROM Users WHERE id = %s;", (user_id,))
-            user_data = cur.fetchone()
-            if user_data:
-                return User(_id=user_data["id"], username=user_data["username"], is_admin=user_data["is_admin"])
-            return None
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.is_admin, uca.champ_no
+                FROM Users u
+                LEFT JOIN user_champ_access uca ON u.id = uca.user_id
+                WHERE u.id = %s;
+            """,
+                (user_id,),
+            )
+            user_data_rows = cur.fetchall()
+
+            if not user_data_rows:
+                return None
+
+            first_row = user_data_rows[0]
+            _id = first_row["id"]
+            username = first_row["username"]
+            is_admin = first_row["is_admin"]
+
+            allowed_champs: list[str] = []
+            if not is_admin:  # Si l'utilisateur n'est PAS admin, collecter ses champs autorisés
+                for row in user_data_rows:
+                    if row["champ_no"]:  # S'assurer qu'il y a un champ et que la jointure n'est pas nulle
+                        allowed_champs.append(row["champ_no"])
+                allowed_champs = list(set(allowed_champs))  # Éliminer les doublons
+            # Si is_admin est True, allowed_champs reste vide, ce qui est géré par User.can_access_champ.
+
+            return User(_id=_id, username=username, is_admin=is_admin, allowed_champs=allowed_champs)
     except psycopg2.Error as e:
         app.logger.error(f"Erreur DAO get_user_by_id pour {user_id}: {e}")
-        if db and not db.closed:
-            db.rollback()
         return None
 
 
@@ -168,10 +191,26 @@ def get_user_by_username(username: str) -> dict | None:
         return None
 
 
+def get_users_count() -> int:
+    """
+    Compte le nombre total d'utilisateurs dans la base de données.
+    """
+    db = get_db()
+    if not db:
+        return 0
+    try:
+        with db.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM Users;")
+            return cur.fetchone()[0]
+    except psycopg2.Error as e:
+        app.logger.error(f"Erreur DAO get_users_count: {e}")
+        return 0
+
+
 def create_user(username: str, password: str, is_admin: bool = False) -> User | None:
     """
     Crée un nouvel utilisateur dans la base de données avec un mot de passe haché.
-    Retourne l'objet User créé ou None en cas d'échec.
+    Retourne l'objet User créé ou None en cas d'échec (ex: nom d'utilisateur déjà pris).
     """
     db = get_db()
     if not db:
@@ -184,8 +223,9 @@ def create_user(username: str, password: str, is_admin: bool = False) -> User | 
                 (username, hashed_pwd, is_admin),
             )
             user_id = cur.fetchone()["id"]
-            db.commit()
-            return User(_id=user_id, username=username, is_admin=is_admin)
+            db.commit()  # Commit pour la création de l'utilisateur
+            # La liste allowed_champs est vide ici car la gestion se fait ailleurs (admin ou premier user)
+            return User(_id=user_id, username=username, is_admin=is_admin, allowed_champs=[])
     except psycopg2.errors.UniqueViolation:
         db.rollback()
         app.logger.warning(f"Tentative de création d'un utilisateur existant: {username}")
@@ -195,6 +235,118 @@ def create_user(username: str, password: str, is_admin: bool = False) -> User | 
         if db and not db.closed:
             db.rollback()
         return None
+
+
+def get_all_users_with_access_info() -> list[dict]:
+    """
+    Récupère tous les utilisateurs avec leurs informations de base et la liste
+    des champs auxquels ils ont accès.
+    """
+    db = get_db()
+    if not db:
+        return []
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.is_admin, ARRAY_AGG(uca.champ_no ORDER BY uca.champ_no) AS allowed_champs
+                FROM Users u
+                LEFT JOIN user_champ_access uca ON u.id = uca.user_id
+                GROUP BY u.id, u.username, u.is_admin
+                ORDER BY u.username;
+            """
+            )
+            users_data = []
+            for row in cur.fetchall():
+                user_dict = dict(row)
+                # ARRAY_AGG retourne un tableau Python, il peut contenir None si pas d'accès
+                if user_dict["is_admin"]:
+                    user_dict["allowed_champs"] = []  # Les admins ont tout par défaut.
+                else:
+                    user_dict["allowed_champs"] = (
+                        [c for c in user_dict["allowed_champs"] if c is not None] if user_dict["allowed_champs"] else []
+                    )
+                users_data.append(user_dict)
+            return users_data
+    except psycopg2.Error as e:
+        app.logger.error(f"Erreur DAO get_all_users_with_access_info: {e}")
+        if db and not db.closed:
+            db.rollback()
+        return []
+
+
+def update_user_champ_access(user_id: int, champ_nos: list[str]) -> bool:
+    """
+    Met à jour les permissions d'accès aux champs pour un utilisateur spécifique.
+    Remplace tous les accès existants par la nouvelle liste fournie.
+    """
+    db = get_db()
+    if not db:
+        return False
+    try:
+        with db.cursor() as cur:
+            # Supprimer tous les accès existants pour cet utilisateur
+            cur.execute("DELETE FROM user_champ_access WHERE user_id = %s;", (user_id,))
+            # Insérer les nouveaux accès
+            if champ_nos:
+                values = [(user_id, champ_no) for champ_no in champ_nos]
+                psycopg2.extras.execute_values(
+                    cur,
+                    "INSERT INTO user_champ_access (user_id, champ_no) VALUES %s ON CONFLICT (user_id, champ_no) DO NOTHING;",
+                    values,
+                )
+            db.commit()
+            return True
+    except psycopg2.Error as e:
+        db.rollback()
+        app.logger.error(f"Erreur DAO update_user_champ_access pour user {user_id}: {e}")
+        return False
+
+
+def delete_user_data(user_id: int) -> bool:
+    """
+    Supprime un utilisateur de la base de données.
+    Cela supprimera aussi ses accès aux champs grâce à la contrainte ON DELETE CASCADE.
+    """
+    db = get_db()
+    if not db:
+        return False
+    try:
+        with db.cursor() as cur:
+            cur.execute("DELETE FROM Users WHERE id = %s;", (user_id,))
+            db.commit()
+            return cur.rowcount > 0
+    except psycopg2.Error as e:
+        db.rollback()
+        app.logger.error(f"Erreur DAO delete_user_data pour user {user_id}: {e}")
+        return False
+
+
+def grant_access_to_all_champs(user_id: int) -> bool:
+    """
+    Accorde à un utilisateur l'accès à tous les champs existants dans la base de données.
+    Utilisé typiquement pour le premier utilisateur administrateur.
+    """
+    db = get_db()
+    if not db:
+        return False
+    try:
+        with db.cursor() as cur:
+            cur.execute("SELECT ChampNo FROM Champs;")
+            all_champs = [row[0] for row in cur.fetchall()]
+            if all_champs:
+                values = [(user_id, champ_no) for champ_no in all_champs]
+                psycopg2.extras.execute_values(
+                    cur,
+                    "INSERT INTO user_champ_access (user_id, champ_no) VALUES %s ON CONFLICT (user_id, champ_no) DO NOTHING;",
+                    values,
+                )
+            db.commit()
+            return True
+    except psycopg2.Error as e:
+        db.rollback()
+        app.logger.error(f"Erreur DAO grant_access_to_all_champs pour user {user_id}: {e}")
+        return False
 
 
 # --- Décorateur personnalisé pour l'accès administrateur ---
@@ -217,7 +369,7 @@ def admin_required(f):
 # --- Fonctions d'accès aux données (DAO - Data Access Object) existantes ---
 
 
-def get_all_champs():
+def get_all_champs() -> list[dict]:
     """
     Récupère tous les champs depuis la base de données, y compris leur statut de verrouillage.
     Les champs sont triés par numéro de champ.
@@ -237,7 +389,7 @@ def get_all_champs():
         return []
 
 
-def get_champ_details(champ_no):
+def get_champ_details(champ_no: str) -> dict | None:
     """
     Récupère les détails d'un champ spécifique par son numéro, y compris son statut de verrouillage.
     Retourne un dictionnaire représentant le champ, ou None si non trouvé.
@@ -257,7 +409,7 @@ def get_champ_details(champ_no):
         return None
 
 
-def get_enseignants_par_champ(champ_no):
+def get_enseignants_par_champ(champ_no: str) -> list[dict]:
     """
     Récupère les enseignants associés à un champ spécifique.
     Les enseignants sont triés par statut fictif (les fictifs après les réels),
@@ -284,7 +436,24 @@ def get_enseignants_par_champ(champ_no):
         return []
 
 
-def get_all_enseignants_avec_details():
+def get_enseignant_champ_no(enseignant_id: int) -> str | None:
+    """
+    Récupère le numéro de champ auquel un enseignant est associé.
+    """
+    db = get_db()
+    if not db:
+        return None
+    try:
+        with db.cursor() as cur:
+            cur.execute("SELECT ChampNo FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
+            result = cur.fetchone()
+            return result[0] if result else None
+    except psycopg2.Error as e:
+        app.logger.error(f"Erreur DAO get_enseignant_champ_no pour {enseignant_id}: {e}")
+        return None
+
+
+def get_all_enseignants_avec_details() -> list[dict]:
     """
     Récupère tous les enseignants de la base de données avec des détails enrichis :
     informations sur leur champ (y compris le verrouillage), leurs périodes de cours et autres.
@@ -333,7 +502,7 @@ def get_all_enseignants_avec_details():
         return []
 
 
-def get_cours_disponibles_par_champ(champ_no):
+def get_cours_disponibles_par_champ(champ_no: str) -> list[dict]:
     """
     Récupère les cours disponibles pour un champ donné, en calculant les groupes restants.
     Retourne une liste de dictionnaires, triés par type de cours (autre ou non) puis par code de cours.
@@ -362,7 +531,7 @@ def get_cours_disponibles_par_champ(champ_no):
         return []
 
 
-def get_attributions_enseignant(enseignant_id):
+def get_attributions_enseignant(enseignant_id: int) -> list[dict]:
     """
     Récupère toutes les attributions de cours pour un enseignant spécifique.
     Inclut les détails du cours (descriptif, périodes, type, champ d'origine).
@@ -391,7 +560,7 @@ def get_attributions_enseignant(enseignant_id):
         return []
 
 
-def get_toutes_les_attributions():
+def get_toutes_les_attributions() -> list[dict]:
     """
     Récupère toutes les attributions de cours pour tous les enseignants en une seule requête.
     Cette fonction est utilisée pour optimiser les performances en évitant de multiples requêtes
@@ -418,7 +587,7 @@ def get_toutes_les_attributions():
         return []
 
 
-def calculer_periodes_pour_attributions(attributions):
+def calculer_periodes_pour_attributions(attributions: list[dict]) -> dict[str, float]:
     """
     Calcule le total des périodes de cours (enseignement) et des périodes d'autres tâches
     à partir d'une liste d'attributions fournie.
@@ -434,7 +603,7 @@ def calculer_periodes_pour_attributions(attributions):
     }
 
 
-def calculer_periodes_enseignant(enseignant_id):
+def calculer_periodes_enseignant(enseignant_id: int) -> dict[str, float]:
     """
     Calcule le total des périodes de cours et d'autres tâches pour un enseignant spécifique
     en interrogeant la base de données pour ses attributions.
@@ -443,7 +612,7 @@ def calculer_periodes_enseignant(enseignant_id):
     return calculer_periodes_pour_attributions(attributions)
 
 
-def get_groupes_restants_pour_cours(code_cours):
+def get_groupes_restants_pour_cours(code_cours: str) -> int:
     """
     Calcule le nombre de groupes restants pour un cours spécifique.
     Prend en compte le nombre initial de groupes et le nombre de groupes déjà attribués.
@@ -458,11 +627,11 @@ def get_groupes_restants_pour_cours(code_cours):
                 """
                 SELECT (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0)) AS grp_dispo
                 FROM Cours c
-                LEFT JOIN AttributionsCours ac ON c.CodeCours = ac.CodeCours
+                LEFT JOIN AttributionsCours ac ON c.CodeCours = ac.CodeCours AND c.CodeCours = %s
                 WHERE c.CodeCours = %s
-                GROUP BY c.NbGroupeInitial, c.CodeCours; -- Inclure CodeCours dans GROUP BY
+                GROUP BY c.NbGroupeInitial, c.CodeCours;
                 """,
-                (code_cours,),
+                (code_cours, code_cours),
             )
             result = cur.fetchone()
 
@@ -480,7 +649,7 @@ def get_groupes_restants_pour_cours(code_cours):
         return 0
 
 
-def get_all_cours_avec_details_champ():
+def get_all_cours_avec_details_champ() -> list[dict]:
     """
     Récupère tous les cours disponibles dans la base de données avec les détails de leur champ d'origine.
     Trié par code de cours.
@@ -504,7 +673,7 @@ def get_all_cours_avec_details_champ():
         return []
 
 
-def toggle_champ_lock_status(champ_no):
+def toggle_champ_lock_status(champ_no: str) -> bool | None:
     """
     Bascule le statut de verrouillage (EstVerrouille) d'un champ spécifique.
     Retourne le nouveau statut de verrouillage (True si verrouillé, False si déverrouillé)
@@ -515,7 +684,10 @@ def toggle_champ_lock_status(champ_no):
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("UPDATE Champs SET EstVerrouille = NOT EstVerrouille WHERE ChampNo = %s RETURNING EstVerrouille;", (champ_no,))
+            cur.execute(
+                "UPDATE Champs SET EstVerrouille = NOT EstVerrouille WHERE ChampNo = %s RETURNING EstVerrouille;",
+                (champ_no,),
+            )
             result = cur.fetchone()
             db.commit()
             return result["estverrouille"] if result else None
@@ -530,7 +702,7 @@ def toggle_champ_lock_status(champ_no):
 
 
 @app.route("/login", methods=["GET", "POST"])
-def login():
+def login() -> Any:
     """
     Gère la connexion des utilisateurs.
     GET: Affiche le formulaire de connexion.
@@ -540,6 +712,9 @@ def login():
         flash("Vous êtes déjà connecté(e).", "info")
         return redirect(url_for("index"))
 
+    # Déterminer si c'est le tout premier utilisateur à créer dans la base de données.
+    _first_user_check = get_users_count() == 0
+
     if request.method == "POST":
         username = request.form["username"].strip()
         password = request.form["password"].strip()
@@ -547,19 +722,23 @@ def login():
         user_data = get_user_by_username(username)
 
         if user_data and check_hashed_password(user_data["password_hash"], password):
-            user = User(_id=user_data["id"], username=user_data["username"], is_admin=user_data["is_admin"])
-            login_user(user)
-            flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
-            # Redirige vers la page demandée avant la connexion, ou vers l'accueil
-            next_page = request.args.get("next")
-            return redirect(next_page or url_for("index"))
-        flash("Nom d'utilisateur ou mot de passe invalide.", "error")
-    return render_template("login.html")
+            # Lors de la connexion, recharger l'utilisateur via get_user_by_id pour obtenir ses allowed_champs
+            user = get_user_by_id(user_data["id"])
+            if user:
+                login_user(user)
+                flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
+                # Redirige vers la page demandée avant la connexion, ou vers l'accueil
+                next_page = request.args.get("next")
+                return redirect(next_page or url_for("index"))
+            flash("Erreur lors du chargement des informations utilisateur.", "error")
+        else:
+            flash("Nom d'utilisateur ou mot de passe invalide.", "error")
+    return render_template("login.html", first_user=_first_user_check)
 
 
 @app.route("/logout")
 @login_required
-def logout():
+def logout() -> Any:
     """
     Déconnecte l'utilisateur actuel.
     """
@@ -569,82 +748,87 @@ def logout():
 
 
 @app.route("/register", methods=["GET", "POST"])
-def register():
+def register() -> Any:
     """
-    Gère l'inscription de nouveaux utilisateurs.
-    GET: Affiche le formulaire d'inscription.
-    POST: Traite les données d'inscription.
-    Note : En production, cette route devrait être protégée ou désactivée
-    après la création du premier utilisateur admin.
+    Gère l'inscription du tout premier utilisateur seulement.
+    Après le premier utilisateur, cette route est désactivée.
+    Les nouveaux utilisateurs devront être créés via le panneau d'administration.
     """
-    # Déterminer si c'est le premier utilisateur à être créé dans la base de données.
-    user_count = 0
-    db = get_db()
-    if db:
-        with db.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM Users;")
-            user_count = cur.fetchone()[0]
+    # Déterminer si c'est le tout premier utilisateur à être créé dans la base de données.
+    user_count = get_users_count()
 
-    # Rediriger si ce n'est pas le premier utilisateur et que l'utilisateur actuel n'est pas admin
-    # ou n'est pas connecté.
-    if user_count > 0 and (not current_user.is_authenticated or not current_user.is_admin):
-        flash("Seuls les administrateurs peuvent créer de nouveaux comptes.", "error")
-        return redirect(url_for("index"))
+    # Si des utilisateurs existent déjà, rediriger l'utilisateur.
+    # Cette route est réservée à la création du tout premier compte ADMIN.
+    if user_count > 0:
+        if current_user.is_authenticated and current_user.is_admin:
+            flash("Les nouveaux comptes sont créés via la page d'administration des utilisateurs.", "info")
+            return redirect(url_for("page_administration_utilisateurs"))
+        flash("L'inscription directe est désactivée. Veuillez contacter un administrateur.", "error")
+        return redirect(url_for("login"))
 
-    # Initialiser les valeurs du formulaire pour le rendu du template
-    _username = request.form.get("username", "").strip()
-    _is_admin_checked = request.form.get("is_admin") == "on"
+    # Logique pour le tout premier utilisateur (sera ADMIN d'office)
+    _username = request.form.get("username", "").strip()  # pour réafficher le nom d'utilisateur en cas d'erreur
+    # _is_admin_checked = True # Le premier utilisateur est toujours admin, cette variable n'est pas vraiment utilisée.
 
     if request.method == "POST":
         username = request.form["username"].strip()
         password = request.form["password"].strip()
         confirm_password = request.form["confirm_password"].strip()
-        is_admin_request = request.form.get("is_admin") == "on"
 
         if not username or not password or not confirm_password:
             flash("Tous les champs sont requis.", "error")
-            return render_template("register.html", username=_username, is_admin_checked=_is_admin_checked, first_user=(user_count == 0))
+            return render_template("register.html", username=_username, first_user=True)
 
         if password != confirm_password:
             flash("Les mots de passe ne correspondent pas.", "error")
-            return render_template("register.html", username=_username, is_admin_checked=_is_admin_checked, first_user=(user_count == 0))
+            return render_template("register.html", username=_username, first_user=True)
 
         if len(password) < 6:
             flash("Le mot de passe doit contenir au moins 6 caractères.", "error")
-            return render_template("register.html", username=_username, is_admin_checked=_is_admin_checked, first_user=(user_count == 0))
+            return render_template("register.html", username=_username, first_user=True)
 
-        # Si c'est le premier utilisateur, il est forcément admin.
-        # Sinon, l'admin peut décider de créer un nouvel admin ou non.
-        final_is_admin_status = is_admin_request
-        if user_count == 0:
-            final_is_admin_status = True  # Le premier utilisateur créé sera toujours admin
-
-        user = create_user(username, password, is_admin=final_is_admin_status)
+        user = create_user(username, password, is_admin=True)  # Le premier utilisateur est toujours admin
         if user:
+            # Accordez l'accès à tous les champs au premier utilisateur admin
+            grant_access_to_all_champs(user.id)
+            app.logger.info(f"Premier utilisateur {user.username} créé et accès à tous les champs accordé.")
+
             flash(f"Compte '{username}' créé avec succès! Vous pouvez maintenant vous connecter.", "success")
             return redirect(url_for("login"))
         flash("Ce nom d'utilisateur est déjà pris.", "error")  # Erreur si create_user retourne None (nom d'utilisateur existant)
 
     # Pour la requête GET, passer la variable first_user au template
-    return render_template("register.html", first_user=(user_count == 0))
+    return render_template("register.html", first_user=True)
 
 
 @app.route("/")
 @login_required  # Protection de la route
-def index():
+def index() -> Any:
     """
     Affiche la page d'accueil de l'application.
+    Les champs affichés dépendent des permissions de l'utilisateur.
     """
-    champs = get_all_champs()
-    return render_template("index.html", champs=champs)
+    all_champs = get_all_champs()
+    if current_user.is_admin:
+        champs_accessible = all_champs
+    else:
+        # Filtrer les champs pour les utilisateurs non-admin
+        champs_accessible = [champ for champ in all_champs if current_user.can_access_champ(champ["champno"])]
+    return render_template("index.html", champs=champs_accessible)
 
 
 @app.route("/champ/<string:champ_no>")
 @login_required  # Protection de la route
-def page_champ(champ_no):
+def page_champ(champ_no: str) -> Any:
     """
     Affiche la page détaillée d'un champ spécifique.
+    Vérifie les permissions de l'utilisateur pour le champ.
     """
+    # Première vérification de permission
+    if not current_user.can_access_champ(champ_no):
+        flash("Vous n'avez pas les permissions pour accéder à ce champ.", "error")
+        return redirect(url_for("index"))
+
     champ_details = get_champ_details(champ_no)
     if not champ_details:
         flash(f"Le champ {champ_no} n'a pas été trouvé.", "error")
@@ -698,7 +882,7 @@ def page_champ(champ_no):
 
 @app.route("/sommaire")
 @login_required  # Protection de la route
-def page_sommaire():
+def page_sommaire() -> Any:
     """
     Affiche la page du sommaire global des tâches des enseignants.
     """
@@ -714,9 +898,9 @@ def page_sommaire():
 @app.route("/administration")
 @login_required  # Requiert une connexion
 @admin_required  # Requiert des droits d'administrateur
-def page_administration_donnees():
+def page_administration_donnees() -> Any:
     """
-    Affiche la page d'administration.
+    Affiche la page d'administration générale (import/export).
     """
     cours_pour_reassignation = get_all_cours_avec_details_champ()
     champs_pour_destination = get_all_champs()
@@ -727,14 +911,26 @@ def page_administration_donnees():
     )
 
 
+@app.route("/administration/utilisateurs")
+@login_required
+@admin_required
+def page_administration_utilisateurs() -> Any:
+    """
+    Affiche la page d'administration des utilisateurs et de leurs permissions d'accès aux champs.
+    """
+    users_with_access = get_all_users_with_access_info()
+    all_champs = get_all_champs()
+    return render_template("administration_utilisateurs.html", users=users_with_access, all_champs=all_champs)
+
+
 # --- Fonctions utilitaires pour le sommaire ---
-def calculer_donnees_sommaire():
+def calculer_donnees_sommaire() -> tuple[list[dict], dict[str, dict], float]:
     """
     Calcule les données agrégées nécessaires pour la page sommaire globale.
     """
     tous_enseignants_details = get_all_enseignants_avec_details()
-    enseignants_par_champ_temp = {}
-    moyennes_par_champ_calculees = {}
+    enseignants_par_champ_temp: dict[str, Any] = {}
+    moyennes_par_champ_calculees: dict[str, dict] = {}
     total_periodes_global_tp = 0.0
     nb_enseignants_tp_global = 0
 
@@ -779,7 +975,9 @@ def calculer_donnees_sommaire():
         del data_champ["total_periodes"]
         del data_champ["nb_enseignants"]
 
-    moyenne_generale_calculee = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
+    moyenne_generale_calculee = (
+        (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
+    )
     enseignants_par_champ_final = list(enseignants_par_champ_temp.values())
 
     return enseignants_par_champ_final, moyennes_par_champ_calculees, moyenne_generale_calculee
@@ -788,7 +986,7 @@ def calculer_donnees_sommaire():
 # --- API ENDPOINTS ---
 @app.route("/api/sommaire/donnees", methods=["GET"])
 @login_required  # Protection de la route API
-def api_get_donnees_sommaire():
+def api_get_donnees_sommaire() -> Any:
     """
     API pour récupérer les données actualisées du sommaire global de l'établissement.
     """
@@ -804,9 +1002,10 @@ def api_get_donnees_sommaire():
 
 @app.route("/api/attributions/ajouter", methods=["POST"])
 @login_required  # Protection de la route API
-def api_ajouter_attribution():
+def api_ajouter_attribution() -> Any:
     """
     API pour ajouter une attribution de cours à un enseignant.
+    Vérifie les permissions de l'utilisateur sur le champ et le statut de verrouillage.
     """
     db = get_db()
     if not db:
@@ -821,11 +1020,19 @@ def api_ajouter_attribution():
     if not enseignant_id or not code_cours:
         return jsonify({"success": False, "message": "Données manquantes (ID enseignant ou code cours)."}), 400
 
+    champ_no_enseignant = get_enseignant_champ_no(enseignant_id)
+    if not champ_no_enseignant:
+        return jsonify({"success": False, "message": "Enseignant ou son champ non trouvé."}), 404
+
+    # Vérification d'accès au champ par l'utilisateur connecté
+    if not current_user.can_access_champ(champ_no_enseignant):
+        return jsonify({"success": False, "message": "Vous n'avez pas les permissions pour attribuer des cours dans ce champ."}), 403
+
     nouvelle_attribution_id = None
-    periodes_enseignant_maj = {}
+    periodes_enseignant_maj: dict[str, float] = {}
     groupes_restants_cours_maj = 0
-    attributions_enseignant_maj = []
-    infos_enseignant_pour_reponse = {}
+    attributions_enseignant_maj: list[dict] = []
+    infos_enseignant_pour_reponse: dict[str, Any] = {}
 
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
@@ -834,9 +1041,9 @@ def api_ajouter_attribution():
             query_verrou = """
                 SELECT e.EstFictif, ch.EstVerrouille
                 FROM Enseignants e JOIN Champs ch ON e.ChampNo = ch.ChampNo
-                WHERE e.EnseignantID = %s;
+                WHERE e.EnseignantID = %s AND ch.ChampNo = %s;
             """
-            cur.execute(query_verrou, (enseignant_id,))
+            cur.execute(query_verrou, (enseignant_id, champ_no_enseignant))
             verrou_info = cur.fetchone()
 
             if verrou_info and verrou_info["estverrouille"] and not verrou_info["estfictif"]:
@@ -881,7 +1088,10 @@ def api_ajouter_attribution():
                 return jsonify({"success": False, "message": "Erreur interne lors de la création de l'attribution."}), 500
             nouvelle_attribution_id = resultat_insertion["attributionid"]
 
-            cur.execute("SELECT ChampNo, EstTempsPlein, EstFictif, Nom, Prenom FROM Enseignants WHERE EnseignantID = %s", (enseignant_id,))
+            cur.execute(
+                "SELECT ChampNo, EstTempsPlein, EstFictif, Nom, Prenom FROM Enseignants WHERE EnseignantID = %s",
+                (enseignant_id,),
+            )
             resultat_enseignant = cur.fetchone()
             if resultat_enseignant:
                 infos_enseignant_pour_reponse = dict(resultat_enseignant)
@@ -943,9 +1153,10 @@ def api_ajouter_attribution():
 
 @app.route("/api/attributions/supprimer", methods=["POST"])
 @login_required  # Protection de la route API
-def api_supprimer_attribution():
+def api_supprimer_attribution() -> Any:
     """
     API pour supprimer une attribution de cours spécifique.
+    Vérifie les permissions de l'utilisateur sur le champ et le statut de verrouillage.
     """
     db = get_db()
     if not db:
@@ -959,17 +1170,18 @@ def api_supprimer_attribution():
         return jsonify({"success": False, "message": "ID d'attribution manquant."}), 400
 
     enseignant_id_concerne, code_cours_concerne = None, None
-    periodes_enseignant_maj, groupes_restants_cours_maj = {}, 0
-    attributions_enseignant_maj = []
+    periodes_enseignant_maj: dict[str, float] = {}
+    groupes_restants_cours_maj = 0
+    attributions_enseignant_maj: list[dict] = []
     periodes_liberees_par_suppression = 0.0
-    infos_enseignant_pour_reponse = {}
+    infos_enseignant_pour_reponse: dict[str, Any] = {}
 
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             # Récupérer les informations de l'attribution avant suppression et vérifier le verrouillage.
             query_select_attribution = """
                 SELECT ac.EnseignantID, ac.CodeCours, c.NbPeriodes AS PeriodesDuCours, ac.NbGroupesPris,
-                       e.EstFictif, ch.EstVerrouille
+                       e.EstFictif, ch.EstVerrouille, ch.ChampNo
                 FROM AttributionsCours ac
                 JOIN Cours c ON ac.CodeCours = c.CodeCours
                 JOIN Enseignants e ON ac.EnseignantID = e.EnseignantID
@@ -981,13 +1193,20 @@ def api_supprimer_attribution():
             if not attribution_info:
                 return jsonify({"success": False, "message": "Attribution non trouvée."}), 404
 
+            champ_no_concerne = attribution_info["champno"]
+            # Vérification d'accès au champ par l'utilisateur connecté
+            if not current_user.can_access_champ(champ_no_concerne):
+                return jsonify({"success": False, "message": "Vous n'avez pas les permissions pour retirer des cours dans ce champ."}), 403
+
             if attribution_info["estverrouille"] and not attribution_info["estfictif"]:
                 msg = "Impossible de retirer ce cours, le champ est verrouillé. " "Seules les tâches restantes peuvent être modifiées."
                 return jsonify({"success": False, "message": msg}), 403
 
             enseignant_id_concerne = attribution_info["enseignantid"]
             code_cours_concerne = attribution_info["codecours"]
-            periodes_liberees_par_suppression = float(attribution_info.get("periodesducours", 0.0)) * attribution_info.get("nbgroupespris", 0)
+            periodes_liberees_par_suppression = float(attribution_info.get("periodesducours", 0.0)) * attribution_info.get(
+                "nbgroupespris", 0
+            )
 
             # Supprime l'attribution.
             cur.execute("DELETE FROM AttributionsCours WHERE AttributionID = %s;", (attribution_id_a_supprimer,))
@@ -1063,16 +1282,21 @@ def api_supprimer_attribution():
 
 @app.route("/api/champs/<string:champ_no>/taches_restantes/creer", methods=["POST"])
 @login_required  # Protection de la route API
-def api_creer_tache_restante(champ_no):
+def api_creer_tache_restante(champ_no: str) -> Any:
     """
     API pour créer une nouvelle tâche restante (représentée par un enseignant fictif) dans un champ donné.
+    Vérifie les permissions de l'utilisateur sur le champ.
     """
+    # Vérification d'accès au champ par l'utilisateur connecté
+    if not current_user.can_access_champ(champ_no):
+        return jsonify({"success": False, "message": "Vous n'avez pas les permissions pour créer une tâche restante dans ce champ."}), 403
+
     db = get_db()
     if not db:
         return jsonify({"success": False, "message": "Erreur de connexion à la base de données."}), 500
 
-    nouvel_enseignant_fictif_cree = {}
-    periodes_initiales_tache = {"periodes_cours": 0.0, "periodes_autres": 0.0, "total_periodes": 0.0}
+    nouvel_enseignant_fictif_cree: dict[str, Any] = {}
+    periodes_initiales_tache: dict[str, float] = {"periodes_cours": 0.0, "periodes_autres": 0.0, "total_periodes": 0.0}
 
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
@@ -1140,23 +1364,33 @@ def api_creer_tache_restante(champ_no):
 
 @app.route("/api/enseignants/<int:enseignant_id>/supprimer", methods=["POST"])
 @login_required  # Protection de la route API
-def api_supprimer_enseignant(enseignant_id):
+def api_supprimer_enseignant(enseignant_id: int) -> Any:
     """
     API pour supprimer un enseignant, principalement utilisée pour les tâches fictives.
+    Vérifie les permissions de l'utilisateur sur le champ et le statut de verrouillage.
     """
     db = get_db()
     if not db:
         return jsonify({"success": False, "message": "Erreur de connexion à la base de données."}), 500
 
-    cours_liberes_apres_suppression = []
+    # Récupérer le champ_no de l'enseignant avant toute suppression
+    champ_no_enseignant = get_enseignant_champ_no(enseignant_id)
+    if not champ_no_enseignant:
+        return jsonify({"success": False, "message": "Enseignant ou son champ non trouvé."}), 404
+
+    # Vérification d'accès au champ par l'utilisateur connecté
+    if not current_user.can_access_champ(champ_no_enseignant):
+        return jsonify({"success": False, "message": "Vous n'avez pas les permissions pour supprimer un enseignant de ce champ."}), 403
+
+    cours_liberes_apres_suppression: list[dict] = []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             query_info_enseignant = """
                 SELECT e.EstFictif, ch.EstVerrouille
                 FROM Enseignants e JOIN Champs ch ON e.ChampNo = ch.ChampNo
-                WHERE e.EnseignantID = %s;
+                WHERE e.EnseignantID = %s AND ch.ChampNo = %s;
             """
-            cur.execute(query_info_enseignant, (enseignant_id,))
+            cur.execute(query_info_enseignant, (enseignant_id, champ_no_enseignant))
             enseignant_info = cur.fetchone()
 
             if not enseignant_info:
@@ -1184,7 +1418,9 @@ def api_supprimer_enseignant(enseignant_id):
                 codes_cours_uniques = list(set(c["codecours"] for c in cours_affectes_avant_suppression))
                 for code_cours_unique in codes_cours_uniques:
                     groupes_restants_maj = get_groupes_restants_pour_cours(code_cours_unique)
-                    nb_periodes = float(next((c["nbperiodes"] for c in cours_affectes_avant_suppression if c["codecours"] == code_cours_unique), 0.0))
+                    nb_periodes = float(
+                        next((c["nbperiodes"] for c in cours_affectes_avant_suppression if c["codecours"] == code_cours_unique), 0.0)
+                    )
                     cours_liberes_apres_suppression.append(
                         {
                             "code_cours": code_cours_unique,
@@ -1224,7 +1460,7 @@ def api_supprimer_enseignant(enseignant_id):
 @app.route("/api/champs/<string:champ_no>/basculer_verrou", methods=["POST"])
 @login_required  # Protection de la route API
 @admin_required  # Requiert des droits d'administrateur
-def api_basculer_verrou_champ(champ_no):
+def api_basculer_verrou_champ(champ_no: str) -> Any:
     """
     API pour basculer le statut de verrouillage d'un champ.
     """
@@ -1240,8 +1476,145 @@ def api_basculer_verrou_champ(champ_no):
     return jsonify({"success": True, "message": message, "est_verrouille": nouveau_statut}), 200
 
 
+@app.route("/api/utilisateurs", methods=["GET"])
+@login_required
+@admin_required
+def api_get_all_users() -> Any:
+    """
+    Endpoint API pour récupérer la liste de tous les utilisateurs et le nombre d'administrateurs.
+    Utilisé par la page d'administration des utilisateurs pour le rafraîchissement dynamique.
+    """
+    users_info = get_all_users_with_access_info()
+    db = get_db()
+    admin_count = 0
+    if db:
+        with db.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
+            admin_count = cur.fetchone()[0]
+    return jsonify({"users": users_info, "admin_count": admin_count})
+
+
+@app.route("/api/utilisateurs/creer", methods=["POST"])
+@login_required
+@admin_required
+def api_create_user() -> Any:
+    """
+    Endpoint API pour créer un nouvel utilisateur depuis le panneau d'administration.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "Aucune donnée JSON reçue."}), 400
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    is_admin = data.get("is_admin", False)
+    # Les champs autorisés sont une liste de chaînes (ChampNo)
+    allowed_champs = data.get("allowed_champs", [])
+
+    if not username or not password:
+        return jsonify({"success": False, "message": "Le nom d'utilisateur et le mot de passe sont requis."}), 400
+    if len(password) < 6:
+        return jsonify({"success": False, "message": "Le mot de passe doit contenir au moins 6 caractères."}), 400
+    if not isinstance(allowed_champs, list):
+        return jsonify({"success": False, "message": "Le format des champs autorisés est invalide."}), 400
+
+    user = create_user(username, password, is_admin)
+    if user:
+        if not is_admin and allowed_champs:
+            # Assigner les permissions de champ si ce n'est pas un admin
+            if not update_user_champ_access(user.id, allowed_champs):
+                # En cas d'échec de l'attribution des permissions, supprimer l'utilisateur créé
+                delete_user_data(user.id)
+                app.logger.error(f"Erreur d'attribution des champs pour le nouvel utilisateur {username}.")
+                return jsonify({"success": False, "message": "Utilisateur créé mais erreur lors de l'attribution des accès aux champs."}), 500
+
+        return jsonify({"success": True, "message": f"Utilisateur '{username}' créé avec succès!", "user_id": user.id}), 201
+    return jsonify({"success": False, "message": "Ce nom d'utilisateur est déjà pris."}), 409
+
+
+@app.route("/api/utilisateurs/<int:user_id>/update_access", methods=["POST"])
+@login_required
+@admin_required
+def api_update_user_access(user_id: int) -> Any:
+    """
+    Endpoint API pour mettre à jour les accès aux champs d'un utilisateur.
+    Requiert des droits d'administrateur.
+    """
+    data = request.get_json()
+    if not data or "champ_nos" not in data:
+        return jsonify({"success": False, "message": "Données manquantes (champ_nos)."}), 400
+
+    champ_nos_to_grant = data["champ_nos"]
+    if not isinstance(champ_nos_to_grant, list):
+        return jsonify({"success": False, "message": "Le format de 'champ_nos' est invalide (doit être une liste)."}), 400
+
+    # Empêcher un administrateur de modifier ses propres droits d'accès aux champs
+    # car les administrateurs ont accès à tous les champs par nature.
+    if user_id == current_user.id and current_user.is_admin:
+        return jsonify(
+            {
+                "success": False,
+                "message": "Vous ne pouvez pas modifier vos propres droits d'accès aux champs si vous êtes administrateur. Les administrateurs ont accès à tous les champs par défaut.",
+            }
+        ), 403
+
+    # Empêcher un administrateur de modifier les droits d'accès aux champs d'un autre administrateur.
+    target_user_info = get_user_by_id(user_id)
+    if not target_user_info:
+        return jsonify({"success": False, "message": "Utilisateur cible non trouvé."}), 404
+    if target_user_info.is_admin:
+        return jsonify(
+            {
+                "success": False,
+                "message": "Vous ne pouvez pas modifier les droits d'accès aux champs d'un autre administrateur. Les administrateurs ont accès à tous les champs par défaut.",
+            }
+        ), 403
+
+    if update_user_champ_access(user_id, champ_nos_to_grant):
+        return jsonify({"success": True, "message": "Accès aux champs mis à jour avec succès."}), 200
+    return jsonify({"success": False, "message": "Erreur lors de la mise à jour des accès aux champs."}), 500
+
+
+@app.route("/api/utilisateurs/<int:user_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def api_delete_user(user_id: int) -> Any:
+    """
+    Endpoint API pour supprimer un utilisateur.
+    Requiert des droits d'administrateur.
+    Empêche la suppression du compte de l'utilisateur actuellement connecté
+    et la suppression du dernier compte administrateur.
+    """
+    if user_id == current_user.id:
+        return jsonify({"success": False, "message": "Vous ne pouvez pas supprimer votre propre compte."}), 403
+
+    target_user_info = get_user_by_id(user_id)
+    if not target_user_info:
+        return jsonify({"success": False, "message": "Utilisateur cible non trouvé."}), 404
+
+    # Si l'utilisateur cible est un administrateur, vérifier qu'il ne s'agit pas du dernier admin.
+    if target_user_info.is_admin:
+        db = get_db()
+        if not db:
+            return jsonify({"success": False, "message": "Erreur de connexion à la base de données."}), 500
+        try:
+            with db.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
+                admin_count = cur.fetchone()[0]
+                # Si il ne reste qu'un seul admin ET que l'utilisateur cible est cet admin
+                if admin_count <= 1 and target_user_info.is_admin:
+                    return jsonify({"success": False, "message": "Impossible de supprimer le dernier compte administrateur."}), 403
+        except psycopg2.Error as e:
+            app.logger.error(f"Erreur vérification admin_count: {e}")
+            return jsonify({"success": False, "message": "Erreur de base de données lors de la vérification des administrateurs."}), 500
+
+    if delete_user_data(user_id):
+        return jsonify({"success": True, "message": "Utilisateur supprimé avec succès."}), 200
+    return jsonify({"success": False, "message": "Erreur lors de la suppression de l'utilisateur."}), 500
+
+
 # --- Fonctions utilitaires et routes pour l'importation de données Excel ---
-def allowed_file(filename):
+def allowed_file(filename: str) -> bool:
     """Vérifie si l'extension du fichier est autorisée pour l'importation."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -1249,7 +1622,7 @@ def allowed_file(filename):
 @app.route("/administration/importer_cours_excel", methods=["POST"])
 @login_required  # Protection de la route
 @admin_required  # Requiert des droits d'administrateur
-def api_importer_cours_excel():
+def api_importer_cours_excel() -> Any:
     """
     Importe les données des cours depuis un fichier Excel.
     """
@@ -1271,7 +1644,7 @@ def api_importer_cours_excel():
         flash("Type de fichier non autorisé pour les cours. Seuls les fichiers .xlsx sont acceptés.", "error")
         return redirect(url_for("page_administration_donnees"))
 
-    nouveaux_cours_a_importer = []
+    nouveaux_cours_a_importer: list[dict] = []
     try:
         workbook = openpyxl.load_workbook(file.stream)
         sheet = workbook.active
@@ -1291,9 +1664,11 @@ def api_importer_cours_excel():
             try:
                 champ_no_raw = row[0].value
                 code_cours_raw = row[1].value
+                # row[2].value est la grille (ignorée)
                 cours_descriptif_raw = row[3].value
                 nb_groupe_initial_raw = row[4].value
                 nb_periodes_raw = row[5].value
+                # row[6].value est le total période (ignoré)
                 est_cours_autre_raw = row[7].value
 
                 champ_no = str(champ_no_raw).strip() if champ_no_raw is not None else None
@@ -1301,7 +1676,10 @@ def api_importer_cours_excel():
                 cours_descriptif = str(cours_descriptif_raw).strip() if cours_descriptif_raw is not None else None
 
                 if not all([champ_no, code_cours, cours_descriptif]):
-                    flash(f"Ligne {row_idx} (Cours): Données essentielles (ChampNo, CodeCours, Descriptif) manquantes. Ligne ignorée.", "warning")
+                    flash(
+                        f"Ligne {row_idx} (Cours): Données essentielles (ChampNo, CodeCours, Descriptif) manquantes. Ligne ignorée.",
+                        "warning",
+                    )
                     lignes_ignorees_compt += 1
                     continue
 
@@ -1427,7 +1805,7 @@ def api_importer_cours_excel():
 @app.route("/administration/importer_enseignants_excel", methods=["POST"])
 @login_required  # Protection de la route
 @admin_required  # Requiert des droits d'administrateur
-def api_importer_enseignants_excel():
+def api_importer_enseignants_excel() -> Any:
     """
     Importe les données des enseignants depuis un fichier Excel.
     """
@@ -1449,7 +1827,7 @@ def api_importer_enseignants_excel():
         flash("Type de fichier non autorisé pour les enseignants. Seuls les fichiers .xlsx sont acceptés.", "error")
         return redirect(url_for("page_administration_donnees"))
 
-    nouveaux_enseignants_a_importer = []
+    nouveaux_enseignants_a_importer: list[dict] = []
     try:
         workbook = openpyxl.load_workbook(file.stream)
         sheet = workbook.active
@@ -1468,6 +1846,7 @@ def api_importer_enseignants_excel():
         for row_idx, row in enumerate(iter_rows, start=2):
             try:
                 champ_no_raw = row[0].value
+                # row[1].value est le "Champ Nom" (ignoré)
                 nom_famille_raw = row[2].value
                 prenom_raw = row[3].value
                 temps_plein_raw = row[4].value

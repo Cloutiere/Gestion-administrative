@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration - Gestion des utilisateurs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Styles spécifiques à cette page pour l'administration des utilisateurs */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top; /* Alignement en haut pour les contenus multi-lignes */
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap; /* Permet aux boutons de passer à la ligne si l'espace est limité */
+        }
+
+        .btn-toggle-access, .btn-save-access, .btn-delete-user, .btn-create-user {
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            white-space: nowrap; /* Empêche le texte du bouton de se couper */
+        }
+
+        /* Styles pour le bouton de bascule d'accès */
+        .btn-toggle-access {
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+        .btn-toggle-access.active { /* Quand un champ est sélectionné */
+            background-color: #28a745; /* Vert */
+        }
+        .btn-toggle-access.disabled { /* Si l'utilisateur est admin ou si bouton désactivé */
+            background-color: #6c757d; /* Gris */
+            cursor: not-allowed;
+        }
+        .btn-toggle-access:hover:not(.disabled) {
+            background-color: #0056b3;
+        }
+        .btn-toggle-access.active:hover:not(.disabled) {
+            background-color: #218838;
+        }
+
+        /* Styles pour le bouton de sauvegarde */
+        .btn-save-access {
+            background-color: #17a2b8; /* Bleu-vert pour sauvegarder */
+            color: white;
+            border: none;
+        }
+        .btn-save-access:hover {
+            background-color: #138496;
+        }
+        .btn-save-access:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* Styles pour le bouton de suppression d'utilisateur */
+        .btn-delete-user {
+            background-color: #dc3545; /* Rouge pour supprimer */
+            color: white;
+            border: none;
+        }
+        .btn-delete-user:hover {
+            background-color: #c82333;
+        }
+        .btn-delete-user:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* Styles pour le bouton de création d'utilisateur */
+        .btn-create-user {
+            background-color: #28a745; /* Vert pour créer */
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            font-size: 1em;
+            margin-top: 15px;
+        }
+        .btn-create-user:hover {
+            background-color: #218838;
+        }
+        .btn-create-user:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* Message d'info pour les administrateurs */
+        .admin-info {
+            font-style: italic;
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        /* Messages de l'API (succès/erreur) */
+        .api-message {
+            margin-top: 10px;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            display: none; /* Caché par défaut, affiché par JS */
+        }
+        .api-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .api-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .api-message.info { /* Ajouté pour les messages d'information */
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        /* Formulaire de création d'utilisateur */
+        .create-user-form .form-group {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        .create-user-form .form-group label {
+            min-width: 120px;
+            margin-bottom: 0;
+        }
+        .create-user-form .form-group input[type="text"],
+        .create-user-form .form-group input[type="password"] {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .create-user-form .checkbox-group {
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        .create-user-form .champ-selection-create {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #eee;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .create-user-form .champ-selection-create .btn-toggle-access {
+            margin-bottom: 5px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Administration - Gestion des utilisateurs</h1>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('index') }}">Accueil</a></li>
+                <li><a href="{{ url_for('page_administration_donnees') }}">Administration (Données)</a></li>
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
+                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <section class="admin-section">
+            <h2>Créer un nouvel utilisateur</h2>
+            <form id="create-user-form" class="create-user-form">
+                <div class="form-group">
+                    <label for="new_username">Nom d'utilisateur :</label>
+                    <input type="text" id="new_username" name="new_username" required>
+                </div>
+                <div class="form-group">
+                    <label for="new_password">Mot de passe :</label>
+                    <input type="password" id="new_password" name="new_password" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm_new_password">Confirmer le mot de passe :</label>
+                    <input type="password" id="confirm_new_password" name="confirm_new_password" required>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="new_is_admin" name="new_is_admin">
+                    <label for="new_is_admin">Accès Administrateur</label>
+                </div>
+                <div class="champ-selection-create">
+                    <h4>Accès aux champs (si non-admin) :</h4>
+                    <p class="admin-info">Les administrateurs ont accès à tous les champs par défaut, cette sélection sera ignorée.</p>
+                    {% for champ in all_champs %}
+                        <button type="button" class="btn-toggle-access" data-champ-no="{{ champ.champno }}" title="{{ champ.champnom }}">
+                            {{ champ.champno }}
+                        </button>
+                    {% endfor %}
+                </div>
+                <div class="api-message" id="message-create-user"></div>
+                <button type="submit" class="btn-create-user">Créer l'utilisateur</button>
+            </form>
+        </section>
+
+        <hr>
+
+        <section class="admin-section">
+            <h2>Liste des utilisateurs et accès aux champs</h2>
+            <table id="users-table">
+                <thead>
+                    <tr>
+                        <th>Nom d'utilisateur</th>
+                        <th>Statut Admin</th>
+                        <th>Accès aux champs</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# Les utilisateurs sont insérés ici par Jinja2 au chargement, et par JS après création/MAJ/suppression #}
+                    {% for user in users %}
+                    <tr id="user-row-{{ user.id }}">
+                        <td>
+                            {{ user.username }}
+                            {% if user.id == current_user.id %}<br><small>(Vous)</small>{% endif %}
+                        </td>
+                        <td>
+                            {{ 'Oui' if user.is_admin else 'Non' }}
+                            {% if user.is_admin %}
+                                <div class="admin-info">Accès à tous les champs</div>
+                            {% endif %}
+                        </td>
+                        <td class="champ-access-buttons" data-user-id="{{ user.id }}">
+                            {% if not user.is_admin %}
+                                {% for champ in all_champs %}
+                                <button
+                                    type="button"
+                                    class="btn-toggle-access {% if champ.champno in user.allowed_champs %}active{% endif %}"
+                                    data-champ-no="{{ champ.champno }}"
+                                    title="{{ champ.champnom }}"
+                                >
+                                    {{ champ.champno }}
+                                </button>
+                                {% endfor %}
+                                <div class="api-message" id="message-user-{{ user.id }}"></div>
+                            {% else %}
+                                <span class="admin-info">Accès automatique à tous les champs</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {# Boutons d'action pour les utilisateurs existants #}
+                            {% if not user.is_admin %}
+                                <button class="btn-save-access" data-user-id="{{ user.id }}" disabled>Sauvegarder</button>
+                                <button class="btn-delete-user" data-user-id="{{ user.id }}">Supprimer</button>
+                            {% else %}
+                                {# Si l'utilisateur est admin, certaines actions sont limitées #}
+                                {% if user.id == current_user.id %}
+                                    <button class="btn-delete-user" data-user-id="{{ user.id }}" disabled title="Vous ne pouvez pas supprimer votre propre compte.">Supprimer</button>
+                                {% else %}
+                                    {# La suppression d'un autre admin est possible si ce n'est pas le dernier #}
+                                    <button class="btn-delete-user" data-user-id="{{ user.id }}" {% if users|selectattr('is_admin')|list|length <= 1 %}disabled title="Impossible de supprimer le dernier compte administrateur."{% endif %}>Supprimer</button>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <footer>
+        <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
+    </footer>
+
+    <script>
+        // Data passed from Flask to JavaScript
+        const ALL_CHAMPS_DATA = {{ all_champs | tojson | safe }};
+        const CURRENT_USER_ID = {{ current_user.id | tojson | safe }};
+        const CURRENT_USER_IS_ADMIN = {{ current_user.is_admin | tojson | safe }};
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialisation des écouteurs d'événements pour les utilisateurs existants
+            initializeExistingUserListeners();
+
+            // Gérer la soumission du formulaire de création d'utilisateur
+            document.getElementById('create-user-form').addEventListener('submit', handleCreateUserFormSubmit);
+
+            // Gérer le changement d'état de la case à cocher "Accès Administrateur" pour la création
+            document.getElementById('new_is_admin').addEventListener('change', function() {
+                const champSelectionDiv = document.querySelector('.champ-selection-create');
+                if (this.checked) {
+                    champSelectionDiv.style.opacity = '0.5';
+                    champSelectionDiv.style.pointerEvents = 'none'; // Désactive les interactions
+                } else {
+                    champSelectionDiv.style.opacity = '1';
+                    champSelectionDiv.style.pointerEvents = 'auto'; // Active les interactions
+                }
+            });
+
+            // Gérer les clics sur les boutons de bascule d'accès des champs pour la création
+            document.querySelectorAll('.champ-selection-create .btn-toggle-access').forEach(button => {
+                button.addEventListener('click', function() {
+                    if (!document.getElementById('new_is_admin').checked) {
+                        this.classList.toggle('active');
+                    }
+                });
+            });
+        });
+
+        // Fonction pour réinitialiser le formulaire de création d'utilisateur
+        function resetCreateUserForm() {
+            document.getElementById('create-user-form').reset();
+            document.getElementById('new_is_admin').checked = false;
+            const champSelectionDiv = document.querySelector('.champ-selection-create');
+            champSelectionDiv.style.opacity = '1';
+            champSelectionDiv.style.pointerEvents = 'auto';
+            document.querySelectorAll('.champ-selection-create .btn-toggle-access').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            showMessage(document.getElementById('message-create-user'), '', ''); // Efface les messages
+        }
+
+        // Fonction pour gérer la soumission du formulaire de création d'utilisateur
+        async function handleCreateUserFormSubmit(event) {
+            event.preventDefault(); // Empêche le rechargement de la page
+
+            const usernameInput = document.getElementById('new_username');
+            const passwordInput = document.getElementById('new_password');
+            const confirmPasswordInput = document.getElementById('confirm_new_password');
+            const isAdminCheckbox = document.getElementById('new_is_admin');
+            const messageDiv = document.getElementById('message-create-user');
+            const submitButton = document.querySelector('.btn-create-user');
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+            const confirmPassword = confirmPasswordInput.value.trim();
+            const is_admin = isAdminCheckbox.checked;
+
+            if (!username || !password || !confirmPassword) {
+                showMessage(messageDiv, 'Tous les champs sont requis.', 'error');
+                return;
+            }
+            if (password !== confirmPassword) {
+                showMessage(messageDiv, 'Les mots de passe ne correspondent pas.', 'error');
+                return;
+            }
+            if (password.length < 6) {
+                showMessage(messageDiv, 'Le mot de passe doit contenir au moins 6 caractères.', 'error');
+                return;
+            }
+
+            submitButton.disabled = true;
+            submitButton.textContent = 'Création...';
+
+            let allowed_champs = [];
+            if (!is_admin) {
+                document.querySelectorAll('.champ-selection-create .btn-toggle-access.active').forEach(btn => {
+                    allowed_champs.push(btn.dataset.champNo);
+                });
+            }
+
+            try {
+                const response = await fetch('/api/utilisateurs/creer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        is_admin: is_admin,
+                        allowed_champs: allowed_champs
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(messageDiv, data.message, 'success');
+                    resetCreateUserForm(); // Réinitialiser le formulaire
+                    await refreshUsersTable(); // Recharger et afficher tous les utilisateurs
+
+                } else {
+                    showMessage(messageDiv, data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Erreur lors de la création de l\'utilisateur:', error);
+                showMessage(messageDiv, 'Erreur de communication avec le serveur.', 'error');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Créer l\'utilisateur';
+            }
+        }
+
+
+        // Fonction pour récupérer et afficher tous les utilisateurs (après modification/création/suppression)
+        async function refreshUsersTable() {
+            try {
+                const response = await fetch('/api/utilisateurs'); // Assurez-vous que cette API existe ou utilisez get_all_users_with_access_info() via une route Flask
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json(); // data.users devrait être la liste d'utilisateurs
+
+                const tbody = document.querySelector('#users-table tbody');
+                tbody.innerHTML = ''; // Vider le tableau existant
+
+                // Re-remplir le tableau avec les données fraîches
+                data.users.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.id = `user-row-${user.id}`;
+                    let userHtml = `
+                        <td>
+                            ${user.username}
+                            ${user.id === CURRENT_USER_ID ? '<br><small>(Vous)</small>' : ''}
+                        </td>
+                        <td>
+                            ${user.is_admin ? 'Oui' : 'Non'}
+                            ${user.is_admin ? '<div class="admin-info">Accès à tous les champs</div>' : ''}
+                        </td>
+                        <td class="champ-access-buttons" data-user-id="${user.id}">`;
+
+                    if (!user.is_admin) {
+                        ALL_CHAMPS_DATA.forEach(champ => {
+                            const isActive = user.allowed_champs.includes(champ.champno) ? 'active' : '';
+                            userHtml += `
+                                <button
+                                    type="button"
+                                    class="btn-toggle-access ${isActive}"
+                                    data-champ-no="${champ.champno}"
+                                    title="${champ.champnom}"
+                                >
+                                    ${champ.champno}
+                                </button>`;
+                        });
+                        userHtml += `<div class="api-message" id="message-user-${user.id}"></div>`;
+                    } else {
+                        userHtml += `<span class="admin-info">Accès automatique à tous les champs</span>`;
+                    }
+
+                    userHtml += `
+                        </td>
+                        <td>`;
+                    if (!user.is_admin) {
+                        userHtml += `
+                            <button class="btn-save-access" data-user-id="${user.id}" disabled>Sauvegarder</button>
+                            <button class="btn-delete-user" data-user-id="${user.id}">Supprimer</button>`;
+                    } else {
+                        // Logique de désactivation du bouton supprimer pour les admins
+                        userHtml += `
+                            <button class="btn-delete-user" data-user-id="${user.id}" ${user.id === CURRENT_USER_ID || data.admin_count <= 1 ? 'disabled' : ''} title="${user.id === CURRENT_USER_ID ? 'Vous ne pouvez pas supprimer votre propre compte.' : (data.admin_count <= 1 ? 'Impossible de supprimer le dernier compte administrateur.' : '')}">Supprimer</button>`;
+                    }
+                    userHtml += `
+                        </td>
+                    </tr>`;
+                    row.innerHTML = userHtml;
+                    tbody.appendChild(row);
+                });
+
+                // Réinitialiser les écouteurs d'événements pour les nouveaux éléments créés dynamiquement
+                initializeExistingUserListeners();
+
+            } catch (error) {
+                console.error('Erreur lors du rafraîchissement du tableau des utilisateurs:', error);
+                // Optionnel: afficher un message d'erreur général
+            }
+        }
+
+        // Fonction pour initialiser les écouteurs pour les utilisateurs existants et dynamiquement ajoutés
+        function initializeExistingUserListeners() {
+            // Événement pour basculer la sélection d'un champ
+            document.querySelectorAll('.champ-access-buttons .btn-toggle-access').forEach(button => {
+                button.removeEventListener('click', handleToggleAccessClick); // S'assurer qu'il n'y a pas de doublons
+                button.addEventListener('click', handleToggleAccessClick);
+            });
+
+            // Événement pour sauvegarder les accès modifiés
+            document.querySelectorAll('.btn-save-access').forEach(button => {
+                button.removeEventListener('click', handleSaveAccessClick);
+                button.addEventListener('click', handleSaveAccessClick);
+            });
+
+            // Événement pour supprimer un utilisateur
+            document.querySelectorAll('.btn-delete-user').forEach(button => {
+                // S'assurer que le bouton n'est pas désactivé à cause de Jinja (pour les admins par exemple)
+                if (!button.disabled) {
+                    button.removeEventListener('click', handleDeleteUserClick);
+                    button.addEventListener('click', handleDeleteUserClick);
+                }
+            });
+        }
+
+        // Gestionnaire de clic pour basculer l'accès
+        function handleToggleAccessClick() {
+            this.classList.toggle('active');
+            const userId = this.closest('.champ-access-buttons').dataset.userId;
+            document.querySelector(`#user-row-${userId} .btn-save-access`).disabled = false;
+        }
+
+        // Gestionnaire de clic pour sauvegarder l'accès
+        async function handleSaveAccessClick() {
+            const userId = this.dataset.userId;
+            const messageDiv = document.getElementById(`message-user-${userId}`);
+            const saveButton = this;
+            const toggleButtons = document.querySelectorAll(`#user-row-${userId} .btn-toggle-access`);
+
+            saveButton.disabled = true;
+            saveButton.textContent = 'Sauvegarde...';
+
+            const selectedChampNos = [];
+            toggleButtons.forEach(btn => {
+                if (btn.classList.contains('active')) {
+                    selectedChampNos.push(btn.dataset.champNo);
+                }
+            });
+
+            try {
+                const response = await fetch(`/api/utilisateurs/${userId}/update_access`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ champ_nos: selectedChampNos })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(messageDiv, data.message, 'success');
+                    // Optionnel: rafraîchir l'utilisateur courant si ses permissions ont changé
+                    // ou si c'est lui qui a été modifié.
+                    if (parseInt(userId) === CURRENT_USER_ID) {
+                        setTimeout(() => window.location.reload(), 1000); // Recharger pour mettre à jour current_user
+                    } else {
+                        // Recharger le tableau pour mettre à jour les labels d'accès
+                        await refreshUsersTable();
+                    }
+                } else {
+                    showMessage(messageDiv, data.message, 'error');
+                    saveButton.disabled = false;
+                }
+            } catch (error) {
+                console.error('Erreur lors de la mise à jour des accès:', error);
+                showMessage(messageDiv, 'Erreur de communication avec le serveur.', 'error');
+                saveButton.disabled = false;
+            } finally {
+                saveButton.textContent = 'Sauvegarder';
+            }
+        }
+
+        // Gestionnaire de clic pour supprimer un utilisateur
+        async function handleDeleteUserClick() {
+            const userId = this.dataset.userId;
+            const username = this.closest('tr').querySelector('td:first-child').textContent.trim();
+            const messageDiv = document.getElementById(`message-user-${userId}`) || document.createElement('div');
+            if (!messageDiv.id) { // Si la div n'existe pas encore (pour les admins par exemple)
+                messageDiv.className = 'api-message';
+                messageDiv.id = `message-user-${userId}`;
+                this.parentNode.insertBefore(messageDiv, this.nextSibling);
+            }
+
+            if (!confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${username}" ? Cette action est irréversible.`)) {
+                return;
+            }
+
+            this.disabled = true;
+            this.textContent = 'Suppression...';
+
+            try {
+                const response = await fetch(`/api/utilisateurs/${userId}/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(messageDiv, data.message, 'success');
+                    // Supprimer la ligne de l'utilisateur du tableau après un court délai
+                    setTimeout(async () => {
+                        await refreshUsersTable(); // Rafraîchir pour enlever la ligne et mettre à jour les états des boutons
+                        if (parseInt(userId) === CURRENT_USER_ID) {
+                            window.location.href = "{{ url_for('logout') }}"; // Déconnecter si l'utilisateur s'est supprimé lui-même
+                        }
+                    }, 1000);
+                } else {
+                    showMessage(messageDiv, data.message, 'error');
+                    this.disabled = false;
+                    this.textContent = 'Supprimer';
+                }
+            } catch (error) {
+                console.error('Erreur lors de la suppression de l\'utilisateur:', error);
+                showMessage(messageDiv, 'Erreur de communication avec le serveur.', 'error');
+                this.disabled = false;
+                this.textContent = 'Supprimer';
+            }
+        }
+
+        // Fonction utilitaire pour afficher les messages API
+        function showMessage(element, msg, type) {
+            element.textContent = msg;
+            element.className = 'api-message ' + type; // Réinitialise et ajoute la classe de type
+            element.style.display = 'block';
+            setTimeout(() => {
+                element.style.display = 'none';
+                element.textContent = '';
+            }, 5000);
+        }
+
+        // Pour la fonction refreshUsersTable, elle a besoin d'un endpoint /api/utilisateurs
+        // Vous devrez ajouter cette route à main.py pour qu'elle renvoie tous les utilisateurs.
+        // Exemple (à ajouter dans main.py):
+        /*
+        @app.route("/api/utilisateurs", methods=["GET"])
+        @login_required
+        @admin_required
+        def api_get_all_users():
+            users_info = get_all_users_with_access_info()
+            db = get_db()
+            admin_count = 0
+            if db:
+                with db.cursor() as cur:
+                    cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
+                    admin_count = cur.fetchone()[0]
+            return jsonify({"users": users_info, "admin_count": admin_count})
+        */
+    </script>
+</body>
+</html>

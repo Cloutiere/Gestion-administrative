@@ -5,6 +5,9 @@ body {
   font-family: sans-serif; /* Police de caractères par défaut */
   margin: 20px; /* Marges extérieures pour espacer du bord de la fenêtre */
   background-color: #f4f4f4; /* Couleur de fond légère pour la page */
+  display: flex; /* Utilisé dans le sommaire pour un layout flexible */
+  flex-direction: column; /* Organise le contenu verticalement */
+  min-height: 100vh; /* S'assure que le corps prend au moins toute la hauteur de la fenêtre */
 }
 
 /* Styles communs pour les sections principales : en-tête, navigation, contenu principal, pied de page */
@@ -14,6 +17,15 @@ header, nav, main, footer {
   margin-bottom: 15px; /* Marge inférieure pour espacer les blocs verticalement */
   border-radius: 5px; /* Coins arrondis */
   box-shadow: 0 0 5px rgba(0,0,0,0.1); /* Ombre légère pour un effet de profondeur */
+}
+
+/* Pied de page */
+footer {
+  flex-shrink: 0; /* Empêche le pied de page de rétrécir */
+  text-align: center;
+  padding: 10px;
+  background-color: #f1f1f1;
+  border-top: 1px solid #ddd;
 }
 
 /* Styles pour les listes de navigation */
@@ -36,10 +48,33 @@ nav ul li a:hover {
   text-decoration: underline; /* Souligne les liens au survol pour un meilleur retour visuel */
 }
 
+nav ul strong {
+    display: block; /* Pour s'assurer que les titres prennent toute la largeur disponible */
+    margin-top: 10px;
+    margin-bottom: 5px;
+}
+nav ul hr {
+    border: 0;
+    height: 1px;
+    background: #eee;
+    margin: 15px 0;
+}
+
 /* Styles pour les titres de niveau 1 et 2 */
 h1, h2 {
   color: #333; /* Couleur de texte foncée pour les titres */
 }
+
+/* Section titres (pour les pages de détails, sommaire, admin) */
+.section-title {
+    margin-top: 20px;
+    margin-bottom:10px;
+    font-size: 1.2em;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom:5px;
+}
+
 
 /* Styles pour les messages flash (alertes) */
 .flash-messages {
@@ -176,4 +211,472 @@ h1, h2 {
     font-weight: normal; /* Le label de checkbox est moins gras */
 }
 
-/* Ajoutez ici d'autres styles globaux si nécessaire */
+/* Styles pour l'indicateur de champ verrouillé sur la page d'accueil */
+.locked-indicator {
+    color: #888;
+    font-size: 0.8em;
+    margin-left: 5px;
+}
+
+
+/* Styles généraux pour les tableaux */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px; /* Moins de marge par défaut pour les petits tableaux */
+    font-size: 0.9em;
+}
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    vertical-align: top; /* Alignement en haut par défaut pour les cellules de tableau */
+}
+th {
+    background-color: #e9ecef;
+}
+
+/* Styles pour les sections d'administration (import, réassignation, utilisateurs) */
+.admin-section {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    margin-bottom: 30px;
+}
+.admin-section h2 {
+    margin-top: 0;
+}
+.admin-section label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+.admin-section input[type="file"] {
+    margin-bottom: 15px;
+}
+.admin-section .btn-importer {
+    padding: 8px 15px;
+    background-color: #28a745; /* Vert pour importer */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.admin-section .btn-importer:hover {
+    background-color: #218838;
+}
+.note-importation {
+    font-size: 0.9em;
+    color: #555;
+    margin-top: 10px;
+}
+.note-importation ul {
+    padding-left: 20px; /* Indentation pour la liste des colonnes */
+}
+.warning-text {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Message area pour les retours d'API (général, réassignation) */
+.message-area, .api-message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    display: none; /* Caché par défaut, affiché par JS */
+}
+.message-area.message-success, .api-message.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.message-area.message-error, .api-message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+.message-area.message-info, .api-message.info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* Styles pour la réassignation des cours */
+.select-champ {
+    min-width: 150px;
+}
+.btn-reassigner {
+    padding: 5px 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.btn-reassigner:hover {
+    background-color: #0056b3;
+}
+.btn-reassigner:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+/* Styles pour la page page_champ.html */
+.container {
+    display: flex;
+    gap: 20px;
+    flex-wrap: nowrap;
+}
+
+.enseignants-section {
+    flex: 2;
+    min-width: 400px;
+    max-height: calc(100vh - 200px); /* Hauteur maximale pour permettre le défilement interne */
+    overflow-y: auto; /* Défilement vertical pour la section des enseignants si elle dépasse la hauteur max */
+    padding:10px;
+    border: 1px solid #ccc;
+    border-radius:5px;
+    background-color: #f9f9f9;
+}
+
+.cours-restants-section, .sommaire-champ-section {
+    flex: 1;
+    min-width: 300px;
+    padding:10px;
+    border: 1px solid #ccc;
+    border-radius:5px;
+    background-color: #f9f9f9;
+    max-height: calc(100vh - 200px); /* Hauteur maximale pour ces sections aussi */
+    overflow-y: auto; /* Permettre le défilement si le contenu est trop grand */
+}
+
+#lock-status-indicator {
+    font-size: 0.8em;
+    color: #dc3545;
+    margin-left: 10px;
+}
+
+.enseignant-card {
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: #fff;
+    transition: background-color 0.3s ease;
+}
+
+.enseignant-fictif { background-color: #f0f8ff; border-left: 5px solid #cce5ff; }
+
+.enseignant-card.detail-visible {
+    background-color: #e7f3fe;
+    border-left: 5px solid #007bff;
+}
+
+.entete-enseignant {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+.entete-enseignant:hover { background-color: #f0f0f0; }
+.entete-enseignant .arrow-indicator { margin-left: 10px; transition: transform 0.3s ease; }
+.enseignant-card.detail-visible .entete-enseignant .arrow-indicator { transform: rotate(90deg); }
+
+.entete-enseignant h3.titre-enseignant-bascule { margin-bottom: 5px; }
+.nom-enseignant-texte { flex-grow: 1; }
+.action-enseignant-fictif { text-align: right; margin-top: 0; margin-bottom: 5px; }
+
+div.cours-attribues > table { margin-top: 5px; }
+
+/* En-têtes spécifiques aux tableaux d'attributions */
+.sous-titre-cours-restants td, .sous-titre-attributions td {
+    background-color: #f0f0f0; font-weight: bold; text-align: center;
+    border-top: 2px solid #ccc; border-bottom: 1px solid #ccc;
+}
+
+.total-attributions-row td { font-weight: bold; background-color: #e9ecef; text-align: right; }
+.total-attributions-row td:first-child { text-align: left; }
+
+.cours-attribues { margin-top: 0px; }
+
+/* Boutons "Choisir", "Retirer", "Supprimer tâche" */
+.cours-selection button, .btn-retirer-cours, .btn-supprimer-enseignant {
+    margin-left:5px; cursor:pointer; padding: 3px 8px; font-size: 0.85em;
+    border-radius: 4px;
+}
+.btn-retirer-cours, .btn-supprimer-enseignant { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+.btn-retirer-cours:hover, .btn-supprimer-enseignant:hover { background-color: #f5c6cb;}
+
+/* Styles pour les sections de sélection de cours */
+.cours-selection { margin-top: 15px; }
+.cours-selection ul { list-style-type: none; padding-left: 0; margin-top: 5px; margin-bottom: 5px; }
+.cours-selection li { margin-bottom: 2px; padding: 3px 5px; border-bottom: 1px dashed #eee; }
+.cours-selection li:last-child { border-bottom: none; }
+
+/* Styles pour le verrouillage des champs dans page_champ.html */
+.champ-verrouille .btn-retirer-cours:disabled,
+.champ-verrouille .cours-selection button:disabled {
+    background-color: #e9ecef;
+    color: #6c757d;
+    border-color: #ddd;
+    cursor: not-allowed;
+}
+
+/* Ligne de signature pour l'impression */
+.signature-line {
+    margin-top: 40px;
+    border-top: 1px solid #000;
+    padding-top: 5px;
+    font-style: italic;
+}
+
+
+/* Styles pour la page sommaire globale (page_sommaire.html) */
+main {
+    flex-grow: 1; /* Permet à la zone principale de prendre l'espace disponible */
+}
+header h1 {
+    margin-top: 10px;
+    margin-bottom: 5px;
+    margin-left: 20px;
+    margin-right: 20px;
+    font-size: 1.8em;
+}
+header p {
+    margin-top: 0;
+    margin-bottom: 10px;
+    margin-left: 20px;
+    margin-right: 20px;
+}
+.container-principal-sommaire {
+    display: flex;
+    flex-grow: 1;
+    overflow: hidden;
+    padding: 10px 15px 15px 15px;
+    gap: 15px;
+}
+.colonne-sommaire {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    background-color: #ffffff;
+}
+.colonne-gauche { flex-basis: 35%; }
+.colonne-droite { flex-basis: 65%; }
+
+.section-sommaire {
+    padding: 10px 15px 15px 15px;
+    border: 1px solid #ccc;
+    border-radius:5px;
+    background-color: #f9f9f9;
+}
+.section-sommaire h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+}
+
+#table-moyennes-par-champ th:last-child,
+#table-moyennes-par-champ td:last-child {
+    text-align: center;
+    vertical-align: middle;
+}
+.section-moyenne-generale {
+    background-color: #e7f3fe;
+    padding: 10px 15px;
+}
+.moyenne-generale-contenu {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.1em;
+    font-weight: bold;
+}
+.statut-non-compte { color: #6c757d; font-style: italic; }
+
+.champ-header-row th.champ-title-cell {
+    background-color: #ddeeff;
+    font-size: 1.05em;
+    padding: 8px 10px;
+    text-align: center;
+    font-weight: bold;
+}
+.column-header-row th {
+    background-color: #f8f9fa;
+    position: sticky; /* Pour les en-têtes de colonne */
+    top: 0;
+    z-index: 1;
+    font-size: 0.85em;
+    padding: 6px 8px;
+}
+
+/* STYLES POUR LES ICÔNES SVG (VERROU) */
+.lock-icon {
+    cursor: pointer;
+    display: inline-block;
+    width: 20px; /* Taille de l'icône */
+    height: 20px;
+    transition: transform 0.2s ease-in-out;
+}
+.lock-icon:hover {
+    transform: scale(1.15); /* Effet de grossissement au survol */
+}
+.lock-icon svg {
+    width: 100%;
+    height: 100%;
+}
+.lock-icon.unlocked svg {
+    fill: #28a745; /* Vert pour déverrouillé */
+}
+.lock-icon.locked svg {
+    fill: #dc3545; /* Rouge pour verrouillé */
+}
+
+/* Styles pour les rangées du sommaire par statut */
+.enseignant-fictif-sommaire { background-color: #f0f8ff; }
+.enseignant-temps-partiel-sommaire { background-color: #f9f9e0; } /* Légèrement jaune */
+.enseignant-temps-plein-sommaire { background-color: #ffffff; } /* Blanc par défaut */
+
+
+/* Styles spécifiques pour administration_utilisateurs.html */
+.user-actions {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+/* Boutons de bascule d'accès aux champs */
+.btn-toggle-access {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+.btn-toggle-access.active {
+    background-color: #28a745; /* Vert */
+}
+.btn-toggle-access.disabled {
+    background-color: #6c757d; /* Gris */
+    cursor: not-allowed;
+}
+.btn-toggle-access:hover:not(.disabled) {
+    background-color: #0056b3;
+}
+.btn-toggle-access.active:hover:not(.disabled) {
+    background-color: #218838;
+}
+
+/* Bouton de sauvegarde des accès */
+.btn-save-access {
+    background-color: #17a2b8; /* Bleu-vert */
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+.btn-save-access:hover {
+    background-color: #138496;
+}
+.btn-save-access:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+/* Bouton de suppression d'utilisateur */
+.btn-delete-user {
+    background-color: #dc3545; /* Rouge */
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+.btn-delete-user:hover {
+    background-color: #c82333;
+}
+.btn-delete-user:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+/* Message d'information pour les administrateurs */
+.admin-info {
+    font-style: italic;
+    color: #6c757d;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+/* Styles pour l'impression (pour page_champ.html) */
+.print-only { display: none; }
+
+@media print {
+    /* Cache les éléments non désirés à l'impression. */
+    header,
+    nav, /* Cacher la navigation pour l'impression */
+    .no-print {
+        display: none !important;
+    }
+
+    /* Assure que le corps principal est bien positionné */
+    body {
+        margin: 0;
+        padding: 0;
+        display: block; /* Annuler le flex pour l'impression */
+    }
+
+    /* Force l'affichage des éléments destinés uniquement à l'impression */
+    .print-only {
+        display: block;
+    }
+
+    .container {
+        display: block; /* Change le flexbox en block pour l'impression */
+        width: 100%;
+        gap: 0;
+    }
+
+    .enseignants-section {
+        display: block;
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+        border: none;
+        padding: 0;
+    }
+
+    .enseignant-card {
+        border: 1px solid #000;
+        padding: 15px;
+        margin-bottom: 20px;
+        page-break-inside: avoid; /* Évite les coupures de carte en milieu de page */
+    }
+
+    .entete-enseignant { cursor: default; }
+    .entete-enseignant .arrow-indicator { display: none; }
+    .contenu-selection-cours, .action-enseignant-fictif { display: none !important; }
+
+    table { font-size: 9pt; border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #000; padding: 4px; text-align: left; }
+    .total-attributions-row { border-top: 2px solid #000; }
+
+    /* Styles pour la première page d'impression (sommaire) */
+    #print-summary-page { page-break-after: always; }
+    #print-summary-page h2 { font-size: 14pt; margin-top: 0; }
+    #print-summary-page table { margin-bottom: 40px; }
+    #print-summary-page th { background-color: #e0e0e0; }
+    #print-summary-page tfoot td { font-weight: bold; }
+}

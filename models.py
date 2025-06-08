@@ -15,7 +15,7 @@ class User(UserMixin):
     des propriétés et méthodes requises par Flask-Login (is_authenticated, is_active, etc.).
     """
 
-    def __init__(self, _id: int, username: str, is_admin: bool = False):
+    def __init__(self, _id: int, username: str, is_admin: bool = False, allowed_champs: list[str] | None = None):
         """
         Initialise un nouvel objet User.
 
@@ -23,16 +23,37 @@ class User(UserMixin):
             _id (int): L'identifiant unique de l'utilisateur dans la base de données.
             username (str): Le nom d'utilisateur.
             is_admin (bool): Indique si l'utilisateur a des privilèges d'administrateur.
+            allowed_champs (list[str] | None): Liste des numéros de champ (ChampNo) auxquels
+                                              cet utilisateur a un accès explicite.
+                                              Ignoré si l'utilisateur est admin (accès à tout).
         """
         self.id = _id
         self.username = username
         self.is_admin = is_admin
+        # Si l'utilisateur est admin, il a accès à tous les champs.
+        # Sinon, l'accès est limité par la liste fournie.
+        self.allowed_champs = allowed_champs if not is_admin else [] # La liste sera vide pour les admins pour simplifier la logique de vérification, puisque is_admin sera prioritaire.
 
     def get_id(self):
         """
         Retourne l'identifiant unique de l'utilisateur, requis par Flask-Login.
         """
         return str(self.id)
+
+    def can_access_champ(self, champ_no: str) -> bool:
+        """
+        Vérifie si l'utilisateur a l'autorisation d'accéder à un champ spécifique.
+
+        Args:
+            champ_no (str): Le numéro du champ à vérifier.
+
+        Returns:
+            bool: True si l'utilisateur est admin ou si le champ est dans sa liste d'accès,
+                  False sinon.
+        """
+        if self.is_admin:
+            return True
+        return champ_no in self.allowed_champs
 
 
 def hash_password(password: str) -> str:

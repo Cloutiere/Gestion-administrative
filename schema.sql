@@ -165,6 +165,19 @@ ALTER SEQUENCE public.users_id_seq OWNER TO neondb_owner;
 
 ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
 
+--
+-- Name: user_champ_access; Type: TABLE; Schema: public; Owner: neondb_owner
+--
+
+-- Table de liaison pour les accès utilisateurs aux champs spécifiques
+CREATE TABLE public.user_champ_access (
+    user_id integer NOT NULL,
+    champ_no text NOT NULL,
+    CONSTRAINT user_champ_access_pkey PRIMARY KEY (user_id, champ_no) -- Clé primaire composée pour l'unicité
+);
+
+ALTER TABLE public.user_champ_access OWNER TO neondb_owner;
+
 
 --
 -- Name: attributionscours attributionid; Type: DEFAULT; Schema: public; Owner: neondb_owner
@@ -293,6 +306,20 @@ ALTER TABLE ONLY public.cours
 
 ALTER TABLE ONLY public.enseignants
     ADD CONSTRAINT enseignants_champno_fkey FOREIGN KEY (champno) REFERENCES public.champs(champno);
+
+--
+-- Name: user_champ_access user_champ_access_champ_no_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE public.user_champ_access
+    ADD CONSTRAINT user_champ_access_champ_no_fkey FOREIGN KEY (champ_no) REFERENCES public.champs(champno) ON DELETE CASCADE;
+
+--
+-- Name: user_champ_access user_champ_access_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE public.user_champ_access
+    ADD CONSTRAINT user_champ_access_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
