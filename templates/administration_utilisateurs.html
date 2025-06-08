@@ -5,172 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Administration - Gestion des utilisateurs</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        /* Styles spécifiques à cette page pour l'administration des utilisateurs */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            margin-bottom: 30px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-            vertical-align: top; /* Alignement en haut pour les contenus multi-lignes */
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-
-        .user-actions {
-            display: flex;
-            gap: 5px;
-            flex-wrap: wrap; /* Permet aux boutons de passer à la ligne si l'espace est limité */
-        }
-
-        .btn-toggle-access, .btn-save-access, .btn-delete-user, .btn-create-user {
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9em;
-            white-space: nowrap; /* Empêche le texte du bouton de se couper */
-        }
-
-        /* Styles pour le bouton de bascule d'accès */
-        .btn-toggle-access {
-            background-color: #007bff;
-            color: white;
-            border: none;
-        }
-        .btn-toggle-access.active { /* Quand un champ est sélectionné */
-            background-color: #28a745; /* Vert */
-        }
-        .btn-toggle-access.disabled { /* Si l'utilisateur est admin ou si bouton désactivé */
-            background-color: #6c757d; /* Gris */
-            cursor: not-allowed;
-        }
-        .btn-toggle-access:hover:not(.disabled) {
-            background-color: #0056b3;
-        }
-        .btn-toggle-access.active:hover:not(.disabled) {
-            background-color: #218838;
-        }
-
-        /* Styles pour le bouton de sauvegarde */
-        .btn-save-access {
-            background-color: #17a2b8; /* Bleu-vert pour sauvegarder */
-            color: white;
-            border: none;
-        }
-        .btn-save-access:hover {
-            background-color: #138496;
-        }
-        .btn-save-access:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-
-        /* Styles pour le bouton de suppression d'utilisateur */
-        .btn-delete-user {
-            background-color: #dc3545; /* Rouge pour supprimer */
-            color: white;
-            border: none;
-        }
-        .btn-delete-user:hover {
-            background-color: #c82333;
-        }
-        .btn-delete-user:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-
-        /* Styles pour le bouton de création d'utilisateur */
-        .btn-create-user {
-            background-color: #28a745; /* Vert pour créer */
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            font-size: 1em;
-            margin-top: 15px;
-        }
-        .btn-create-user:hover {
-            background-color: #218838;
-        }
-        .btn-create-user:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-
-        /* Message d'info pour les administrateurs */
-        .admin-info {
-            font-style: italic;
-            color: #6c757d;
-            font-size: 0.9em;
-            margin-top: 5px;
-        }
-
-        /* Messages de l'API (succès/erreur) */
-        .api-message {
-            margin-top: 10px;
-            padding: 8px 15px;
-            border-radius: 4px;
-            font-weight: bold;
-            display: none; /* Caché par défaut, affiché par JS */
-        }
-        .api-message.success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .api-message.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .api-message.info { /* Ajouté pour les messages d'information */
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        /* Formulaire de création d'utilisateur */
-        .create-user-form .form-group {
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-        }
-        .create-user-form .form-group label {
-            min-width: 120px;
-            margin-bottom: 0;
-        }
-        .create-user-form .form-group input[type="text"],
-        .create-user-form .form-group input[type="password"] {
-            flex-grow: 1;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .create-user-form .checkbox-group {
-            margin-top: 10px;
-            margin-bottom: 10px;
-        }
-        .create-user-form .champ-selection-create {
-            margin-top: 10px;
-            padding: 10px;
-            border: 1px solid #eee;
-            background-color: #f0f0f0;
-            border-radius: 4px;
-            max-height: 150px;
-            overflow-y: auto;
-        }
-        .create-user-form .champ-selection-create .btn-toggle-access {
-            margin-bottom: 5px;
-            margin-right: 5px;
-        }
-    </style>
+    
+    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <script>
+        (function() {
+            /**
+             * Applique le thème spécifié au corps du document.
+             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
+             */
+            function applyTheme(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                if (theme === 'dark') {
+                    document.body.classList.add('theme-dark');
+                } else if (theme === 'vintage') {
+                    document.body.classList.add('theme-vintage');
+                } else {
+                    document.body.classList.add('theme-light'); // Thème par défaut explicite
+                }
+            }
+            // Récupère le thème sauvegardé ou utilise 'light' par défaut.
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme);
+        })();
+    </script>
 </head>
-<body>
+<body class="theme-light">
     <header>
         <h1>Administration - Gestion des utilisateurs</h1>
         <nav>
@@ -185,6 +44,13 @@
                 {% endif %}
             </ul>
         </nav>
+        
+        <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
+        </div>
     </header>
 
     <main>
@@ -221,17 +87,15 @@
                     <h4>Accès aux champs (si non-admin) :</h4>
                     <p class="admin-info">Les administrateurs ont accès à tous les champs par défaut, cette sélection sera ignorée.</p>
                     {% for champ in all_champs %}
-                        <button type="button" class="btn-toggle-access" data-champ-no="{{ champ.champno }}" title="{{ champ.champnom }}">
+                        <button type="button" class="btn btn-toggle-access" data-champ-no="{{ champ.champno }}" title="{{ champ.champnom }}">
                             {{ champ.champno }}
                         </button>
                     {% endfor %}
                 </div>
                 <div class="api-message" id="message-create-user"></div>
-                <button type="submit" class="btn-create-user">Créer l'utilisateur</button>
+                <button type="submit" id="btn-submit-create-user" class="btn btn-success" style="margin-top: 1rem;">Créer l'utilisateur</button>
             </form>
         </section>
-
-        <hr>
 
         <section class="admin-section">
             <h2>Liste des utilisateurs et accès aux champs</h2>
@@ -245,7 +109,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {# Les utilisateurs sont insérés ici par Jinja2 au chargement, et par JS après création/MAJ/suppression #}
+                    {# Les utilisateurs sont insérés par Jinja2 au chargement, et par JS après création/MAJ/suppression #}
                     {% for user in users %}
                     <tr id="user-row-{{ user.id }}">
                         <td>
@@ -254,19 +118,12 @@
                         </td>
                         <td>
                             {{ 'Oui' if user.is_admin else 'Non' }}
-                            {% if user.is_admin %}
-                                <div class="admin-info">Accès à tous les champs</div>
-                            {% endif %}
                         </td>
                         <td class="champ-access-buttons" data-user-id="{{ user.id }}">
                             {% if not user.is_admin %}
                                 {% for champ in all_champs %}
-                                <button
-                                    type="button"
-                                    class="btn-toggle-access {% if champ.champno in user.allowed_champs %}active{% endif %}"
-                                    data-champ-no="{{ champ.champno }}"
-                                    title="{{ champ.champnom }}"
-                                >
+                                <button type="button" class="btn btn-toggle-access {% if champ.champno in user.allowed_champs %}active{% endif %}"
+                                    data-champ-no="{{ champ.champno }}" title="{{ champ.champnom }}">
                                     {{ champ.champno }}
                                 </button>
                                 {% endfor %}
@@ -275,18 +132,16 @@
                                 <span class="admin-info">Accès automatique à tous les champs</span>
                             {% endif %}
                         </td>
-                        <td>
-                            {# Boutons d'action pour les utilisateurs existants #}
+                        <td class="user-actions">
                             {% if not user.is_admin %}
-                                <button class="btn-save-access" data-user-id="{{ user.id }}" disabled>Sauvegarder</button>
-                                <button class="btn-delete-user" data-user-id="{{ user.id }}">Supprimer</button>
+                                <button class="btn btn-save-access" data-user-id="{{ user.id }}" disabled>Sauvegarder</button>
+                                <button class="btn btn-delete-user" data-user-id="{{ user.id }}">Supprimer</button>
                             {% else %}
-                                {# Si l'utilisateur est admin, certaines actions sont limitées #}
+                                {# Logique pour la suppression des admins #}
                                 {% if user.id == current_user.id %}
-                                    <button class="btn-delete-user" data-user-id="{{ user.id }}" disabled title="Vous ne pouvez pas supprimer votre propre compte.">Supprimer</button>
+                                    <button class="btn btn-delete-user" data-user-id="{{ user.id }}" disabled title="Vous ne pouvez pas supprimer votre propre compte.">Supprimer</button>
                                 {% else %}
-                                    {# La suppression d'un autre admin est possible si ce n'est pas le dernier #}
-                                    <button class="btn-delete-user" data-user-id="{{ user.id }}" {% if users|selectattr('is_admin')|list|length <= 1 %}disabled title="Impossible de supprimer le dernier compte administrateur."{% endif %}>Supprimer</button>
+                                    <button class="btn btn-delete-user" data-user-id="{{ user.id }}" {% if users|selectattr('is_admin')|list|length <= 1 %}disabled title="Impossible de supprimer le dernier compte administrateur."{% endif %}>Supprimer</button>
                                 {% endif %}
                             {% endif %}
                         </td>
@@ -300,35 +155,26 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
-
+    
+    <!-- Script JS spécifique à la page d'administration des utilisateurs -->
     <script>
-        // Data passed from Flask to JavaScript
         const ALL_CHAMPS_DATA = {{ all_champs | tojson | safe }};
         const CURRENT_USER_ID = {{ current_user.id | tojson | safe }};
-        const CURRENT_USER_IS_ADMIN = {{ current_user.is_admin | tojson | safe }};
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialisation des écouteurs d'événements pour les utilisateurs existants
+            // Initialisation des écouteurs d'événements pour les utilisateurs existants et dynamiquement ajoutés
             initializeExistingUserListeners();
 
             // Gérer la soumission du formulaire de création d'utilisateur
             document.getElementById('create-user-form').addEventListener('submit', handleCreateUserFormSubmit);
 
             // Gérer le changement d'état de la case à cocher "Accès Administrateur" pour la création
-            document.getElementById('new_is_admin').addEventListener('change', function() {
-                const champSelectionDiv = document.querySelector('.champ-selection-create');
-                if (this.checked) {
-                    champSelectionDiv.style.opacity = '0.5';
-                    champSelectionDiv.style.pointerEvents = 'none'; // Désactive les interactions
-                } else {
-                    champSelectionDiv.style.opacity = '1';
-                    champSelectionDiv.style.pointerEvents = 'auto'; // Active les interactions
-                }
-            });
+            document.getElementById('new_is_admin').addEventListener('change', handleAdminCheckboxChange);
 
             // Gérer les clics sur les boutons de bascule d'accès des champs pour la création
             document.querySelectorAll('.champ-selection-create .btn-toggle-access').forEach(button => {
                 button.addEventListener('click', function() {
+                    // Les accès aux champs ne sont modifiables que si l'utilisateur n'est PAS un admin.
                     if (!document.getElementById('new_is_admin').checked) {
                         this.classList.toggle('active');
                     }
@@ -336,76 +182,84 @@
             });
         });
 
-        // Fonction pour réinitialiser le formulaire de création d'utilisateur
-        function resetCreateUserForm() {
-            document.getElementById('create-user-form').reset();
-            document.getElementById('new_is_admin').checked = false;
-            const champSelectionDiv = document.querySelector('.champ-selection-create');
-            champSelectionDiv.style.opacity = '1';
-            champSelectionDiv.style.pointerEvents = 'auto';
-            document.querySelectorAll('.champ-selection-create .btn-toggle-access').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            showMessage(document.getElementById('message-create-user'), '', ''); // Efface les messages
+        /**
+         * Gère le changement de l'état de la case à cocher "Accès Administrateur".
+         * Désactive la sélection des champs si l'admin est coché.
+         */
+        function handleAdminCheckboxChange() {
+            const champSelectionDiv = this.closest('form').querySelector('.champ-selection-create');
+            champSelectionDiv.style.opacity = this.checked ? '0.5' : '1';
+            champSelectionDiv.style.pointerEvents = this.checked ? 'none' : 'auto'; // Désactive/active les interactions
         }
 
-        // Fonction pour gérer la soumission du formulaire de création d'utilisateur
+        /**
+         * Réinitialise le formulaire de création d'utilisateur à son état initial.
+         */
+        function resetCreateUserForm() {
+            const form = document.getElementById('create-user-form');
+            form.reset(); // Réinitialise les champs du formulaire.
+            document.getElementById('new_is_admin').checked = false; // Décoche la case admin.
+            handleAdminCheckboxChange.call(document.getElementById('new_is_admin')); // Applique l'état visuel du sélecteur de champ.
+            
+            // Supprime la classe 'active' de tous les boutons de sélection de champ.
+            form.querySelectorAll('.champ-selection-create .btn-toggle-access.active').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            showMessage(document.getElementById('message-create-user'), '', ''); // Efface les messages d'état.
+        }
+
+        /**
+         * Gère la soumission du formulaire de création d'utilisateur.
+         * Envoie les données à l'API et met à jour l'interface.
+         * @param {Event} event - L'objet événement 'submit'.
+         */
         async function handleCreateUserFormSubmit(event) {
-            event.preventDefault(); // Empêche le rechargement de la page
+            event.preventDefault(); // Empêche le rechargement par défaut de la page.
 
-            const usernameInput = document.getElementById('new_username');
-            const passwordInput = document.getElementById('new_password');
-            const confirmPasswordInput = document.getElementById('confirm_new_password');
-            const isAdminCheckbox = document.getElementById('new_is_admin');
-            const messageDiv = document.getElementById('message-create-user');
-            const submitButton = document.querySelector('.btn-create-user');
+            const form = event.target;
+            const messageDiv = form.querySelector('#message-create-user');
+            const submitButton = form.querySelector('#btn-submit-create-user');
 
-            const username = usernameInput.value.trim();
-            const password = passwordInput.value.trim();
-            const confirmPassword = confirmPasswordInput.value.trim();
-            const is_admin = isAdminCheckbox.checked;
+            const username = form.new_username.value.trim();
+            const password = form.new_password.value.trim();
+            const confirmPassword = form.confirm_new_password.value.trim();
+            const is_admin = form.new_is_admin.checked;
 
+            // Validations côté client.
             if (!username || !password || !confirmPassword) {
-                showMessage(messageDiv, 'Tous les champs sont requis.', 'error');
-                return;
+                return showMessage(messageDiv, 'Tous les champs sont requis.', 'error');
             }
             if (password !== confirmPassword) {
-                showMessage(messageDiv, 'Les mots de passe ne correspondent pas.', 'error');
-                return;
+                return showMessage(messageDiv, 'Les mots de passe ne correspondent pas.', 'error');
             }
             if (password.length < 6) {
-                showMessage(messageDiv, 'Le mot de passe doit contenir au moins 6 caractères.', 'error');
-                return;
+                return showMessage(messageDiv, 'Le mot de passe doit contenir au moins 6 caractères.', 'error');
             }
 
-            submitButton.disabled = true;
+            submitButton.disabled = true; // Désactive le bouton pendant le traitement.
             submitButton.textContent = 'Création...';
 
             let allowed_champs = [];
+            // Collecte les champs sélectionnés si l'utilisateur n'est pas admin.
             if (!is_admin) {
-                document.querySelectorAll('.champ-selection-create .btn-toggle-access.active').forEach(btn => {
+                form.querySelectorAll('.champ-selection-create .btn-toggle-access.active').forEach(btn => {
                     allowed_champs.push(btn.dataset.champNo);
                 });
             }
 
             try {
+                // Envoie la requête à l'API pour créer l'utilisateur.
                 const response = await fetch('/api/utilisateurs/creer', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: username,
-                        password: password,
-                        is_admin: is_admin,
-                        allowed_champs: allowed_champs
-                    })
+                    body: JSON.stringify({ username, password, is_admin, allowed_champs })
                 });
-                const data = await response.json();
+                const data = await response.json(); // Attend la réponse JSON.
 
                 if (data.success) {
                     showMessage(messageDiv, data.message, 'success');
-                    resetCreateUserForm(); // Réinitialiser le formulaire
-                    await refreshUsersTable(); // Recharger et afficher tous les utilisateurs
-
+                    resetCreateUserForm(); // Réinitialise le formulaire après succès.
+                    await refreshUsersTable(); // Rafraîchit le tableau des utilisateurs existants.
                 } else {
                     showMessage(messageDiv, data.message, 'error');
                 }
@@ -413,102 +267,93 @@
                 console.error('Erreur lors de la création de l\'utilisateur:', error);
                 showMessage(messageDiv, 'Erreur de communication avec le serveur.', 'error');
             } finally {
-                submitButton.disabled = false;
-                submitButton.textContent = 'Créer l\'utilisateur';
+                submitButton.disabled = false; // Réactive le bouton.
+                submitButton.textContent = "Créer l'utilisateur";
             }
         }
 
-
-        // Fonction pour récupérer et afficher tous les utilisateurs (après modification/création/suppression)
+        /**
+         * Récupère et rafraîchit l'intégralité du tableau des utilisateurs.
+         * Appelé après une création, modification ou suppression d'utilisateur.
+         */
         async function refreshUsersTable() {
             try {
-                const response = await fetch('/api/utilisateurs'); // Assurez-vous que cette API existe ou utilisez get_all_users_with_access_info() via une route Flask
+                const response = await fetch('/api/utilisateurs');
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(`Erreur HTTP! Statut: ${response.status}`);
                 }
-                const data = await response.json(); // data.users devrait être la liste d'utilisateurs
+                const data = await response.json(); // Récupère la liste des utilisateurs et le compte admin.
 
                 const tbody = document.querySelector('#users-table tbody');
-                tbody.innerHTML = ''; // Vider le tableau existant
+                tbody.innerHTML = ''; // Vide le tableau existant.
 
-                // Re-remplir le tableau avec les données fraîches
+                // Re-remplir le tableau avec les données fraîches.
                 data.users.forEach(user => {
                     const row = document.createElement('tr');
                     row.id = `user-row-${user.id}`;
-                    let userHtml = `
-                        <td>
-                            ${user.username}
-                            ${user.id === CURRENT_USER_ID ? '<br><small>(Vous)</small>' : ''}
-                        </td>
-                        <td>
-                            ${user.is_admin ? 'Oui' : 'Non'}
-                            ${user.is_admin ? '<div class="admin-info">Accès à tous les champs</div>' : ''}
-                        </td>
-                        <td class="champ-access-buttons" data-user-id="${user.id}">`;
 
+                    // Gère l'affichage des accès aux champs.
+                    let allowedChampsHtml = `<span class="admin-info">Accès automatique à tous les champs</span>`;
                     if (!user.is_admin) {
-                        ALL_CHAMPS_DATA.forEach(champ => {
+                        allowedChampsHtml = ALL_CHAMPS_DATA.map(champ => {
                             const isActive = user.allowed_champs.includes(champ.champno) ? 'active' : '';
-                            userHtml += `
-                                <button
-                                    type="button"
-                                    class="btn-toggle-access ${isActive}"
-                                    data-champ-no="${champ.champno}"
-                                    title="${champ.champnom}"
-                                >
-                                    ${champ.champno}
-                                </button>`;
-                        });
-                        userHtml += `<div class="api-message" id="message-user-${user.id}"></div>`;
-                    } else {
-                        userHtml += `<span class="admin-info">Accès automatique à tous les champs</span>`;
+                            return `<button type="button" class="btn btn-toggle-access ${isActive}" data-champ-no="${champ.champno}" title="${champ.champnom}">${champ.champno}</button>`;
+                        }).join('') + `<div class="api-message" id="message-user-${user.id}"></div>`;
                     }
 
-                    userHtml += `
-                        </td>
-                        <td>`;
-                    if (!user.is_admin) {
-                        userHtml += `
-                            <button class="btn-save-access" data-user-id="${user.id}" disabled>Sauvegarder</button>
-                            <button class="btn-delete-user" data-user-id="${user.id}">Supprimer</button>`;
-                    } else {
-                        // Logique de désactivation du bouton supprimer pour les admins
-                        userHtml += `
-                            <button class="btn-delete-user" data-user-id="${user.id}" ${user.id === CURRENT_USER_ID || data.admin_count <= 1 ? 'disabled' : ''} title="${user.id === CURRENT_USER_ID ? 'Vous ne pouvez pas supprimer votre propre compte.' : (data.admin_count <= 1 ? 'Impossible de supprimer le dernier compte administrateur.' : '')}">Supprimer</button>`;
+                    // Gère l'affichage des boutons d'action (Sauvegarder, Supprimer).
+                    let actionsHtml = '';
+                    if (!user.is_admin) { // Pour les utilisateurs non-admin
+                        actionsHtml = `
+                            <button class="btn btn-save-access" data-user-id="${user.id}" disabled>Sauvegarder</button>
+                            <button class="btn btn-delete-user" data-user-id="${user.id}">Supprimer</button>`;
+                    } else { // Pour les administrateurs
+                        const isSelf = user.id === CURRENT_USER_ID;
+                        const isLastAdmin = data.admin_count <= 1; // Vérifie s'il s'agit du dernier admin.
+                        const isDisabled = isSelf || isLastAdmin;
+                        // Texte de l'infobulle pour le bouton supprimer.
+                        const title = isSelf ? "Vous ne pouvez pas supprimer votre propre compte." : (isLastAdmin ? "Impossible de supprimer le dernier compte administrateur." : "");
+                        actionsHtml = `<button class="btn btn-delete-user" data-user-id="${user.id}" ${isDisabled ? 'disabled' : ''} title="${title}">Supprimer</button>`;
                     }
-                    userHtml += `
-                        </td>
-                    </tr>`;
-                    row.innerHTML = userHtml;
+
+                    row.innerHTML = `
+                        <td>${user.username} ${user.id === CURRENT_USER_ID ? '<br><small>(Vous)</small>' : ''}</td>
+                        <td>${user.is_admin ? 'Oui' : 'Non'}</td>
+                        <td class="champ-access-buttons" data-user-id="${user.id}">${allowedChampsHtml}</td>
+                        <td class="user-actions">${actionsHtml}</td>`;
                     tbody.appendChild(row);
                 });
 
-                // Réinitialiser les écouteurs d'événements pour les nouveaux éléments créés dynamiquement
+                // Réinitialiser les écouteurs d'événements pour les nouveaux éléments créés dynamiquement.
                 initializeExistingUserListeners();
 
             } catch (error) {
                 console.error('Erreur lors du rafraîchissement du tableau des utilisateurs:', error);
-                // Optionnel: afficher un message d'erreur général
+                // Optionnel: afficher un message d'erreur général à l'utilisateur.
             }
         }
 
-        // Fonction pour initialiser les écouteurs pour les utilisateurs existants et dynamiquement ajoutés
+        /**
+         * Initialise ou réinitialise les écouteurs d'événements pour les utilisateurs existants.
+         * Appelé au chargement et après le rafraîchissement dynamique du tableau.
+         */
         function initializeExistingUserListeners() {
-            // Événement pour basculer la sélection d'un champ
+            // Événement pour basculer la sélection d'un champ.
             document.querySelectorAll('.champ-access-buttons .btn-toggle-access').forEach(button => {
-                button.removeEventListener('click', handleToggleAccessClick); // S'assurer qu'il n'y a pas de doublons
+                // S'assurer de ne pas ajouter de doublons d'écouteurs.
+                button.removeEventListener('click', handleToggleAccessClick);
                 button.addEventListener('click', handleToggleAccessClick);
             });
 
-            // Événement pour sauvegarder les accès modifiés
+            // Événement pour sauvegarder les accès modifiés.
             document.querySelectorAll('.btn-save-access').forEach(button => {
                 button.removeEventListener('click', handleSaveAccessClick);
                 button.addEventListener('click', handleSaveAccessClick);
             });
 
-            // Événement pour supprimer un utilisateur
+            // Événement pour supprimer un utilisateur.
             document.querySelectorAll('.btn-delete-user').forEach(button => {
-                // S'assurer que le bouton n'est pas désactivé à cause de Jinja (pour les admins par exemple)
+                // S'assurer que le bouton n'est pas désactivé (ex: par Jinja pour les admins).
                 if (!button.disabled) {
                     button.removeEventListener('click', handleDeleteUserClick);
                     button.addEventListener('click', handleDeleteUserClick);
@@ -516,29 +361,34 @@
             });
         }
 
-        // Gestionnaire de clic pour basculer l'accès
+        /**
+         * Gestionnaire de clic pour basculer l'état (actif/inactif) d'un bouton d'accès à un champ.
+         * Active aussi le bouton de sauvegarde pour la ligne.
+         */
         function handleToggleAccessClick() {
-            this.classList.toggle('active');
+            this.classList.toggle('active'); // Bascule la classe 'active' pour le style.
             const userId = this.closest('.champ-access-buttons').dataset.userId;
-            document.querySelector(`#user-row-${userId} .btn-save-access`).disabled = false;
+            // Active le bouton 'Sauvegarder' pour la ligne de l'utilisateur concerné.
+            const saveButton = document.querySelector(`#user-row-${userId} .btn-save-access`);
+            if (saveButton) {
+                saveButton.disabled = false;
+            }
         }
 
-        // Gestionnaire de clic pour sauvegarder l'accès
+        /**
+         * Gestionnaire de clic pour sauvegarder les accès modifiés d'un utilisateur.
+         * Envoie la requête à l'API et gère la réponse.
+         */
         async function handleSaveAccessClick() {
-            const userId = this.dataset.userId;
-            const messageDiv = document.getElementById(`message-user-${userId}`);
             const saveButton = this;
-            const toggleButtons = document.querySelectorAll(`#user-row-${userId} .btn-toggle-access`);
-
-            saveButton.disabled = true;
+            const userId = saveButton.dataset.userId;
+            const messageDiv = document.getElementById(`message-user-${userId}`); // Message spécifique à l'utilisateur.
+            
+            saveButton.disabled = true; // Désactive le bouton pendant l'opération.
             saveButton.textContent = 'Sauvegarde...';
 
-            const selectedChampNos = [];
-            toggleButtons.forEach(btn => {
-                if (btn.classList.contains('active')) {
-                    selectedChampNos.push(btn.dataset.champNo);
-                }
-            });
+            // Collecte tous les numéros de champ actifs pour l'utilisateur.
+            const selectedChampNos = Array.from(document.querySelectorAll(`#user-row-${userId} .btn-toggle-access.active`)).map(btn => btn.dataset.champNo);
 
             try {
                 const response = await fetch(`/api/utilisateurs/${userId}/update_access`, {
@@ -550,44 +400,49 @@
 
                 if (data.success) {
                     showMessage(messageDiv, data.message, 'success');
-                    // Optionnel: rafraîchir l'utilisateur courant si ses permissions ont changé
-                    // ou si c'est lui qui a été modifié.
+                    // Si l'utilisateur courant a modifié ses propres permissions, recharger la page pour mettre à jour la session.
                     if (parseInt(userId) === CURRENT_USER_ID) {
-                        setTimeout(() => window.location.reload(), 1000); // Recharger pour mettre à jour current_user
+                        setTimeout(() => window.location.reload(), 1500);
                     } else {
-                        // Recharger le tableau pour mettre à jour les labels d'accès
-                        await refreshUsersTable();
+                        saveButton.disabled = true; // Désactive le bouton si la sauvegarde est réussie.
                     }
                 } else {
                     showMessage(messageDiv, data.message, 'error');
-                    saveButton.disabled = false;
+                    saveButton.disabled = false; // Réactive en cas d'erreur.
                 }
             } catch (error) {
                 console.error('Erreur lors de la mise à jour des accès:', error);
                 showMessage(messageDiv, 'Erreur de communication avec le serveur.', 'error');
                 saveButton.disabled = false;
             } finally {
-                saveButton.textContent = 'Sauvegarder';
+                saveButton.textContent = 'Sauvegarder'; // Rétablit le texte du bouton.
             }
         }
 
-        // Gestionnaire de clic pour supprimer un utilisateur
+        /**
+         * Gestionnaire de clic pour supprimer un utilisateur.
+         * Demande confirmation, puis envoie la requête à l'API.
+         */
         async function handleDeleteUserClick() {
-            const userId = this.dataset.userId;
-            const username = this.closest('tr').querySelector('td:first-child').textContent.trim();
-            const messageDiv = document.getElementById(`message-user-${userId}`) || document.createElement('div');
-            if (!messageDiv.id) { // Si la div n'existe pas encore (pour les admins par exemple)
+            const deleteButton = this;
+            const userId = deleteButton.dataset.userId;
+            // Récupère le nom d'utilisateur pour la confirmation visuelle.
+            const username = deleteButton.closest('tr').querySelector('td:first-child').textContent.trim();
+            // Tente de trouver la div de message spécifique ou en crée une si elle n'existe pas.
+            let messageDiv = document.getElementById(`message-user-${userId}`);
+            if (!messageDiv) {
+                messageDiv = document.createElement('div');
                 messageDiv.className = 'api-message';
                 messageDiv.id = `message-user-${userId}`;
-                this.parentNode.insertBefore(messageDiv, this.nextSibling);
+                deleteButton.parentNode.insertBefore(messageDiv, deleteButton.nextSibling);
             }
 
             if (!confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${username}" ? Cette action est irréversible.`)) {
                 return;
             }
 
-            this.disabled = true;
-            this.textContent = 'Suppression...';
+            deleteButton.disabled = true;
+            deleteButton.textContent = 'Suppression...';
 
             try {
                 const response = await fetch(`/api/utilisateurs/${userId}/delete`, {
@@ -598,54 +453,83 @@
 
                 if (data.success) {
                     showMessage(messageDiv, data.message, 'success');
-                    // Supprimer la ligne de l'utilisateur du tableau après un court délai
+                    // Rafraîchit le tableau après un court délai pour que le message soit visible.
                     setTimeout(async () => {
-                        await refreshUsersTable(); // Rafraîchir pour enlever la ligne et mettre à jour les états des boutons
+                        await refreshUsersTable(); // Met à jour l'UI en supprimant la ligne.
+                        // Si l'utilisateur s'est supprimé lui-même, le déconnecter.
                         if (parseInt(userId) === CURRENT_USER_ID) {
-                            window.location.href = "{{ url_for('logout') }}"; // Déconnecter si l'utilisateur s'est supprimé lui-même
+                            window.location.href = "{{ url_for('logout') }}";
                         }
                     }, 1000);
                 } else {
                     showMessage(messageDiv, data.message, 'error');
-                    this.disabled = false;
-                    this.textContent = 'Supprimer';
+                    deleteButton.disabled = false; // Réactive le bouton en cas d'échec.
+                    deleteButton.textContent = 'Supprimer';
                 }
             } catch (error) {
                 console.error('Erreur lors de la suppression de l\'utilisateur:', error);
                 showMessage(messageDiv, 'Erreur de communication avec le serveur.', 'error');
-                this.disabled = false;
-                this.textContent = 'Supprimer';
+                deleteButton.disabled = false;
+                deleteButton.textContent = 'Supprimer';
             }
         }
 
-        // Fonction utilitaire pour afficher les messages API
+        /**
+         * Fonction utilitaire pour afficher les messages provenant des API.
+         * @param {HTMLElement} element - L'élément DOM où le message sera affiché.
+         * @param {string} msg - Le texte du message.
+         * @param {'success'|'error'|'info'} type - Le type de message pour la stylisation.
+         */
         function showMessage(element, msg, type) {
+            if (!element) return; // S'assure que l'élément cible existe.
             element.textContent = msg;
-            element.className = 'api-message ' + type; // Réinitialise et ajoute la classe de type
-            element.style.display = 'block';
+            element.className = 'api-message ' + type; // Réinitialise et ajoute la classe de type.
+            element.style.display = 'block'; // Affiche l'élément.
+            // Cache le message après 5 secondes.
             setTimeout(() => {
                 element.style.display = 'none';
-                element.textContent = '';
+                element.textContent = ''; // Vide le texte pour une prochaine utilisation.
             }, 5000);
         }
+    </script>
 
-        // Pour la fonction refreshUsersTable, elle a besoin d'un endpoint /api/utilisateurs
-        // Vous devrez ajouter cette route à main.py pour qu'elle renvoie tous les utilisateurs.
-        // Exemple (à ajouter dans main.py):
-        /*
-        @app.route("/api/utilisateurs", methods=["GET"])
-        @login_required
-        @admin_required
-        def api_get_all_users():
-            users_info = get_all_users_with_access_info()
-            db = get_db()
-            admin_count = 0
-            if db:
-                with db.cursor() as cur:
-                    cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
-                    admin_count = cur.fetchone()[0]
-            return jsonify({"users": users_info, "admin_count": admin_count})
-        */
+    <!-- Script de gestion du thème : écoute les clics sur les boutons et met à jour le thème actif. -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
+                
+                /**
+                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
+                 * @param {string} theme - Le nom du thème à appliquer.
+                 */
+                function applyThemeUI(theme) {
+                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                    document.body.classList.add(`theme-${theme}`);
+                    
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) {
+                        activeButton.classList.add('active');
+                    }
+                }
+
+                // Écoute les clics sur le conteneur du sélecteur de thème pour déléguer l'événement.
+                themeSwitcher.addEventListener('click', function(event) {
+                    // Vérifie si l'élément cliqué est un bouton
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme; // Récupère le thème du data-attribute
+                        localStorage.setItem('appTheme', theme); // Sauvegarde le choix de l'utilisateur
+                        applyThemeUI(theme); // Applique le thème visuellement
+                    }
+                });
+
+                // Applique le thème sauvegardé au chargement DOM complet.
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme); 
+            }
+        });
     </script>
 </body>
 </html>

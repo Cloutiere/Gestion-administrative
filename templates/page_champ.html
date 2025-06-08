@@ -5,184 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tâches - Champ {{ champ.champnom }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        *, *::before, *::after {
-            box-sizing: border-box;
-        }
-
-        /* Styles spécifiques pour la page de gestion d'un champ */
-        .container {
-            display: flex;
-            gap: 20px;
-            flex-wrap: nowrap;
-        }
-
-        .enseignants-section {
-            flex: 2;
-            min-width: 400px;
-            max-height: calc(100vh - 200px); /* Hauteur maximale pour permettre le défilement interne */
-            overflow-y: auto; /* Défilement vertical pour la section des enseignants si elle dépasse la hauteur max */
-            padding:10px;
-            border: 1px solid #ccc;
-            border-radius:5px;
-            background-color: #f9f9f9;
-        }
-
-        .cours-restants-section, .sommaire-champ-section {
-            flex: 1;
-            min-width: 300px;
-            padding:10px;
-            border: 1px solid #ccc;
-            border-radius:5px;
-            background-color: #f9f9f9;
-            max-height: calc(100vh - 200px); /* Hauteur maximale pour ces sections aussi */
-            overflow-y: auto; /* Permettre le défilement si le contenu est trop grand */
-        }
-
-        #lock-status-indicator {
-            font-size: 0.8em;
-            color: #dc3545;
-            margin-left: 10px;
-        }
-
-        .enseignant-card {
-            border: 1px solid #ddd;
-            padding: 10px;
-            margin-bottom: 10px;
-            background-color: #fff;
-            transition: background-color 0.3s ease;
-        }
-
-        .enseignant-fictif { background-color: #f0f8ff; border-left: 5px solid #cce5ff; }
-
-        .enseignant-card.detail-visible {
-            background-color: #e7f3fe;
-            border-left: 5px solid #007bff;
-        }
-
-        .entete-enseignant {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-        }
-        .entete-enseignant:hover { background-color: #f0f0f0; }
-        .entete-enseignant .arrow-indicator { margin-left: 10px; transition: transform 0.3s ease; }
-        .enseignant-card.detail-visible .entete-enseignant .arrow-indicator { transform: rotate(90deg); }
-
-        .entete-enseignant h3.titre-enseignant-bascule { margin-bottom: 5px; }
-        .nom-enseignant-texte { flex-grow: 1; }
-        .action-enseignant-fictif { text-align: right; margin-top: 0; margin-bottom: 5px; }
-
-        .contenu-selection-cours { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #eee; }
-        .enseignant-card.detail-visible .contenu-selection-cours { display: block; }
-
-        table { width: 100%; border-collapse: collapse; margin-top:10px; font-size: 0.9em; }
-        div.cours-attribues > table { margin-top: 5px; }
-
-        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-        th { background-color: #e9ecef; }
-
-        .sous-titre-cours-restants td, .sous-titre-attributions td {
-            background-color: #f0f0f0; font-weight: bold; text-align: center;
-            border-top: 2px solid #ccc; border-bottom: 1px solid #ccc;
-        }
-
-        .total-attributions-row td { font-weight: bold; background-color: #e9ecef; text-align: right; }
-        .total-attributions-row td:first-child { text-align: left; }
-
-        .cours-attribues { margin-top: 0px; }
-
-        .cours-selection button, .btn-retirer-cours, .btn-supprimer-enseignant {
-            margin-left:5px; cursor:pointer; padding: 3px 8px; font-size: 0.85em;
-        }
-        .btn-retirer-cours, .btn-supprimer-enseignant { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
-        .btn-retirer-cours:hover, .btn-supprimer-enseignant:hover { background-color: #f5c6cb;}
-        .section-title { margin-top: 20px; margin-bottom:10px; font-size: 1.2em; color: #333; border-bottom: 1px solid #eee; padding-bottom:5px;}
-
-        .cours-selection { margin-top: 15px; }
-        .cours-selection ul { list-style-type: none; padding-left: 0; margin-top: 5px; margin-bottom: 5px; }
-        .cours-selection li { margin-bottom: 2px; padding: 3px 5px; border-bottom: 1px dashed #eee; }
-        .cours-selection li:last-child { border-bottom: none; }
-
-        /* Styles pour le verrouillage */
-        .champ-verrouille .btn-retirer-cours:disabled,
-        .champ-verrouille .cours-selection button:disabled {
-            background-color: #e9ecef;
-            color: #6c757d;
-            border-color: #ddd;
-            cursor: not-allowed;
-        }
-
-        /* Styles pour l'impression */
-        .print-only { display: none; }
-
-        @media print {
-            /* Cache les éléments non désirés à l'impression. */
-            header,
-            .no-print {
-                display: none !important;
+    
+    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <script>
+        (function() {
+            /**
+             * Applique le thème spécifié au corps du document.
+             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
+             */
+            function applyTheme(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                if (theme === 'dark') {
+                    document.body.classList.add('theme-dark');
+                } else if (theme === 'vintage') {
+                    document.body.classList.add('theme-vintage');
+                } else {
+                    document.body.classList.add('theme-light'); // Thème par défaut explicite
+                }
             }
-
-            /* Assure que le corps principal est bien positionné */
-            body {
-                margin: 0;
-                padding: 0;
-            }
-
-            /* Force l'affichage des éléments destinés uniquement à l'impression */
-            .print-only {
-                display: block;
-            }
-
-            .container {
-                display: block; /* Change le flexbox en block pour l'impression */
-                width: 100%;
-                gap: 0;
-            }
-
-            .enseignants-section {
-                display: block;
-                width: 100%;
-                max-height: none;
-                overflow: visible;
-                border: none;
-                padding: 0;
-            }
-
-            .enseignant-card {
-                border: 1px solid #000;
-                padding: 15px;
-                margin-bottom: 20px;
-                page-break-inside: avoid;
-            }
-
-            .entete-enseignant { cursor: default; }
-            .entete-enseignant .arrow-indicator { display: none; }
-            .contenu-selection-cours, .action-enseignant-fictif { display: none !important; }
-
-            table { font-size: 9pt; border-collapse: collapse; width: 100%; }
-            th, td { border: 1px solid #000; padding: 4px; text-align: left; }
-            .total-attributions-row { border-top: 2px solid #000; }
-
-            .signature-line { margin-top: 40px; border-top: 1px solid #000; padding-top: 5px; font-style: italic; }
-
-            /* Styles pour la première page (Sommaire) */
-            #print-summary-page { page-break-after: always; }
-            #print-summary-page h2 { font-size: 14pt; margin-top: 0; }
-            #print-summary-page table { margin-bottom: 40px; }
-            #print-summary-page th { background-color: #e0e0e0; }
-            #print-summary-page tfoot td { font-weight: bold; }
-        }
-
-    </style>
+            // Récupère le thème sauvegardé ou utilise 'light' par défaut.
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme);
+        })();
+    </script>
 </head>
-<body class="{{ 'champ-verrouille' if champ.estverrouille else '' }}">
+<body class="theme-light {{ 'champ-verrouille' if champ.estverrouille else '' }}">
     <header class="no-print">
         <h1>
             Gestion des tâches - Champ : {{ champ.champnom }} ({{ champ.champno }})
             {% if champ.estverrouille %}
-                <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées.">🔒 Verrouillé</span>
+                <!-- Indicateur de verrouillage avec une icône SVG pour une meilleure qualité visuelle. -->
+                <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées.">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: middle; margin-right: 5px;">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
+                    </svg>
+                    Verrouillé
+                </span>
             {% endif %}
         </h1>
         <nav>
@@ -196,142 +54,158 @@
                 {% endif %}
             </ul>
         </nav>
-        <p><button id="btn-imprimer-champ">Imprimer ce champ</button></p>
+        
+        <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
+        </div>
+        
+        <p><button id="btn-imprimer-champ" class="btn btn-info no-print" style="margin-top:1rem;">Imprimer ce champ</button></p>
     </header>
 
-    <!-- Conteneur pour la première page d'impression (sommaire) -->
+    <!-- Conteneur pour la première page d'impression (sommaire). Le contenu est généré par JS avant l'impression. -->
     <div id="print-summary-page" class="print-only">
-        <!-- Contenu généré par JS avant impression -->
+        <!-- Contenu généré dynamiquement -->
     </div>
 
-    <div class="container">
-        <section class="enseignants-section">
-            <h2 class="section-title no-print">Choix de tâche des enseignants</h2>
-            {% for enseignant in enseignants_data %}
-            <div class="enseignant-card {% if enseignant.estfictif %}enseignant-fictif{% elif not enseignant.esttempsplein %}enseignant-temps-partiel{% endif %}"
-                 id="enseignant-card-{{ enseignant.enseignantid }}">
+    <main>
+        <div class="page-champ-container">
+            <section class="enseignants-section">
+                <h2 class="section-title no-print">Choix de tâche des enseignants</h2>
+                {% for enseignant in enseignants_data %}
+                <div class="enseignant-card {% if enseignant.estfictif %}enseignant-fictif{% endif %}"
+                     id="enseignant-card-{{ enseignant.enseignantid }}">
 
-                <div class="entete-enseignant">
-                    <h3 class="titre-enseignant-bascule nom-enseignant-texte">
-                        {% if enseignant.nom and enseignant.prenom %}
-                            {{ enseignant.nom }}, {{ enseignant.prenom }}
-                        {% else %}
-                            {{ enseignant.nomcomplet }} {# Cas des tâches fictives #}
-                        {% endif %}
-                        {% if not enseignant.estfictif and not enseignant.esttempsplein %}
-                            <small>(Temps Partiel)</small>
-                        {% endif %}
-                        {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
-                    </h3>
-                    <span class="arrow-indicator no-print">▶</span>
-                </div>
-
-                <div class="action-enseignant-fictif no-print">
-                    {% if enseignant.estfictif %}
-                        <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer tâche</button>
-                    {% endif %}
-                </div>
-
-                <div class="cours-attribues">
-                    <table id="table-attributions-{{ enseignant.enseignantid }}">
-                        <thead>
-                            <tr>
-                                <th>Code</th>
-                                <th>Cours choisi</th>
-                                <th>Nb. grp.</th>
-                                <th>Pér.</th>
-                                <th>Pér. total</th>
-                                <th class="no-print">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbody-attributions-{{ enseignant.enseignantid }}">
-                            {# Le contenu de ce tbody est généré par JS pour agréger les cours. #}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="signature-line print-only">
-                    Signature de l'enseignant :
-                    {% if enseignant.nom and enseignant.prenom %}
-                        {{ enseignant.nom }}, {{ enseignant.prenom }}
-                    {% else %}
-                        {{ enseignant.nomcomplet }}
-                    {% endif %}
-                </div>
-
-                <div class="contenu-selection-cours no-print">
-                    <div class="cours-selection">
-                        <h4>Cours d'enseignement disponibles :</h4>
-                        <ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul>
-                    </div>
-                    <div class="cours-selection">
-                        <h4>Autres tâches disponibles :</h4>
-                        <ul class="liste-cours-a-choisir" data-type-cours="autre"></ul>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-            {% if not enseignants_data %}
-            <p>Aucun enseignant dans ce champ.</p>
-            {% endif %}
-            <button id="btn-creer-tache-restante" class="no-print" style="margin-top:15px;">Créer une Tâche Restante</button>
-        </section>
-
-        <section class="cours-restants-section no-print">
-            <h2 class="section-title">Périodes restantes dans ce champ</h2>
-            <table id="tableau-cours-restants">
-                <thead>
-                    <tr>
-                        <th>Code</th>
-                        <th>Cours disponibles</th>
-                        <th>Grp. rest.</th>
-                        <th>Pér.</th>
-                        <th>Pér. restantes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {# Le contenu est généré par JS car il est dynamique #}
-                </tbody>
-            </table>
-        </section>
-
-        <section class="sommaire-champ-section no-print">
-            <h2 class="section-title">Tâches du champ : {{ champ.champno }}</h2>
-            <table id="tableau-sommaire-champ">
-                <thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead>
-                <tbody>
-                    {% for enseignant in enseignants_data %}
-                    <tr data-enseignant-id="{{ enseignant.enseignantid }}" class="{{ 'enseignant-fictif-sommaire' if enseignant.estfictif else ('enseignant-temps-partiel-sommaire' if not enseignant.esttempsplein else 'enseignant-temps-plein-sommaire') }}">
-                        <td>
+                    <div class="entete-enseignant">
+                        <h3 class="titre-enseignant-bascule nom-enseignant-texte">
                             {% if enseignant.nom and enseignant.prenom %}
                                 {{ enseignant.nom }}, {{ enseignant.prenom }}
                             {% else %}
-                                {{ enseignant.nomcomplet }}
+                                {{ enseignant.nomcomplet }} {# Cas des tâches fictives #}
                             {% endif %}
-                        </td>
-                        {# Applique le formatage de Jinja2 pour l'affichage initial. Le JS mettra à jour si nécessaire. #}
-                        <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours | format_periodes }}</td>
-                        <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres | format_periodes }}</td>
-                        <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes | format_periodes }}</td>
-                        <td>{% if enseignant.estfictif %}Tâche Restante{% elif not enseignant.esttempsplein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td id="moyenne-champ-val">{{ moyenne_champ_initiale | format_periodes }}</td><td></td></tr></tfoot>
-            </table>
-            {% if not enseignants_data %}
-            <p>Aucun enseignant à afficher dans le sommaire.</p>
-            {% endif %}
-        </section>
-    </div>
+                            {% if not enseignant.estfictif and not enseignant.esttempsplein %}
+                                <small>(Temps Partiel)</small>
+                            {% endif %}
+                            {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
+                        </h3>
+                        <!-- Icône SVG pour indiquer l'action de déplier/replier -->
+                        <div class="arrow-indicator no-print">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
+                        </div>
+                    </div>
+
+                    <div class="action-enseignant-fictif no-print">
+                        {% if enseignant.estfictif %}
+                            <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer tâche</button>
+                        {% endif %}
+                    </div>
+
+                    <div class="cours-attribues">
+                        <table id="table-attributions-{{ enseignant.enseignantid }}">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Cours choisi</th>
+                                    <th>Nb. grp.</th>
+                                    <th>Pér.</th>
+                                    <th>Pér. total</th>
+                                    <th class="no-print">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-attributions-{{ enseignant.enseignantid }}">
+                                {# Le contenu de ce tbody est généré par JS pour agréger les cours. #}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="signature-line print-only">
+                        Signature de l'enseignant :
+                        {% if enseignant.nom and enseignant.prenom %}
+                            {{ enseignant.nom }}, {{ enseignant.prenom }}
+                        {% else %}
+                            {{ enseignant.nomcomplet }}
+                        {% endif %}
+                    </div>
+
+                    <div class="contenu-selection-cours no-print">
+                        <div class="cours-selection">
+                            <h4>Cours d'enseignement disponibles :</h4>
+                            <ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul>
+                        </div>
+                        <div class="cours-selection">
+                            <h4>Autres tâches disponibles :</h4>
+                            <ul class="liste-cours-a-choisir" data-type-cours="autre"></ul>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not enseignants_data %}
+                <p>Aucun enseignant dans ce champ.</p>
+                {% endif %}
+                <button id="btn-creer-tache-restante" class="btn btn-success no-print" style="margin-top:15px;">Créer une Tâche Restante</button>
+            </section>
+
+            <section class="sommaire-champ-section no-print">
+                <h2 class="section-title">Tâches du champ : {{ champ.champno }}</h2>
+                <table id="tableau-sommaire-champ">
+                    <thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead>
+                    <tbody>
+                        {% for enseignant in enseignants_data %}
+                        <tr data-enseignant-id="{{ enseignant.enseignantid }}" class="{{ 'enseignant-fictif-sommaire' if enseignant.estfictif else ('enseignant-temps-partiel-sommaire' if not enseignant.esttempsplein else 'enseignant-temps-plein-sommaire') }}">
+                            <td>
+                                {% if enseignant.nom and enseignant.prenom %}
+                                    {{ enseignant.nom }}, {{ enseignant.prenom }}
+                                {% else %}
+                                    {{ enseignant.nomcomplet }}
+                                {% endif %}
+                            </td>
+                            {# Applique le formatage de Jinja2 pour l'affichage initial. Le JS mettra à jour si nécessaire. #}
+                            <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours | format_periodes }}</td>
+                            <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres | format_periodes }}</td>
+                            <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes | format_periodes }}</td>
+                            <td>{% if enseignant.estfictif %}Tâche Restante{% elif not enseignant.esttempsplein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td id="moyenne-champ-val">{{ moyenne_champ_initiale | format_periodes }}</td><td></td></tr></tfoot>
+                </table>
+                {% if not enseignants_data %}
+                <p>Aucun enseignant à afficher dans le sommaire.</p>
+                {% endif %}
+            </section>
+
+            <section class="cours-restants-section no-print">
+                <h2 class="section-title">Périodes restantes dans ce champ</h2>
+                <table id="tableau-cours-restants">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Cours disponibles</th>
+                            <th>Grp. rest.</th>
+                            <th>Pér.</th>
+                            <th>Pér. restantes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Le contenu est généré par JS car il est dynamique. #}
+                    </tbody>
+                </table>
+            </section>
+
+        </div>
+    </main>
 
     <template id="enseignant-card-template">
         <div class="enseignant-card enseignant-fictif" data-template-id="enseignant-card-ID">
             <div class="entete-enseignant">
                 <h3 class="titre-enseignant-bascule nom-enseignant-texte" data-template-nom="nom-enseignant">
-                    NOM_COMPLET_PLACEHOLDER {# Sera le NomComplet pour les tâches fictives #}
+                    NOM_COMPLET_PLACEHOLDER
                 </h3>
-                <span class="arrow-indicator no-print">▶</span>
+                <div class="arrow-indicator no-print">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
+                </div>
             </div>
             <div class="action-enseignant-fictif no-print">
                 <button class="btn-supprimer-enseignant" data-template-id-btn="btn-supprimer-ID">Supprimer tâche</button>
@@ -345,7 +219,7 @@
                 </table>
             </div>
             <div class="signature-line print-only">
-                Signature de l'enseignant : NOM_COMPLET_PLACEHOLDER_PRINT {# Pour l'impression des tâches fictives #}
+                Signature de l'enseignant : NOM_COMPLET_PLACEHOLDER_PRINT
             </div>
             <div class="contenu-selection-cours no-print">
                 <div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div>
@@ -354,28 +228,55 @@
         </div>
     </template>
 
-    <!-- Étape 1: Initialisation des données via Jinja2 -->
+    <!-- Étape 1: Initialisation des données critiques pour le JS via Jinja2 -->
     <script>
         const G_COURS_ENSEIGNEMENT_CHAMP = {{ cours_enseignement_champ|tojson }};
         const G_COURS_AUTRES_TACHES_CHAMP = {{ cours_autres_taches_champ|tojson }};
-        const G_ENSEIGNANTS_INITIAL_DATA = {{ enseignants_data|tojson }}; // Contient maintenant Nom et Prenom
+        const G_ENSEIGNANTS_INITIAL_DATA = {{ enseignants_data|tojson }};
         const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}";
         const G_CHAMP_EST_VERROUILLE = {{ champ.estverrouille|tojson }};
-
-        // Fonction dummy pour permettre au code Jinja2 d'utiliser format_periodes
-        // Elle sera ensuite écrasée par la vraie fonction du fichier JS externe.
-        if (typeof formatPeriodes === 'undefined') {
-            window.formatPeriodes = function(value) {
-                if (value === null || value === undefined) return '';
-                const num = parseFloat(value);
-                if (Number.isInteger(num)) return num.toString();
-                return num.toFixed(2).replace(/\.0+$/, '').replace(/\.$/, '');
-            };
-        }
     </script>
 
-    <!-- Étape 2: Chargement du fichier de logique externe -->
+    <!-- Étape 2: Chargement du fichier de logique externe qui dépend des données ci-dessus -->
     <script src="{{ url_for('static', filename='js/page_champ.js') }}"></script>
+    
+    <!-- Script de gestion du thème : écoute les clics sur les boutons et met à jour le thème actif. -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
+                
+                /**
+                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
+                 * @param {string} theme - Le nom du thème à appliquer.
+                 */
+                function applyThemeUI(theme) {
+                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                    document.body.classList.add(`theme-${theme}`);
+                    
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) {
+                        activeButton.classList.add('active');
+                    }
+                }
 
+                // Écoute les clics sur le conteneur du sélecteur de thème pour déléguer l'événement.
+                themeSwitcher.addEventListener('click', function(event) {
+                    // Vérifie si l'élément cliqué est un bouton
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme; // Récupère le thème du data-attribute
+                        localStorage.setItem('appTheme', theme); // Sauvegarde le choix de l'utilisateur
+                        applyThemeUI(theme); // Applique le thème visuellement
+                    }
+                });
+
+                // Applique le thème sauvegardé au chargement DOM complet.
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme); 
+            }
+        });
+    </script>
 </body>
 </html>

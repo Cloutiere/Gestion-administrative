@@ -1,107 +1,131 @@
- <!DOCTYPE html>
- <html lang="fr">
- <head>
-     <meta charset="UTF-8">
-     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <title>Administration - Gestion des données</title>
-     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
- </head>
- <body>
-     <header>
-         <h1>Administration - Gestion des données</h1>
-         <nav>
-             <ul>
-                 <li><a href="{{ url_for('index') }}">Accueil</a></li>
-                 {% if current_user.is_authenticated and current_user.is_admin %}
-                     <li><a href="{{ url_for('page_sommaire') }}">Sommaire Global</a></li>
-                 {% endif %}
-                 {% if current_user.is_authenticated %}
-                     <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
-                 {% else %}
-                     <li><a href="{{ url_for('login') }}">Connexion</a></li>
-                     <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
-                 {% endif %}
-             </ul>
-         </nav>
-     </header>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration - Gestion des données</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <script>
+        (function() {
+            /**
+             * Applique le thème spécifié au corps du document.
+             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
+             */
+            function applyTheme(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                if (theme === 'dark') {
+                    document.body.classList.add('theme-dark');
+                } else if (theme === 'vintage') {
+                    document.body.classList.add('theme-vintage');
+                } else {
+                    document.body.classList.add('theme-light'); // Thème par défaut explicite
+                }
+            }
+            // Récupère le thème sauvegardé ou utilise 'light' par défaut.
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme);
+        })();
+    </script>
+</head>
+<body class="theme-light">
+    <header>
+        <h1>Administration - Gestion des données</h1>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('index') }}">Accueil</a></li>
+                {% if current_user.is_authenticated and current_user.is_admin %}
+                    <li><a href="{{ url_for('page_sommaire') }}">Sommaire Global</a></li>
+                    <li><a href="{{ url_for('page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                {% endif %}
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
+                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        
+        <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
+        </div>
+    </header>
 
-     <main>
-         {% with messages = get_flashed_messages(with_categories=true) %}
-             {% if messages %}
-                 <ul class="flash-messages">
-                 {% for category, message in messages %}
-                     <li class="{{ category }}">{{ message }}</li>
-                 {% endfor %}
-                 </ul>
-             {% endif %}
-         {% endwith %}
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
 
-         <!-- Section pour l'importation des ENSEIGNANTS via Excel -->
-         <section class="admin-section">
-             <h2>Importer des Enseignants depuis un Fichier Excel</h2>
-             <form method="POST" action="{{ url_for('api_importer_enseignants_excel') }}" enctype="multipart/form-data">
-                 <div>
-                     <label for="fichier_enseignants">Sélectionner un fichier Excel (.xlsx) :</label>
-                     <input type="file" id="fichier_enseignants" name="fichier_enseignants" accept=".xlsx" required>
-                 </div>
-                 <button type="submit" class="btn-importer">Importer les Enseignants</button>
-             </form>
-             <div class="note-importation">
-                 <p>Le fichier Excel doit respecter le format suivant :</p>
-                 <ul>
-                     <li>Colonne A : Champ (Numéro du champ, ex: 01)</li>
-                     <li>Colonne B : NOM (Nom de famille de l'enseignant)</li>
-                     <li>Colonne C : PRÉNOM (Prénom de l'enseignant)</li>
-                     <li>Colonne D : Temps plein (VRAI ou FAUX)</li>
-                 </ul>
-                 <p>
-                     Les colonnes `EstFictif` et `PeutChoisirHorsChampPrincipal` seront initialisées à `FAUX` pour tous les enseignants importés.
-                     La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.
-                 </p>
-                 <p class="warning-text">
-                     ATTENTION : L'importation écrasera TOUS les enseignants et TOUTES les attributions de cours existants dans la base de données.
-                 </p>
-             </div>
-         </section>
+        <!-- Section pour l'importation des ENSEIGNANTS via Excel -->
+        <section class="admin-section">
+            <h2>Importer des Enseignants depuis un Fichier Excel</h2>
+            <form method="POST" action="{{ url_for('api_importer_enseignants_excel') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="fichier_enseignants">Sélectionner un fichier Excel (.xlsx) :</label>
+                    <input type="file" id="fichier_enseignants" name="fichier_enseignants" accept=".xlsx" required>
+                </div>
+                <button type="submit" class="btn btn-importer">Importer les Enseignants</button>
+            </form>
+            <div class="note-importation">
+                <p>Le fichier Excel doit respecter le format suivant :</p>
+                <ul>
+                    <li>Colonne A : Champ (Numéro du champ, ex: 01)</li>
+                    <li>Colonne B : NOM (Nom de famille de l'enseignant)</li>
+                    <li>Colonne C : PRÉNOM (Prénom de l'enseignant)</li>
+                    <li>Colonne D : Temps plein (VRAI ou FAUX)</li>
+                </ul>
+                <p>La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.</p>
+                <p class="warning-text">
+                    ATTENTION : L'importation écrasera TOUS les enseignants et TOUTES les attributions de cours existants dans la base de données.
+                </p>
+            </div>
+        </section>
 
-         <hr>
+        <!-- Section pour l'importation des COURS via Excel -->
+        <section class="admin-section">
+            <h2>Importer des Cours depuis un Fichier Excel</h2>
+            <form method="POST" action="{{ url_for('api_importer_cours_excel') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="fichier_cours">Sélectionner un fichier Excel (.xlsx) :</label>
+                    <input type="file" id="fichier_cours" name="fichier_cours" accept=".xlsx" required>
+                </div>
+                <button type="submit" class="btn btn-importer">Importer les Cours</button>
+            </form>
+            <div class="note-importation">
+                <p>Le fichier Excel doit respecter le format suivant :</p>
+                <ul>
+                    <li>Colonne A : Champ (Numéro du champ)</li>
+                    <li>Colonne B : Code Cours</li>
+                    <li>Colonne C : Grille (Ignorée)</li>
+                    <li>Colonne D : Cours (Descriptif)</li>
+                    <li>Colonne E : Groupes prévus</li>
+                    <li>Colonne F : Périodes par cycle</li>
+                    <li>Colonne G : Total période (Ignoré)</li>
+                    <li>Colonne H : Cours Autre (VRAI ou FAUX)</li>
+                </ul>
+                <p>La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.</p>
+                <p class="warning-text">
+                    ATTENTION : L'importation écrasera TOUS les cours et TOUTES les attributions de cours existants.
+                </p>
+            </div>
+        </section>
 
-         <!-- Section pour l'importation des COURS via Excel -->
-         <section class="admin-section">
-             <h2>Importer des Cours depuis un Fichier Excel</h2>
-             <form method="POST" action="{{ url_for('api_importer_cours_excel') }}" enctype="multipart/form-data">
-                 <div>
-                     <label for="fichier_cours">Sélectionner un fichier Excel (.xlsx) :</label>
-                     <input type="file" id="fichier_cours" name="fichier_cours" accept=".xlsx" required>
-                 </div>
-                 <button type="submit" class="btn-importer">Importer les Cours</button>
-             </form>
-             <div class="note-importation">
-                 <p>Le fichier Excel doit respecter le format suivant :</p>
-                 <ul>
-                     <li>Colonne A : Champ (Numéro du champ)</li>
-                     <li>Colonne B : Code Cours</li>
-                     <li>Colonne C : Grille (Ignorée)</li>
-                     <li>Colonne D : Cours (Descriptif)</li>
-                     <li>Colonne E : Groupes prévus</li>
-                     <li>Colonne F : Périodes par cycle</li>
-                     <li>Colonne G : Total période (Ignoré)</li>
-                     <li>Colonne H : Cours Autre (VRAI ou FAUX)</li>
-                 </ul>
-                 <p>La première ligne du fichier est considérée comme une ligne d'en-têtes et sera ignorée.</p>
-                 <p class="warning-text">
-                     ATTENTION : L'importation écrasera TOUS les cours et TOUTES les attributions de cours existants.
-                 </p>
-             </div>
-         </section>
-
-         <hr>
-
-         <!-- Section existante pour la réassignation des cours -->
-         <section class="admin-section">
-             <h2>Réassigner un Cours à un Champ</h2>
-             <div id="message-container-reassign" class="message-area"></div>
-             {% if cours_a_reassigner and champs_destination %}
+        <!-- Section pour la réassignation des cours -->
+        <section class="admin-section">
+            <h2>Réassigner un Cours à un Champ</h2>
+            <div id="message-container-reassign" class="api-message"></div>
+            {% if cours_a_reassigner and champs_destination %}
                  <table>
                      <thead>
                          <tr>
@@ -121,7 +145,7 @@
                              <td class="champ-actuel-no" data-champno="{{ cours.champno }}">{{ cours.champno }}</td>
                              <td class="champ-actuel-nom">{{ cours.champnom }}</td>
                              <td>
-                                 <select id="select-champ-{{ cours.codecours }}" class="select-champ" data-codecours="{{ cours.codecours }}">
+                                 <select id="select-champ-{{ cours.codecours }}" data-codecours="{{ cours.codecours }}">
                                      <option value="">-- Sélectionner un nouveau champ --</option>
                                      {% for champ_dest in champs_destination %}
                                          {% if champ_dest.champno != cours.champno %}
@@ -131,130 +155,188 @@
                                  </select>
                              </td>
                              <td>
-                                 <button class="btn-reassigner" data-codecours="{{ cours.codecours }}">Réassigner</button>
+                                 <button class="btn btn-primary btn-reassigner" data-codecours="{{ cours.codecours }}">Réassigner</button>
                              </td>
                          </tr>
                          {% endfor %}
                      </tbody>
                  </table>
-             {% elif not cours_a_reassigner %}
-                 <p>Aucun cours n'a été trouvé dans la base de données pour la réassignation.</p>
-             {% elif not champs_destination %}
-                 <p>Aucun champ de destination n'a été trouvé. Impossible de réassigner les cours.</p>
-             {% else %}
-                 <p>Un problème est survenu lors du chargement des données pour la réassignation.</p>
-             {% endif %}
-         </section>
-     </main>
+            {% elif not cours_a_reassigner %}
+                <p>Aucun cours n'a été trouvé dans la base de données pour la réassignation.</p>
+            {% elif not champs_destination %}
+                <p>Aucun champ de destination n'a été trouvé. Impossible de réassigner les cours.</p>
+            {% else %}
+                <p>Un problème est survenu lors du chargement des données pour la réassignation.</p>
+            {% endif %}
+        </section>
+    </main>
 
-     <footer>
-         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
-     </footer>
+    <footer>
+        <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
+    </footer>
+    
+    <!-- Script JS spécifique à la page d'administration des données -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const messageContainerReassign = document.getElementById('message-container-reassign');
+            // Parse la variable globale champs_destination_data qui est un objet Python converti en JSON.
+            const champsDestinationData = JSON.parse('{{ champs_destination | tojson | safe }}');
 
-     <script>
-         document.addEventListener('DOMContentLoaded', function() {
-             const messageContainerReassign = document.getElementById('message-container-reassign');
-             const champsDestinationData = JSON.parse('{{ champs_destination | tojson | safe }}');
+            // Ajoute des écouteurs d'événements à tous les boutons de réassignation.
+            document.querySelectorAll('.btn-reassigner').forEach(button => {
+                button.addEventListener('click', function() {
+                    const codeCours = this.dataset.codecours; // Récupère le code du cours depuis le bouton.
+                    const selectElement = document.getElementById(`select-champ-${codeCours}`);
+                    const nouveauChampNo = selectElement.value; // Récupère le nouveau champ sélectionné.
+                    // Récupère l'ancien champ pour la logique de confirmation et de rafraîchissement des options.
+                    const ancienChampNoCell = document.querySelector(`#cours-row-${codeCours} .champ-actuel-no`);
+                    const ancienChampNo = ancienChampNoCell ? ancienChampNoCell.dataset.champno : null;
 
-             document.querySelectorAll('.btn-reassigner').forEach(button => {
-                 button.addEventListener('click', function() {
-                     const codeCours = this.dataset.codecours;
-                     const selectElement = document.getElementById(`select-champ-${codeCours}`);
-                     const nouveauChampNo = selectElement.value;
-                     const ancienChampNoCell = document.querySelector(`#cours-row-${codeCours} .champ-actuel-no`);
-                     const ancienChampNo = ancienChampNoCell.dataset.champno;
+                    // Validation de la sélection du nouveau champ.
+                    if (!nouveauChampNo) {
+                        displayReassignMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
+                        return;
+                    }
 
-                     if (!nouveauChampNo) {
-                         displayReassignMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
-                         return;
-                     }
+                    // Empêche la réassignation si le champ est le même.
+                    if (nouveauChampNo === ancienChampNo) {
+                         displayReassignMessage('Le cours est déjà assigné à ce champ. Aucune action effectuée.', 'info');
+                        return;
+                    }
 
-                     if (nouveauChampNo === ancienChampNo) {
-                          displayReassignMessage('Le cours est déjà assigné à ce champ. Aucune action effectuée.', 'info');
-                         return;
-                     }
+                    // Récupère le nom du cours pour la confirmation.
+                    const nomCoursEl = document.querySelector(`#cours-row-${codeCours} td:nth-child(2)`);
+                    const nomCours = nomCoursEl ? nomCoursEl.textContent.trim() : "Inconnu";
+                    // Récupère le nom complet du nouveau champ sélectionné.
+                    const nomNouveauChamp = selectElement.options[selectElement.selectedIndex].text;
 
-                     const nomCoursEl = document.querySelector(`#cours-row-${codeCours} td:nth-child(2)`);
-                     const nomCours = nomCoursEl ? nomCoursEl.textContent : "Inconnu";
-                     const nomNouveauChamp = selectElement.options[selectElement.selectedIndex].text;
+                    // Demande confirmation à l'utilisateur.
+                    if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${nomCours}" (${codeCours}) au champ "${nomNouveauChamp}" ?`)) {
+                        return;
+                    }
 
-                     if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${nomCours}" (${codeCours}) au champ "${nomNouveauChamp}" ?`)) {
-                         return;
-                     }
+                    this.disabled = true; // Désactive le bouton pour éviter les clics multiples.
 
-                     this.disabled = true;
+                    // Envoie la requête à l'API.
+                    fetch('/api/cours/reassigner_champ', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            code_cours: codeCours,
+                            nouveau_champ_no: nouveauChampNo
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            displayReassignMessage(data.message, 'success');
+                            const row = document.getElementById(`cours-row-${codeCours}`);
+                            const champNoCell = row.querySelector('.champ-actuel-no');
+                            const champNomCell = row.querySelector('.champ-actuel-nom');
 
-                     fetch('/api/cours/reassigner_champ', {
-                         method: 'POST',
-                         headers: { 'Content-Type': 'application/json' },
-                         body: JSON.stringify({
-                             code_cours: codeCours,
-                             nouveau_champ_no: nouveauChampNo
-                         })
-                     })
-                     .then(response => response.json())
-                     .then(data => {
-                         if (data.success) {
-                             displayReassignMessage(data.message, 'success');
-                             const row = document.getElementById(`cours-row-${codeCours}`);
-                             const champNoCell = row.querySelector('.champ-actuel-no');
-                             const champNomCell = row.querySelector('.champ-actuel-nom');
+                            // Met à jour l'affichage du champ actuel dans la ligne du tableau.
+                            champNoCell.textContent = data.nouveau_champ_no;
+                            champNomCell.textContent = data.nouveau_champ_nom;
+                            champNoCell.dataset.champno = data.nouveau_champ_no; // Met à jour le data-attribute.
 
-                             champNoCell.textContent = data.nouveau_champ_no;
-                             champNomCell.textContent = data.nouveau_champ_nom;
-                             champNoCell.dataset.champno = data.nouveau_champ_no;
+                            // Met à jour les options du sélecteur pour ce cours.
+                            updateSelectOptions(selectElement, data.nouveau_champ_no);
+                        } else {
+                            // Affiche un message d'erreur si l'opération a échoué.
+                            displayReassignMessage(data.message || 'Une erreur est survenue lors de la réassignation.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        // Gère les erreurs de connexion ou de réseau.
+                        console.error('Erreur lors de la réassignation:', error);
+                        displayReassignMessage('Erreur de communication avec le serveur.', 'error');
+                    })
+                    .finally(() => {
+                        this.disabled = false; // Réactive le bouton.
+                    });
+                });
+            });
 
-                             updateSelectOptions(selectElement, data.nouveau_champ_no, ancienChampNo);
-                         } else {
-                             let errorMessage = data.message || 'Une erreur est survenue lors de la réassignation.';
-                             displayReassignMessage(errorMessage, 'error');
-                         }
-                     })
-                     .catch(error => {
-                         console.error('Erreur lors de la réassignation:', error);
-                         displayReassignMessage('Erreur de communication avec le serveur.', 'error');
-                     })
-                     .finally(() => {
-                         this.disabled = false;
-                     });
-                 });
-             });
+            /**
+             * Affiche un message dans le conteneur de message de la section de réassignation.
+             * @param {string} message - Le texte du message à afficher.
+             * @param {'success'|'error'|'info'} type - Le type du message (pour la stylisation).
+             */
+            function displayReassignMessage(message, type) {
+                messageContainerReassign.textContent = message;
+                messageContainerReassign.className = 'api-message'; // Réinitialise les classes
+                messageContainerReassign.classList.add(`message-${type}`); // Ajoute la classe de type
+                messageContainerReassign.style.display = 'block'; // Affiche le message
 
-             function displayReassignMessage(message, type) {
-                 messageContainerReassign.textContent = message;
-                 messageContainerReassign.className = 'message-area';
-                 messageContainerReassign.classList.add(`message-${type}`);
-                 messageContainerReassign.style.display = 'block';
+                // Cache le message après 7 secondes.
+                setTimeout(() => {
+                    messageContainerReassign.style.display = 'none';
+                }, 7000);
+            }
 
-                 setTimeout(() => {
-                     messageContainerReassign.style.display = 'none';
-                 }, 7000);
-             }
+            /**
+             * Met à jour les options du sélecteur de champ pour un cours donné.
+             * L'ancien champ n'est plus une option de destination, et le nouveau champ est exclu.
+             * @param {HTMLSelectElement} selectElement - L'élément <select> à mettre à jour.
+             * @param {string} nouveauChampNoActuel - Le numéro du champ auquel le cours est maintenant assigné.
+             */
+            function updateSelectOptions(selectElement, nouveauChampNoActuel) {
+                // Vide toutes les options existantes, sauf la première option par défaut.
+                while (selectElement.options.length > 1) {
+                    selectElement.remove(1);
+                }
 
-             function updateSelectOptions(selectElement, nouveauChampNoActuel, ancienChampNoPrecedent) {
-                 while (selectElement.options.length > 1) {
-                     selectElement.remove(1);
-                 }
+                // Ajoute toutes les options de champ de destination, à l'exception du champ actuel du cours.
+                champsDestinationData.forEach(champ => {
+                    if (String(champ.champno) !== String(nouveauChampNoActuel)) {
+                        const option = document.createElement('option');
+                        option.value = champ.champno;
+                        option.textContent = `${champ.champnom} (${champ.champno})`;
+                        selectElement.appendChild(option);
+                    }
+                });
+                selectElement.value = ""; // Réinitialise la sélection à l'option par défaut.
+            }
+        });
+    </script>
 
-                 const champPrecedentInfo = champsDestinationData.find(ch => ch.champno === ancienChampNoPrecedent);
-                 if (champPrecedentInfo && String(champPrecedentInfo.champno) !== String(nouveauChampNoActuel)) {
-                     const optionAncien = document.createElement('option');
-                     optionAncien.value = champPrecedentInfo.champno;
-                     optionAncien.textContent = `${champPrecedentInfo.champnom} (${champPrecedentInfo.champno})`;
-                     selectElement.appendChild(optionAncien);
-                 }
+    <!-- Script de gestion du thème : écoute les clics sur les boutons et met à jour le thème actif. -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
+                
+                /**
+                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
+                 * @param {string} theme - Le nom du thème à appliquer.
+                 */
+                function applyThemeUI(theme) {
+                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                    document.body.classList.add(`theme-${theme}`);
+                    
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) {
+                        activeButton.classList.add('active');
+                    }
+                }
 
-                 champsDestinationData.forEach(champ => {
-                     if (String(champ.champno) !== String(nouveauChampNoActuel) && String(champ.champno) !== String(ancienChampNoPrecedent)) {
-                         const option = document.createElement('option');
-                         option.value = champ.champno;
-                         option.textContent = `${champ.champnom} (${champ.champno})`;
-                         selectElement.appendChild(option);
-                     }
-                 });
-                 selectElement.value = "";
-             }
-         });
-     </script>
- </body>
- </html>
+                // Écoute les clics sur le conteneur du sélecteur de thème pour déléguer l'événement.
+                themeSwitcher.addEventListener('click', function(event) {
+                    // Vérifie si l'élément cliqué est un bouton
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme; // Récupère le thème du data-attribute
+                        localStorage.setItem('appTheme', theme); // Sauvegarde le choix de l'utilisateur
+                        applyThemeUI(theme); // Applique le thème visuellement
+                    }
+                });
+
+                // Applique le thème sauvegardé au chargement DOM complet.
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme); 
+            }
+        });
+    </script>
+</body>
+</html>

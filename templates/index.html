@@ -4,71 +4,138 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion des Tâches Enseignants</title>
-    <!-- Lien vers la feuille de style CSS globale -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- NOUVEAU: Script pour appliquer le thème instantanément -->
+    <script>
+        (function() {
+            function applyTheme(theme) {
+                // Applique le thème en ajoutant/retirant une classe sur le body.
+                document.body.classList.remove('theme-dark', 'theme-vintage');
+                if (theme === 'dark') {
+                    document.body.classList.add('theme-dark');
+                } else if (theme === 'vintage') {
+                    document.body.classList.add('theme-vintage');
+                }
+                // 'light' est le thème par défaut, aucune classe n'est nécessaire.
+            }
+        
+            // Applique le thème sauvegardé dès que possible.
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme);
+        })();
+    </script>
 </head>
-<body>
+<body class="theme-light"> <!-- La classe par défaut est ajoutée ici -->
     <header>
         <h1>Application de Gestion des Tâches</h1>
-    </header>
-    <nav>
-        <h2>Navigation</h2>
-        <ul>
-            <!-- Affichage des messages flash -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    <ul class="flash-messages">
-                    {% for category, message in messages %}
-                        <li class="{{ category }}">{{ message }}</li>
-                    {% endfor %}
-                    </ul>
-                {% endif %}
-            {% endwith %}
-
-            <!-- Liens d'authentification et informations utilisateur -->
-            {% if current_user.is_authenticated %}
-                <li>Connecté(e) en tant que: <strong>{{ current_user.username }}</strong></li>
-                <li><a href="{{ url_for('logout') }}">Déconnexion</a></li>
-            {% else %}
-                <li><a href="{{ url_for('login') }}"><strong>Connexion</strong></a></li>
-                <li><a href="{{ url_for('register') }}"><strong>S'inscrire</strong></a></li>
-            {% endif %}
-
-            <hr>
-
-            <!-- Liens principaux de l'application -->
-            {% if current_user.is_authenticated and current_user.is_admin %}
-                <li><a href="{{ url_for('page_sommaire') }}"><strong>Voir le Sommaire Global</strong></a></li>
-                <li><a href="{{ url_for('page_administration_donnees') }}"><strong>Administration - Gestion des données</strong></a></li>
-                <li><a href="{{ url_for('page_administration_utilisateurs') }}"><strong>Administration - Gestion des utilisateurs</strong></a></li>
-            {% endif %}
-            
-            <hr>
-            <li><strong>Navigation par Champ :</strong></li>
-            <!-- Boucle pour afficher les liens vers chaque page de champ.
-                 La liste 'champs' est déjà filtrée par main.py en fonction des permissions de l'utilisateur. -->
-            {% if champs %}
-                {% for champ in champs %}
-                <li>
-                    <a href="{{ url_for('page_champ', champ_no=champ.champno) }}">
-                        {{ champ.champno }} - {{ champ.champnom }}
-                    </a>
-                    {% if champ.estverrouille %}
-                        <span class="locked-indicator" title="Ce champ est verrouillé">🔒</span>
-                    {% endif %}
-                </li>
-                {% endfor %}
-            {% else %}
-                <!-- Message affiché si aucun champ n'est accessible ou trouvé -->
-                <li>Aucun champ trouvé ou accessible pour votre compte.</li>
-            {% endif %}
-        </ul>
-    </nav>
-    <main>
         <p>Bienvenue ! Sélectionnez une option dans la navigation pour commencer.</p>
+
+        <!-- NOUVEAU: Sélecteur de thème -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage">Vintage</button>
+        </div>
+    </header>
+
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <nav>
+            <div class="admin-section" style="max-width: 800px; margin: auto;">
+                <h2>Navigation</h2>
+                <ul>
+                    <!-- Liens d'authentification et informations utilisateur -->
+                    {% if current_user.is_authenticated %}
+                        <li>Connecté(e) en tant que: <strong>{{ current_user.username }}</strong></li>
+                        <li><a href="{{ url_for('logout') }}">Déconnexion</a></li>
+                    {% else %}
+                        <li><a href="{{ url_for('login') }}"><strong>Connexion</strong></a></li>
+                        <li><a href="{{ url_for('register') }}"><strong>S'inscrire</strong></a></li>
+                    {% endif %}
+
+                    <hr>
+
+                    <!-- Liens principaux de l'application -->
+                    {% if current_user.is_authenticated and current_user.is_admin %}
+                        <li><strong>Outils Administrateur</strong></li>
+                        <li><a href="{{ url_for('page_sommaire') }}">Voir le Sommaire Global</a></li>
+                        <li><a href="{{ url_for('page_administration_donnees') }}">Gérer les données (Import, Réassignation)</a></li>
+                        <li><a href="{{ url_for('page_administration_utilisateurs') }}">Gérer les utilisateurs</a></li>
+                        <hr>
+                    {% endif %}
+
+                    <li><strong>Navigation par Champ :</strong></li>
+                    <!-- Boucle pour afficher les liens vers chaque page de champ. -->
+                    {% if champs %}
+                        {% for champ in champs %}
+                        <li>
+                            <a href="{{ url_for('page_champ', champ_no=champ.champno) }}">
+                                {{ champ.champno }} - {{ champ.champnom }}
+                            </a>
+                            {% if champ.estverrouille %}
+                                <span class="locked-indicator" title="Ce champ est verrouillé">🔒</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    {% else %}
+                        <!-- Message affiché si aucun champ n'est accessible ou trouvé -->
+                        <li>Aucun champ trouvé ou accessible pour votre compte.</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
     </main>
+
     <footer>
         <p>© {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
     </footer>
+
+    <!-- NOUVEAU: Script pour gérer les clics et mettre à jour le thème actif -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            const themeButtons = document.querySelectorAll('.theme-switcher button');
+            
+            function applyTheme(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                document.body.classList.add(`theme-${theme}`);
+                
+                themeButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                });
+
+                const activeButton = document.getElementById(`theme-btn-${theme}`);
+                if (activeButton) {
+                    activeButton.classList.add('active');
+                }
+            }
+
+            function setTheme(theme) {
+                localStorage.setItem('appTheme', theme);
+                applyTheme(theme);
+            }
+
+            themeSwitcher.addEventListener('click', function(event) {
+                if (event.target.tagName === 'BUTTON') {
+                    const theme = event.target.dataset.theme;
+                    setTheme(theme);
+                }
+            });
+
+            // Appliquer le thème actif au chargement
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme); 
+        });
+    </script>
 </body>
 </html>

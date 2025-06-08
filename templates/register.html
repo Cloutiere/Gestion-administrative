@@ -5,137 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inscription - Gestion des Tâches Enseignants</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        /* Styles spécifiques pour les formulaires d'authentification (similaires à login.html) */
-        .auth-form-container {
-            max-width: 400px;
-            margin: 50px auto;
-            padding: 30px;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            text-align: center;
-        }
-
-        .auth-form-container h2 {
-            margin-bottom: 25px;
-            color: #333;
-            font-size: 1.8em;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-            color: #555;
-        }
-
-        .form-group input[type="text"],
-        .form-group input[type="password"] {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 1em;
-            box-sizing: border-box;
-        }
-
-        .form-group input[type="text"]:focus,
-        .form-group input[type="password"]:focus {
-            border-color: #007bff;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            margin-right: 10px;
-            transform: scale(1.2); /* Grossir la checkbox */
-        }
-
-        .checkbox-group label {
-            margin-bottom: 0; /* Réinitialise la marge pour l'alignement */
-            font-weight: normal; /* Le label de checkbox est moins gras */
-        }
-
-        .auth-form-container button[type="submit"] {
-            width: 100%;
-            padding: 12px 20px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 1.1em;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        .auth-form-container button[type="submit"]:hover {
-            background-color: #0056b3;
-        }
-
-        .auth-form-container p {
-            margin-top: 25px;
-            font-size: 0.95em;
-            color: #666;
-        }
-
-        .auth-form-container p a {
-            color: #007bff;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .auth-form-container p a:hover {
-            text-decoration: underline;
-        }
-
-        /* Styles pour les messages flash */
-        .flash-messages {
-            list-style-type: none;
-            padding: 0;
-            margin-bottom: 20px;
-        }
-        .flash-messages li {
-            padding: 10px 15px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-            font-weight: bold;
-            text-align: left;
-        }
-        .flash-messages .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .flash-messages .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .flash-messages .warning {
-            background-color: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
-        }
-        .flash-messages .info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-    </style>
+    
+    <!-- Script pour appliquer le thème instantanément -->
+    <script>
+        (function() {
+            function applyTheme(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage');
+                if (theme === 'dark') document.body.classList.add('theme-dark');
+                else if (theme === 'vintage') document.body.classList.add('theme-vintage');
+            }
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme);
+        })();
+    </script>
 </head>
-<body>
+<body class="theme-light">
     <header>
         <h1>Inscription</h1>
         <nav>
@@ -143,6 +27,13 @@
                 <li><a href="{{ url_for('index') }}">Accueil</a></li>
             </ul>
         </nav>
+        
+        <!-- Sélecteur de thème -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage">Vintage</button>
+        </div>
     </header>
 
     <main>
@@ -172,19 +63,17 @@
                     <label for="confirm_password">Confirmer le mot de passe :</label>
                     <input type="password" id="confirm_password" name="confirm_password" required>
                 </div>
+                
                 {% if not first_user %}
-                    {# Cette section n'est affichée que si `first_user` n'est PAS True.
-                       `first_user` est une variable passée par la route `/register` dans main.py,
-                       qui est True uniquement si aucun utilisateur n'existe,
-                       permettant au premier utilisateur d'être auto-admin.
-                       Si des utilisateurs existent, on peut demander si le nouvel utilisateur est admin. #}
                     <div class="checkbox-group">
                         <input type="checkbox" id="is_admin" name="is_admin" {{ 'checked' if is_admin_checked else '' }}>
                         <label for="is_admin">Accès Administrateur</label>
                     </div>
                 {% endif %}
+
                 <button type="submit">S'inscrire</button>
             </form>
+
             <p>Déjà un compte ? <a href="{{ url_for('login') }}">Se connecter</a>.</p>
         </div>
     </main>
@@ -192,5 +81,32 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
+    
+    <!-- Script de gestion du thème -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            const themeButtons = document.querySelectorAll('.theme-switcher button');
+            
+            function applyThemeUI(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                document.body.classList.add(`theme-${theme}`);
+                themeButtons.forEach(btn => btn.classList.remove('active'));
+                const activeButton = document.getElementById(`theme-btn-${theme}`);
+                if (activeButton) activeButton.classList.add('active');
+            }
+
+            themeSwitcher.addEventListener('click', function(event) {
+                if (event.target.tagName === 'BUTTON') {
+                    const theme = event.target.dataset.theme;
+                    localStorage.setItem('appTheme', theme);
+                    applyThemeUI(theme);
+                }
+            });
+
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyThemeUI(savedTheme); 
+        });
+    </script>
 </body>
 </html>

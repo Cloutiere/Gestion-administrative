@@ -5,8 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connexion - Gestion des Tâches Enseignants</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <script>
+        (function() {
+            function applyTheme(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage');
+                if (theme === 'dark') {
+                    document.body.classList.add('theme-dark');
+                } else if (theme === 'vintage') {
+                    document.body.classList.add('theme-vintage');
+                }
+            }
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme);
+        })();
+    </script>
 </head>
-<body>
+<body class="theme-light">
     <header>
         <h1>Connexion</h1>
         <nav>
@@ -14,6 +30,13 @@
                 <li><a href="{{ url_for('index') }}">Accueil</a></li>
             </ul>
         </nav>
+        
+        <!-- Sélecteur de thème -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage">Vintage</button>
+        </div>
     </header>
 
     <main>
@@ -41,7 +64,7 @@
                 </div>
                 <button type="submit">Se connecter</button>
             </form>
-            {# Le lien d'inscription n'est affiché que s'il s'agit du tout premier utilisateur à créer #}
+            
             {% if first_user %}
                 <p>Pas encore de compte ? <a href="{{ url_for('register') }}">S'inscrire ici</a>.</p>
             {% endif %}
@@ -51,5 +74,32 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
+    
+    <!-- Script pour gérer les clics et mettre à jour le thème actif -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            const themeButtons = document.querySelectorAll('.theme-switcher button');
+            
+            function applyThemeUI(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                document.body.classList.add(`theme-${theme}`);
+                themeButtons.forEach(btn => btn.classList.remove('active'));
+                const activeButton = document.getElementById(`theme-btn-${theme}`);
+                if (activeButton) activeButton.classList.add('active');
+            }
+
+            themeSwitcher.addEventListener('click', function(event) {
+                if (event.target.tagName === 'BUTTON') {
+                    const theme = event.target.dataset.theme;
+                    localStorage.setItem('appTheme', theme);
+                    applyThemeUI(theme);
+                }
+            });
+
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyThemeUI(savedTheme); 
+        });
+    </script>
 </body>
 </html>

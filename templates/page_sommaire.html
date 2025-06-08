@@ -5,192 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sommaire global des tâches</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        /* Styles spécifiques pour la page sommaire. Le style.css global s'applique aussi. */
-        body {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            margin: 0;
-        }
-
-        header {
-            flex-shrink: 0;
-            padding-bottom: 5px;
-        }
-        header h1 {
-            margin-top: 10px;
-            margin-bottom: 5px;
-            margin-left: 20px;
-            margin-right: 20px;
-            font-size: 1.8em;
-        }
-        header p {
-            margin-top: 0;
-            margin-bottom: 10px;
-            margin-left: 20px;
-            margin-right: 20px;
-        }
-
-        .container-principal-sommaire {
-            display: flex;
-            flex-grow: 1;
-            overflow: hidden;
-            padding: 10px 15px 15px 15px;
-            gap: 15px;
-        }
-
-        .colonne-sommaire {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            overflow-y: auto;
-            padding: 10px;
-            border: 1px solid #e0e0e0;
-            border-radius: 5px;
-            background-color: #ffffff;
-        }
-
-        .colonne-gauche {
-            flex-basis: 35%;
-        }
-
-        .colonne-droite {
-            flex-basis: 65%;
-        }
-
-        .section-sommaire {
-            padding: 10px 15px 15px 15px;
-            border: 1px solid #ccc;
-            border-radius:5px;
-            background-color: #f9f9f9;
-        }
-        .section-sommaire h2 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 1.2em;
-        }
-
-        table { width: 100%; border-collapse: collapse; margin-top:10px; font-size: 0.9em; }
-        th {
-            background-color: #e9ecef;
-            padding: 8px;
-            text-align: left;
-            border: 1px solid #ddd;
-        }
-        td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        #table-moyennes-par-champ th:last-child,
-        #table-moyennes-par-champ td:last-child {
-            text-align: center;
-            vertical-align: middle;
-        }
-
-        .section-moyenne-generale {
-            background-color: #e7f3fe;
-            padding: 10px 15px;
-        }
-        .moyenne-generale-contenu {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 1.1em;
-            font-weight: bold;
-        }
-
-        .statut-non-compte { color: #6c757d; font-style: italic; }
-
-        .champ-header-row th.champ-title-cell {
-            background-color: #ddeeff;
-            font-size: 1.05em;
-            padding: 8px 10px;
-            text-align: center;
-            font-weight: bold;
-        }
-        .column-header-row th {
-            background-color: #f8f9fa;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            font-size: 0.85em;
-            padding: 6px 8px;
-        }
-
-        /* STYLES POUR LES ICÔNES SVG */
-        .lock-icon {
-            cursor: pointer;
-            display: inline-block;
-            width: 20px; /* Taille de l'icône */
-            height: 20px;
-            transition: transform 0.2s ease-in-out;
-        }
-        .lock-icon:hover {
-            transform: scale(1.15); /* Effet de grossissement au survol */
-        }
-        .lock-icon svg {
-            width: 100%;
-            height: 100%;
-        }
-        .lock-icon.unlocked svg {
-            fill: #28a745; /* Vert pour déverrouillé */
-        }
-        .lock-icon.locked svg {
-            fill: #dc3545; /* Rouge pour verrouillé */
-        }
-
-        footer {
-            flex-shrink: 0;
-            text-align: center;
-            padding: 10px;
-            background-color: #f1f1f1;
-            border-top: 1px solid #ddd;
-        }
-        /* Styles pour les messages flash */
-        .flash-messages {
-            list-style-type: none;
-            padding: 0;
-            margin-bottom: 20px;
-        }
-        .flash-messages li {
-            padding: 10px 15px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-            font-weight: bold;
-            text-align: left;
-        }
-        .flash-messages .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .flash-messages .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .flash-messages .warning {
-            background-color: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
-        }
-        .flash-messages .info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-    </style>
+    
+    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <script>
+        (function() {
+            /**
+             * Applique le thème spécifié au corps du document.
+             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
+             */
+            function applyTheme(theme) {
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                if (theme === 'dark') {
+                    document.body.classList.add('theme-dark');
+                } else if (theme === 'vintage') {
+                    document.body.classList.add('theme-vintage');
+                } else {
+                    document.body.classList.add('theme-light'); // Thème par défaut explicite
+                }
+            }
+            // Récupère le thème sauvegardé ou utilise 'light' par défaut.
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            applyTheme(savedTheme);
+        })();
+    </script>
 </head>
-<body>
+<body class="theme-light">
     <header>
         <h1>Sommaire global des tâches des enseignants</h1>
         <nav>
             <ul>
                 <li><a href="{{ url_for('index') }}">« Retour à la navigation par champ</a></li>
                 {% if current_user.is_authenticated %}
-                    <li><a href="{{ url_for('page_administration_donnees') }}">Administration</a></li>
+                    <li><a href="{{ url_for('page_administration_donnees') }}">Administration (Données)</a></li>
+                    <li><a href="{{ url_for('page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
                     <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
                     <li><a href="{{ url_for('login') }}">Connexion</a></li>
@@ -198,6 +45,13 @@
                 {% endif %}
             </ul>
         </nav>
+        
+        <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
+        </div>
     </header>
 
     <main>
@@ -215,8 +69,8 @@
             <div class="colonne-sommaire colonne-gauche">
                 <section class="section-sommaire section-moyenne-generale">
                     <div class="moyenne-generale-contenu">
-                        <span class="label">Moyenne générale (temps plein) :</span>
-                        <span class="valeur" id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
+                        <span>Moyenne générale (temps plein) :</span>
+                        <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
                     </div>
                 </section>
 
@@ -233,7 +87,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {# Le contenu sera trié et inséré par JavaScript #}
+                            {# Le contenu de ce tbody sera trié et inséré par JavaScript. #}
                         </tbody>
                     </table>
                     <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
@@ -248,11 +102,11 @@
                     <h2>Détail des tâches par champ</h2>
                     <table id="table-detail-enseignants">
                         <tbody>
-                            {# Le contenu sera généré par JavaScript #}
+                            {# Le contenu sera généré dynamiquement par JavaScript. #}
                         </tbody>
                     </table>
                     <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
-                    {# Affichage initial si pas de données, JavaScript cachera si des données sont chargées #}
+                    {# Ce message est affiché si aucune donnée n'est disponible au chargement. JS le gérera ensuite. #}
                     {% if not enseignants_par_champ or not enseignants_par_champ | selectattr('enseignants') | list | join %}
                     <p>Aucun enseignant à afficher initialement.</p>
                     {% endif %}
@@ -264,14 +118,20 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre École</p>
     </footer>
-
+    
+    <!-- Script JS spécifique à la page sommaire -->
     <script>
         const INTERVAL_MISE_A_JOUR = 7000;
+        const IS_ADMIN = {{ current_user.is_authenticated and current_user.is_admin | tojson }};
 
-        // Fonction utilitaire pour formater les nombres de périodes.
-        // Affiche les décimales uniquement si elles sont non nulles, et évite les zéros superflus.
-        // Par exemple : 5.00 -> "5", 1.50 -> "1.5", 0.75 -> "0.75".
-        // Utilise Intl.NumberFormat pour gérer la localisation et les décimales significatives.
+        /**
+         * Fonction utilitaire pour formater les nombres de périodes.
+         * Affiche les décimales uniquement si elles sont non nulles, et évite les zéros superflus.
+         * Exemples : 5.00 -> "5", 1.50 -> "1.5", 0.75 -> "0.75".
+         * Utilise Intl.NumberFormat pour gérer la localisation et les décimales significatives.
+         * @param {number|null|undefined} value Le nombre à formater.
+         * @returns {string} Le nombre formaté en tant que chaîne de caractères.
+         */
         function formatPeriodes(value) {
             if (value === null || value === undefined) {
                 return '';
@@ -284,7 +144,8 @@
             return formatter.format(value);
         }
 
-        // DÉFINITION DES ICÔNES SVG POUR UNE UTILISATION UNIVERSELLE
+        // Définition des icônes SVG pour une utilisation dans le script
+        // Ces SVG sont en ligne pour éviter des requêtes supplémentaires et sont très légers.
         const SVG_LOCKED = `
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                 <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
@@ -296,71 +157,69 @@
 
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Mise à jour initiale après le chargement du DOM.
+            // Mise à jour initiale des données du sommaire au chargement.
             mettreAJourDonneesSommaire();
-            // Puis met à jour à intervalles réguliers.
+            // Puis, met à jour les données à intervalles réguliers pour un affichage "en direct".
             setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
 
+            // Gestionnaire d'événements pour le tableau des moyennes de champ, en utilisant la délégation.
             const tableMoyennes = document.getElementById('table-moyennes-par-champ');
-            if(tableMoyennes) {
+            if (tableMoyennes) {
                 tableMoyennes.addEventListener('click', function(event) {
                     const iconElement = event.target.closest('.lock-icon');
-                    // Vérifier si l'icône est cliquable (l'utilisateur est admin)
-                    if (iconElement && ({{ current_user.is_authenticated|tojson }} && {{ current_user.is_admin|tojson }})) {
-                        const champNo = iconElement.dataset.champNo;
-                        basculerVerrouChamp(champNo, iconElement);
+                    // Vérifier si l'icône a été cliquée et si l'utilisateur est administrateur.
+                    if (iconElement && IS_ADMIN) {
+                        const champNo = iconElement.dataset.champNo; // Récupérer le numéro du champ du data-attribute
+                        basculerVerrouChamp(champNo, iconElement); // Appeler la fonction pour basculer le verrou
                     } else if (iconElement) {
-                        // Si l'utilisateur n'est pas admin, afficher un message d'erreur
+                        // Si l'utilisateur n'est pas admin mais clique, informer qu'il n'a pas la permission.
                         alert("Vous n'avez pas les permissions pour modifier le statut de verrouillage.");
                     }
                 });
             }
         });
 
+        /**
+         * Récupère les données de sommaire via l'API et met à jour les tableaux.
+         * Gère la redirection si la session expire ou si les permissions sont insuffisantes.
+         */
         async function mettreAJourDonneesSommaire() {
             try {
                 const response = await fetch('/api/sommaire/donnees');
                 if (!response.ok) {
-                    // Si l'API retourne une erreur (par exemple 401 Unauthorized),
-                    // cela peut indiquer que la session a expiré ou que l'utilisateur n'est plus connecté.
-                    // Dans ce cas, recharger la page pour rediriger vers le login.
+                    // Si l'API retourne une erreur (ex: 401 Unauthorized), recharger la page pour rediriger vers le login.
                     if (response.status === 401 || response.status === 403) {
-                        window.location.reload(); // Force le rafraîchissement qui déclenchera la redirection
-                        return; // Arrête l'exécution de la fonction
+                        window.location.reload();
+                        return;
                     }
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }
                 const data = await response.json();
 
-                if (data.moyennes_par_champ) {
-                    mettreAJourTableauMoyennesChamp(data.moyennes_par_champ);
-                } else {
-                    console.warn("Données 'moyennes_par_champ' non trouvées.");
-                    mettreAJourTableauMoyennesChamp({}); // Passer un objet vide pour vider le tableau
-                }
+                // Met à jour le tableau des moyennes par champ.
+                mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
 
-                const aDesEnseignants = data.enseignants_par_champ && data.enseignants_par_champ.some(champ => champ.enseignants && champ.enseignants.length > 0);
-                if (aDesEnseignants) {
-                    mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ);
-                } else {
-                     console.warn("Données 'enseignants_par_champ' non trouvées ou vides.");
-                    mettreAJourTableauEnseignantsGroupes([]); // Passer un tableau vide pour vider le tableau
-                }
+                // Met à jour le tableau détaillé des enseignants.
+                mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ || []);
 
-
+                // Met à jour l'affichage de la moyenne générale de l'établissement.
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
-                if (elMoyenneGenerale) {
-                    if (data.moyenne_generale !== undefined && data.moyenne_generale !== null) {
-                        elMoyenneGenerale.textContent = `${formatPeriodes(data.moyenne_generale)} périodes`;
-                    } else {
-                        elMoyenneGenerale.textContent = `N/A périodes`;
-                    }
+                if (elMoyenneGenerale && data.moyenne_generale !== undefined && data.moyenne_generale !== null) {
+                    elMoyenneGenerale.textContent = `${formatPeriodes(data.moyenne_generale)} périodes`;
+                } else if (elMoyenneGenerale) {
+                    elMoyenneGenerale.textContent = `N/A périodes`;
                 }
+
             } catch (error) {
-                console.error("Erreur MàJ sommaire:", error);
+                console.error("Erreur lors de la mise à jour du sommaire:", error);
             }
         }
 
+        /**
+         * Appelle l'API pour basculer le statut de verrouillage d'un champ et met à jour l'icône.
+         * @param {string} champNo - Le numéro du champ à modifier.
+         * @param {HTMLElement} iconElement - L'élément DOM de l'icône du verrou.
+         */
         async function basculerVerrouChamp(champNo, iconElement) {
             iconElement.style.opacity = '0.5'; // Indication visuelle de l'action en cours
             try {
@@ -372,17 +231,18 @@
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
                 }
+                // Si l'opération réussit, met à jour l'icône pour refléter le nouveau statut.
                 mettreAJourIconeVerrou(iconElement, data.est_verrouille);
             } catch (error) {
                 console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
                 alert(error.message); // Ou une notification plus discrète
             } finally {
-                iconElement.style.opacity = '1';
+                iconElement.style.opacity = '1'; // Rétablir l'opacité
             }
         }
 
         /**
-         * Met à jour l'icône de verrouillage SVG en fonction de son état.
+         * Met à jour l'icône de verrouillage SVG en fonction de son état (verrouillé/déverrouillé).
          * @param {HTMLElement} iconElement - L'élément conteneur de l'icône à mettre à jour.
          * @param {boolean} estVerrouille - True si le champ est verrouillé, sinon false.
          */
@@ -400,58 +260,65 @@
             }
         }
 
+        /**
+         * Met à jour le tableau détaillé des enseignants par champ.
+         * @param {Array<Object>} enseignantsParChampData - Les données des enseignants groupées par champ.
+         */
         function mettreAJourTableauEnseignantsGroupes(enseignantsParChampData) {
             const tbody = document.querySelector('#table-detail-enseignants tbody');
             const aucunEnseignantMsg = document.getElementById('aucun-enseignant-message');
             const tableDetailEnseignants = document.getElementById('table-detail-enseignants');
 
-            if (!tbody) return;
-            tbody.innerHTML = ''; // Vider le contenu précédent
+            if (!tbody || !aucunEnseignantMsg || !tableDetailEnseignants) return; // S'assurer que les éléments existent
 
-            if (enseignantsParChampData && enseignantsParChampData.length > 0 && enseignantsParChampData.some(champ => champ.enseignants && champ.enseignants.length > 0)) {
-                if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'none';
-                if (tableDetailEnseignants) tableDetailEnseignants.style.display = 'table';
+            tbody.innerHTML = ''; // Vide le contenu précédent du tableau
+
+            // Vérifie s'il y a des enseignants à afficher dans l'ensemble des champs.
+            const aDesEnseignants = enseignantsParChampData.some(c => c.enseignants && c.enseignants.length > 0);
+
+            if (aDesEnseignants) {
+                aucunEnseignantMsg.style.display = 'none'; // Cache le message "Aucun enseignant"
+                tableDetailEnseignants.style.display = ''; // Affiche le tableau
 
                 enseignantsParChampData.forEach(champData => {
-                    // Ne pas afficher un champ s'il n'a pas d'enseignants
+                    // Ne pas afficher un champ s'il n'a pas d'enseignants.
                     if (!champData.enseignants || champData.enseignants.length === 0) {
                         return;
                     }
 
+                    // Ajoute une ligne d'en-tête pour le champ actuel.
                     const champHeaderRow = tbody.insertRow();
-                    champHeaderRow.classList.add('champ-header-row');
+                    champHeaderRow.className = 'champ-header-row';
                     const champTitleCell = document.createElement('th');
-                    champTitleCell.colSpan = 5; // Nom, Pér. cours, Pér. autres, Total pér., Compte moyenne
-                    champTitleCell.classList.add('champ-title-cell');
+                    champTitleCell.colSpan = 5; // Le colspan doit correspondre au nombre de colonnes dans la table.
+                    champTitleCell.className = 'champ-title-cell';
                     champTitleCell.textContent = `Champ ${champData.champno} - ${champData.champnom}`;
                     champHeaderRow.appendChild(champTitleCell);
 
+                    // Ajoute la ligne d'en-têtes de colonne pour chaque champ.
                     const columnHeaderRow = tbody.insertRow();
-                    columnHeaderRow.classList.add('column-header-row');
+                    columnHeaderRow.className = 'column-header-row';
                     ['Nom', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte moyenne'].forEach(headerText => {
                         const th = document.createElement('th');
                         th.textContent = headerText;
                         columnHeaderRow.appendChild(th);
                     });
 
-                    // Les enseignants sont déjà triés par Nom, Prénom par le backend (via get_all_enseignants_avec_details)
+                    // Ajoute les lignes des enseignants pour le champ actuel.
                     champData.enseignants.forEach(ens => {
                         const row = tbody.insertRow();
-                        row.dataset.enseignantId = ens.enseignantid;
+                        row.dataset.enseignantId = ens.enseignantid; // Ajoute l'ID de l'enseignant comme data-attribute
 
-                        // Affichage Nom, Prénom ou NomComplet
-                        const nomCell = row.insertCell();
-                        if (ens.nom && ens.prenom) {
-                            nomCell.textContent = `${ens.nom}, ${ens.prenom}`;
-                        } else {
-                            nomCell.textContent = ens.nomcomplet; // Pour les tâches fictives
-                        }
+                        // Détermine le nom à afficher (Nom, Prénom ou NomComplet pour les fictifs).
+                        const nomAAfficher = (ens.nom && ens.prenom) ? `${ens.nom}, ${ens.prenom}` : ens.nomcomplet;
+                        row.insertCell().textContent = nomAAfficher;
 
-                        // Appliquer le formatage des périodes
+                        // Applique le formatage des périodes.
                         row.insertCell().textContent = formatPeriodes(ens.periodes_cours);
                         row.insertCell().textContent = formatPeriodes(ens.periodes_autres);
                         row.insertCell().textContent = formatPeriodes(ens.total_periodes);
 
+                        // Gère la colonne "Compte moyenne".
                         const cellCompteMoyenne = row.insertCell();
                         if (ens.compte_pour_moyenne_champ) {
                             cellCompteMoyenne.textContent = 'Oui';
@@ -464,63 +331,123 @@
                     });
                 });
             } else {
-                if (tableDetailEnseignants) tableDetailEnseignants.style.display = 'none';
-                if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'block';
+                tableDetailEnseignants.style.display = 'none'; // Cache le tableau si aucun enseignant
+                aucunEnseignantMsg.style.display = 'block'; // Affiche le message
             }
         }
 
+        /**
+         * Fonction de comparaison pour trier les numéros de champ alphanumériquement.
+         * Gère les formats comme "01", "01A", "02".
+         * @param {string} a - Premier numéro de champ.
+         * @param {string} b - Deuxième numéro de champ.
+         * @returns {number} Résultat de la comparaison.
+         */
         function comparerNumerosChamp(a, b) {
             const regex = /^(\d+)([a-zA-Z]*)$/;
             const matchA = a.match(regex);
             const matchB = b.match(regex);
+
+            // Fallback si le format ne correspond pas, pour éviter des erreurs et trier alphabétiquement.
             if (!matchA || !matchB) {
-                return a.localeCompare(b); // Fallback pour les formats non numériques
+                return a.localeCompare(b);
             }
+
             const numA = parseInt(matchA[1], 10);
             const letterA = matchA[2];
             const numB = parseInt(matchB[1], 10);
             const letterB = matchB[2];
+
+            // Compare la partie numérique.
             if (numA !== numB) {
                 return numA - numB;
             }
-            return letterA.localeCompare(letterB); // Comparer les parties littérales si les nombres sont égaux
+            // Si les parties numériques sont égales, compare la partie alphabétique.
+            return letterA.localeCompare(letterB);
         }
 
+        /**
+         * Met à jour le tableau des moyennes par champ.
+         * @param {Object} moyennesChampData - Les données des moyennes par champ.
+         */
         function mettreAJourTableauMoyennesChamp(moyennesChampData) {
             const tbody = document.querySelector('#table-moyennes-par-champ tbody');
             const aucuneMoyenneMsg = document.getElementById('aucune-moyenne-champ-message');
             const tableMoyennesChamp = document.getElementById('table-moyennes-par-champ');
 
-            if (!tbody) return;
-            tbody.innerHTML = ''; // Vider le contenu précédent
-            const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
+            if (!tbody || !aucuneMoyenneMsg || !tableMoyennesChamp) return;
+
+            tbody.innerHTML = ''; // Vide le contenu précédent.
+            const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp); // Trie les champs.
 
             if (champNosTries.length > 0) {
-                 if (aucuneMoyenneMsg) aucuneMoyenneMsg.style.display = 'none';
-                 if (tableMoyennesChamp) tableMoyennesChamp.style.display = 'table';
+                 aucuneMoyenneMsg.style.display = 'none'; // Cache le message "Aucune moyenne"
+                 tableMoyennesChamp.style.display = ''; // Affiche le tableau
 
                 champNosTries.forEach(champ_no => {
                     const data = moyennesChampData[champ_no];
                     const row = tbody.insertRow();
-                    row.dataset.champNo = champ_no;
+                    row.dataset.champNo = champ_no; // Ajoute le numéro de champ comme data-attribute.
+
+                    // Insère les cellules avec les données formatées.
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
                     row.insertCell().textContent = formatPeriodes(data.moyenne);
 
+                    // Ajoute l'icône de verrouillage.
                     const cellStatut = row.insertCell();
                     const icon = document.createElement('span');
-                    icon.className = 'lock-icon'; // La classe de base
-                    icon.dataset.champNo = champ_no;
+                    icon.className = 'lock-icon'; // Applique la classe CSS pour le style de l'icône.
+                    icon.dataset.champNo = champ_no; // Stocke le numéro de champ pour le clic.
 
-                    mettreAJourIconeVerrou(icon, data.est_verrouille); // Appelle la fonction pour configurer l'icône
+                    mettreAJourIconeVerrou(icon, data.est_verrouille); // Configure l'icône (verrouillé/déverrouillé).
 
                     cellStatut.appendChild(icon);
                 });
             } else {
-                if (tableMoyennesChamp) tableMoyennesChamp.style.display = 'none';
-                if (aucuneMoyenneMsg) aucuneMoyenneMsg.style.display = 'block';
+                tableMoyennesChamp.style.display = 'none'; // Cache le tableau si aucune moyenne
+                aucuneMoyenneMsg.style.display = 'block'; // Affiche le message
             }
         }
+    </script>
+
+    <!-- Script de gestion du thème : écoute les clics sur les boutons et met à jour le thème actif. -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
+                
+                /**
+                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
+                 * @param {string} theme - Le nom du thème à appliquer.
+                 */
+                function applyThemeUI(theme) {
+                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                    document.body.classList.add(`theme-${theme}`);
+                    
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) {
+                        activeButton.classList.add('active');
+                    }
+                }
+
+                // Écoute les clics sur le conteneur du sélecteur de thème pour déléguer l'événement.
+                themeSwitcher.addEventListener('click', function(event) {
+                    // Vérifie si l'élément cliqué est un bouton
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme; // Récupère le thème du data-attribute
+                        localStorage.setItem('appTheme', theme); // Sauvegarde le choix de l'utilisateur
+                        applyThemeUI(theme); // Applique le thème visuellement
+                    }
+                });
+
+                // Applique le thème sauvegardé au chargement DOM complet.
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme); 
+            }
+        });
     </script>
 </body>
 </html>
