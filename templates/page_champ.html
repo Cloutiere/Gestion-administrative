@@ -116,58 +116,63 @@
 
         /* Styles pour l'impression */
         .print-only { display: none; }
-        .no-print { display: block; } /* ou flex, etc. selon l'élément en mode normal */
 
         @media print {
-            body * { visibility: hidden; }
-            .print-area, .print-area * { visibility: visible; }
-            .print-area {
-                position: absolute;
-                left: 0;
-                top: 0;
-                right: 0;
-                width: 98%; 
-                margin: 0 auto;
+            /* Cache les éléments non désirés à l'impression. */
+            header,
+            .no-print {
+                display: none !important;
+            }
+
+            /* Assure que le corps principal est bien positionné */
+            body {
+                margin: 0;
+                padding: 0;
+            }
+
+            /* Force l'affichage des éléments destinés uniquement à l'impression */
+            .print-only {
+                display: block;
             }
             
-            /* Cache les éléments non désirés à l'impression. */
-            header, 
-            .container > section:not(.enseignants-section), 
-            #btn-creer-tache-restante, 
-            .no-print,
-            button.no-print,
-            span.no-print
-             { display: none !important; }
+            .container {
+                display: block; /* Change le flexbox en block pour l'impression */
+                width: 100%;
+                gap: 0;
+            }
             
-            .container { display: block; }
-            .enseignants-section { display: block; width: 100%; max-height: none; overflow: visible; border: none; }
+            .enseignants-section {
+                display: block;
+                width: 100%;
+                max-height: none;
+                overflow: visible;
+                border: none;
+                padding: 0;
+            }
             
-            .enseignant-card { border: 1px solid #000; padding: 15px; margin-bottom: 20px; page-break-inside: avoid; }
+            .enseignant-card {
+                border: 1px solid #000;
+                padding: 15px;
+                margin-bottom: 20px;
+                page-break-inside: avoid;
+            }
+
             .entete-enseignant { cursor: default; }
             .entete-enseignant .arrow-indicator { display: none; }
-            .contenu-selection-cours { display: none !important; } /* Caché car c'est pour l'interaction UI */
-            .action-enseignant-fictif { display: none; } /* Caché car c'est pour l'interaction UI */
+            .contenu-selection-cours, .action-enseignant-fictif { display: none !important; }
             
             table { font-size: 9pt; border-collapse: collapse; width: 100%; }
             th, td { border: 1px solid #000; padding: 4px; text-align: left; }
             .total-attributions-row { border-top: 2px solid #000; }
+            
+            .signature-line { margin-top: 40px; border-top: 1px solid #000; padding-top: 5px; font-style: italic; }
 
-            /* Masque complètement la dernière colonne (Action) à l'impression. */
-            th:last-child,
-            td:last-child {
-                display: none !important;
-            }
-            
-            .print-only { display: block; }
-            
-            .signature-line {
-                margin-top: 40px;
-                border-top: 1px solid #000;
-                padding-top: 5px;
-                font-style: italic;
-            }
-            #print-report-cours-restants { margin-top: 30px; page-break-before: always; }
-            #print-report-cours-restants h2 { font-size: 14pt; }
+            /* Styles pour la première page (Sommaire) */
+            #print-summary-page { page-break-after: always; }
+            #print-summary-page h2 { font-size: 14pt; margin-top: 0; }
+            #print-summary-page table { margin-bottom: 40px; }
+            #print-summary-page th { background-color: #e0e0e0; }
+            #print-summary-page tfoot td { font-weight: bold; }
         }
 
     </style>
@@ -175,7 +180,7 @@
 <body class="{{ 'champ-verrouille' if champ.estverrouille else '' }}">
     <header class="no-print">
         <h1>
-            Gestion des Tâches - Champ : {{ champ.champnom }} ({{ champ.champno }})
+            Gestion des tâches - Champ : {{ champ.champnom }} ({{ champ.champno }})
             {% if champ.estverrouille %}
                 <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées."> Verrouillé</span>
             {% endif %}
@@ -184,18 +189,27 @@
         <p><button id="btn-imprimer-champ">Imprimer ce champ</button></p>
     </header>
 
-    <div class="container print-area">
+    <!-- Conteneur pour la première page d'impression (sommaire) -->
+    <div id="print-summary-page" class="print-only">
+        <!-- Contenu généré par JS avant impression -->
+    </div>
+
+    <div class="container">
         <section class="enseignants-section">
-            <h2 class="section-title no-print">Attribution des Tâches aux Enseignants</h2>
+            <h2 class="section-title no-print">Choix de tâche des enseignants</h2>
             {% for enseignant in enseignants_data %}
-            <div class="enseignant-card {% if not enseignant.esttempsplein %}enseignant-temps-partiel{% endif %} {% if enseignant.estfictif %}enseignant-fictif{% endif %}"
+            <div class="enseignant-card {% if enseignant.estfictif %}enseignant-fictif{% elif not enseignant.esttempsplein %}enseignant-temps-partiel{% endif %}"
                  id="enseignant-card-{{ enseignant.enseignantid }}">
 
                 <div class="entete-enseignant">
                     <h3 class="titre-enseignant-bascule nom-enseignant-texte">
                         {{ enseignant.nomcomplet }}
-                        {% if not enseignant.esttempsplein %}<small>(Temps Partiel)</small>{% endif %}
-                        {% if enseignant.estfictif %}<small>(Tâche Restante)</small>{% endif %}
+                        {# CORRECTION: Logique d'affichage pour ne pas afficher (Tâche restante) #}
+                        {% if enseignant.estfictif %}
+                            {# Rien à ajouter ici, le nom est suffisant #}
+                        {% elif not enseignant.esttempsplein %}
+                            <small>(Temps Partiel)</small>
+                        {% endif %}
                         {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
                     </h3>
                     <span class="arrow-indicator no-print">▶</span>
@@ -203,7 +217,7 @@
 
                 <div class="action-enseignant-fictif no-print">
                     {% if enseignant.estfictif %}
-                        <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer Tâche</button>
+                        <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer tâche</button>
                     {% endif %}
                 </div>
                 
@@ -215,12 +229,12 @@
                                 <th>Cours choisi</th>
                                 <th>Nb. grp.</th>
                                 <th>Pér.</th>
-                                <th>Pér. totale</th>
+                                <th>Pér. total</th>
                                 <th class="no-print">Action</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-attributions-{{ enseignant.enseignantid }}">
-                            {# Le contenu de ce tbody est maintenant généré par une fonction JS pour les mises à jour. #}
+                            {# Le contenu de ce tbody est généré par JS pour agréger les cours. #}
                         </tbody>
                     </table>
                 </div>
@@ -231,11 +245,11 @@
 
                 <div class="contenu-selection-cours no-print">
                     <div class="cours-selection">
-                        <h4>Cours d'enseignement disponibles à l'attribution :</h4>
+                        <h4>Cours d'enseignement disponibles :</h4>
                         <ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul>
                     </div>
                     <div class="cours-selection">
-                        <h4>Autres tâches disponibles à l'attribution :</h4>
+                        <h4>Autres tâches disponibles :</h4>
                         <ul class="liste-cours-a-choisir" data-type-cours="autre"></ul>
                     </div>
                 </div>
@@ -248,14 +262,14 @@
         </section>
 
         <section class="cours-restants-section no-print">
-            <h2 class="section-title">Périodes Restantes dans ce Champ</h2>
+            <h2 class="section-title">Périodes restantes dans ce champ</h2>
             <table id="tableau-cours-restants">
                 <thead>
                     <tr>
                         <th>Code</th>
                         <th>Cours disponibles</th>
-                        <th>Pér.</th>
                         <th>Grp. rest.</th>
+                        <th>Pér.</th>
                         <th>Pér. restantes</th>
                     </tr>
                 </thead>
@@ -276,7 +290,7 @@
                         <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours }}</td>
                         <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres }}</td>
                         <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes }}</td>
-                        <td>{% if enseignant.estfictif %}Fictif{% elif not enseignant.esttempsplein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
+                        <td>{% if enseignant.estfictif %}Tâche Restante{% elif not enseignant.esttempsplein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -287,34 +301,31 @@
             {% endif %}
         </section>
     </div>
-    
-    <div id="print-report-cours-restants" class="print-only">
-        <!-- Contenu généré par JS avant impression -->
-    </div>
 
     <template id="enseignant-card-template">
-        <div class="enseignant-card enseignant-fictif" id="enseignant-card-{{ENSEIGNANT_ID}}">
+        {# CORRECTION: L'étiquette (Tâche Restante) est retirée du template. #}
+        <div class="enseignant-card enseignant-fictif" data-template-id="enseignant-card-ID">
             <div class="entete-enseignant">
-                <h3 class="titre-enseignant-bascule nom-enseignant-texte">
-                    {{NOM_COMPLET}} <small>(Tâche Restante)</small>
+                <h3 class="titre-enseignant-bascule nom-enseignant-texte" data-template-nom="nom-enseignant">
+                    NOM_PLACEHOLDER
                 </h3>
                 <span class="arrow-indicator no-print">▶</span>
             </div>
             <div class="action-enseignant-fictif no-print">
-                <button class="btn-supprimer-enseignant" data-enseignant-id="{{ENSEIGNANT_ID}}">Supprimer Tâche</button>
+                <button class="btn-supprimer-enseignant" data-template-id-btn="btn-supprimer-ID">Supprimer tâche</button>
             </div>
             <div class="cours-attribues">
-                <table id="table-attributions-{{ENSEIGNANT_ID}}">
+                <table data-template-id-table="table-attributions-ID">
                     <thead>
                         <tr><th>Code</th><th>Cours choisi</th><th>Nb. grp.</th><th>Pér.</th><th>Pér. totale</th><th class="no-print">Action</th></tr>
                     </thead>
-                    <tbody id="tbody-attributions-{{ENSEIGNANT_ID}}"></tbody>
+                    <tbody data-template-id-tbody="tbody-attributions-ID"></tbody>
                 </table>
             </div>
             <div class="signature-line print-only">Signature de l'enseignant :</div>
             <div class="contenu-selection-cours no-print">
-                <div class="cours-selection"><h4>Cours d'enseignement disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div>
-                <div class="cours-selection"><h4>Autres tâches disponibles à l'attribution :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div>
+                <div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div>
+                <div class="cours-selection"><h4>Autres tâches disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div>
             </div>
         </div>
     </template>

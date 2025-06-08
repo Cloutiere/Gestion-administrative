@@ -215,7 +215,7 @@ def get_attributions_enseignant(enseignant_id):
 
 def get_toutes_les_attributions():
     """
-    NOUVELLE FONCTION OPTIMISÉE: Récupère toutes les attributions de tous les enseignants en une seule requête.
+    Récupère toutes les attributions de tous les enseignants en une seule requête pour l'optimisation.
     """
     db = get_db()
     if not db:
@@ -240,7 +240,7 @@ def get_toutes_les_attributions():
 
 def calculer_periodes_pour_attributions(attributions):
     """
-    NOUVELLE FONCTION UTILITAIRE: Calcule les totaux de périodes à partir d'une liste d'attributions fournie.
+    Calcule les totaux de périodes à partir d'une liste d'attributions fournie.
     """
     periodes_enseignement = sum(a["nbperiodes"] * a["nbgroupespris"] for a in attributions if not a["estcoursautre"])
     periodes_autres = sum(a["nbperiodes"] * a["nbgroupespris"] for a in attributions if a["estcoursautre"])
@@ -785,9 +785,11 @@ def api_creer_tache_restante(champ_no):
 
             nom_nouvelle_tache = f"{champ_no}-Tâche restante-{max_numero_tache + 1}"
 
+            # CORRECTION : EstTempsPlein est mis à TRUE pour les tâches fictives afin de simplifier l'affichage
+            # et d'éviter qu'elles apparaissent comme "Temps Partiel".
             query_insert_tache = """
                 INSERT INTO Enseignants (NomComplet, ChampNo, EstTempsPlein, EstFictif, PeutChoisirHorsChampPrincipal)
-                VALUES (%s, %s, FALSE, TRUE, FALSE)
+                VALUES (%s, %s, TRUE, TRUE, FALSE)
                 RETURNING EnseignantID, NomComplet, EstTempsPlein, EstFictif, PeutChoisirHorsChampPrincipal, ChampNo;
             """
             cur.execute(query_insert_tache, (nom_nouvelle_tache, champ_no))
