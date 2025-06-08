@@ -54,19 +54,56 @@ document.addEventListener("DOMContentLoaded", function () {
         creerTacheRestante(this);
     });
 
+    // Écouteur pour le bouton "Imprimer ce champ"
     document.getElementById("btn-imprimer-champ")?.addEventListener("click", function () {
-        // S'assurer que toutes les cartes sont repliées pour une impression propre de la liste des enseignants.
+        // S'assurer que toutes les cartes sont repliées.
         document.querySelectorAll(".enseignant-card.detail-visible").forEach((card) => {
             card.classList.remove("detail-visible");
         });
 
-        // Générer dynamiquement la page de sommaire à partir des données les plus récentes.
+        // Générer le sommaire spécifique pour l'impression du champ (sans les tâches restantes).
         genererRapportSommairePourImpression();
 
-        // Lancer l'impression du navigateur.
-        window.print();
+        // Lancer l'impression en mode "champ".
+        prepareAndPrint("champ");
+    });
+
+    // Écouteur pour le bouton "Imprimer Tâches Restantes"
+    document.getElementById("btn-imprimer-taches-restantes")?.addEventListener("click", function () {
+        // S'assurer que toutes les cartes sont repliées.
+        document.querySelectorAll(".enseignant-card.detail-visible").forEach((card) => {
+            card.classList.remove("detail-visible");
+        });
+
+        // Lancer l'impression en mode "tâches restantes" (aucun sommaire n'est généré).
+        prepareAndPrint("taches-restantes");
     });
 });
+
+/**
+ * Prépare le document pour un mode d'impression spécifique et lance l'impression.
+ * @param {'champ' | 'taches-restantes'} mode Le mode d'impression.
+ */
+function prepareAndPrint(mode) {
+    const printClass = `printing-${mode}`;
+    document.body.classList.add(printClass);
+
+    // Fonction pour nettoyer la classe après l'impression.
+    const cleanup = () => {
+        document.body.classList.remove(printClass);
+        window.removeEventListener("afterprint", cleanup);
+    };
+
+    // Attacher l'écouteur pour le nettoyage.
+    window.addEventListener("afterprint", cleanup);
+
+    // Lancer l'impression.
+    window.print();
+
+    // Fallback : au cas où l'événement `afterprint` ne se déclencherait pas (ex: annulation de la boîte de dialogue),
+    // nous retirons la classe après un court délai pour restaurer l'état normal de la page.
+    setTimeout(cleanup, 1000);
+}
 
 /**
  * Applique l'état de verrouillage (désactivation des boutons) à une seule carte d'enseignant.
@@ -154,7 +191,7 @@ function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray)
     const attributionsAutres = Object.values(attributionsAgregees).filter((attr) => attr.estcoursautre).sort((a, b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
 
     if (attributionsEnseignement.length > 0) {
-        tbody.innerHTML += `<tr><td colspan="6" class="sous-titre-attributions">Périodes d'enseignement</td></tr>`;
+        tbody.innerHTML += `<tr class="sous-titre-attributions-row"><td colspan="6" class="sous-titre-attributions">Périodes d'enseignement</td></tr>`;
         attributionsEnseignement.forEach((attr) => {
             const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
             totalPeriodesEnseignantCalcule += totalPeriodesAttr;
@@ -171,7 +208,7 @@ function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray)
     }
 
     if (attributionsAutres.length > 0) {
-        tbody.innerHTML += `<tr><td colspan="6" class="sous-titre-attributions">Autres tâches</td></tr>`;
+        tbody.innerHTML += `<tr class="sous-titre-attributions-row"><td colspan="6" class="sous-titre-attributions">Autres tâches</td></tr>`;
         attributionsAutres.forEach((attr) => {
             const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
             totalPeriodesEnseignantCalcule += totalPeriodesAttr;
@@ -390,14 +427,14 @@ function genererHtmlLignesCoursRestants() {
     const coursAutres = G_COURS_AUTRES_TACHES_CHAMP.filter((c) => c.grprestant > 0);
     let html = "";
 
-    html += `<tr><td colspan="5" class="sous-titre-attributions">Périodes d'enseignement</td></tr>`;
+    html += `<tr class="sous-titre-attributions-row"><td colspan="5" class="sous-titre-attributions">Périodes d'enseignement</td></tr>`;
     if (coursEnseignement.length > 0) {
         coursEnseignement.forEach((c) => (html += `<tr><td>${c.codecours}</td><td>${c.coursdescriptif}</td><td>${c.grprestant}</td><td>${formatPeriodes(c.nbperiodes)}</td><td>${formatPeriodes(c.nbperiodes * c.grprestant)}</td></tr>`));
     } else {
         html += `<tr><td colspan="5" style="text-align:center; font-style:italic;">Tous choisis.</td></tr>`;
     }
 
-    html += `<tr><td colspan="5" class="sous-titre-attributions">Autres tâches</td></tr>`;
+    html += `<tr class="sous-titre-attributions-row"><td colspan="5" class="sous-titre-attributions">Autres tâches</td></tr>`;
     if (coursAutres.length > 0) {
         coursAutres.forEach((c) => (html += `<tr><td>${c.codecours}</td><td>${c.coursdescriptif}</td><td>${c.grprestant}</td><td>${formatPeriodes(c.nbperiodes)}</td><td>${formatPeriodes(c.nbperiodes * c.grprestant)}</td></tr>`));
     } else {
@@ -483,9 +520,9 @@ function ajouterEnseignantDynamiquement(enseignant) {
     newCard.querySelector("[data-template-id-btn]").dataset.enseignantId = enseignant.enseignantid;
     newCard.querySelector("[data-template-id-table]").id = `table-attributions-${enseignant.enseignantid}`;
     newCard.querySelector("[data-template-id-tbody]").id = `tbody-attributions-${enseignant.enseignantid}`;
-    newCard.querySelector(".signature-line").textContent = `Signature de l'enseignant : ${enseignant.nomcomplet}`;
+    clone.querySelector(".signature-line").textContent = `Signature de l'enseignant : ${enseignant.nomcomplet}`;
 
-    container.insertBefore(newCard, btnCreer);
+    container.insertBefore(clone, btnCreer);
     regenererTableauAttributionsEnseignant(enseignant.enseignantid, enseignant.attributions || []);
     appliquerStatutVerrouillagePourCarte(document.getElementById(`enseignant-card-${enseignant.enseignantid}`));
 }
@@ -541,21 +578,23 @@ function genererRapportSommairePourImpression() {
 
 /**
  * Génère le HTML du tableau sommaire du champ pour l'impression.
+ * IMPORTANT : Cette version exclut les enseignants fictifs (tâches restantes).
  * @returns {string} Le code HTML du tableau.
  */
 function genererHtmlTableauSommaireChamp() {
     let tbodyHtml = "";
-    const enseignantsTries = [...G_ENSEIGNANTS_INITIAL_DATA].sort((a, b) => {
-        if (a.estfictif !== b.estfictif) return a.estfictif ? 1 : -1;
+    // Filtrer les enseignants fictifs avant de trier et d'afficher.
+    const enseignantsReels = G_ENSEIGNANTS_INITIAL_DATA.filter((e) => !e.estfictif);
+
+    const enseignantsTries = [...enseignantsReels].sort((a, b) => {
         return (a.nom || "").localeCompare(b.nom || "") || (a.prenom || "").localeCompare(b.prenom || "");
     });
 
     enseignantsTries.forEach((enseignant) => {
         const p = enseignant.periodes_actuelles || { periodes_cours: 0, periodes_autres: 0, total_periodes: 0 };
-        const nom = (enseignant.nom && enseignant.prenom) ? `${enseignant.nom}, ${enseignant.prenom}` : enseignant.nomcomplet;
+        const nom = `${enseignant.nom}, ${enseignant.prenom}`;
         let statut = "Temps Plein";
-        if (enseignant.estfictif) statut = "Tâche Restante";
-        else if (!enseignant.esttempsplein) statut = "Temps Partiel";
+        if (!enseignant.esttempsplein) statut = "Temps Partiel";
 
         tbodyHtml += `
             <tr>

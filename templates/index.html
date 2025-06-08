@@ -6,36 +6,39 @@
     <title>Gestion des Tâches Enseignants</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     
-    <!-- NOUVEAU: Script pour appliquer le thème instantanément -->
+    <!-- Script pour appliquer le thème instantanément et éviter le FOUC -->
     <script>
         (function() {
+            /**
+             * Applique le thème spécifié au corps du document.
+             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
+             */
             function applyTheme(theme) {
-                // Applique le thème en ajoutant/retirant une classe sur le body.
-                document.body.classList.remove('theme-dark', 'theme-vintage');
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
                 if (theme === 'dark') {
                     document.body.classList.add('theme-dark');
                 } else if (theme === 'vintage') {
                     document.body.classList.add('theme-vintage');
+                } else {
+                    document.body.classList.add('theme-light'); // Thème par défaut explicite
                 }
-                // 'light' est le thème par défaut, aucune classe n'est nécessaire.
             }
-        
-            // Applique le thème sauvegardé dès que possible.
+            // Récupère le thème sauvegardé ou utilise 'light' par défaut.
             const savedTheme = localStorage.getItem('appTheme') || 'light';
             applyTheme(savedTheme);
         })();
     </script>
 </head>
-<body class="theme-light"> <!-- La classe par défaut est ajoutée ici -->
+<body class="theme-light">
     <header>
         <h1>Application de Gestion des Tâches</h1>
         <p>Bienvenue ! Sélectionnez une option dans la navigation pour commencer.</p>
 
-        <!-- NOUVEAU: Sélecteur de thème -->
+        <!-- Sélecteur de thème -->
         <div class="theme-switcher no-print">
-            <button id="theme-btn-light" data-theme="light">Clair</button>
-            <button id="theme-btn-dark" data-theme="dark">Sombre</button>
-            <button id="theme-btn-vintage" data-theme="vintage">Vintage</button>
+            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
         </div>
     </header>
 
@@ -97,44 +100,45 @@
     </main>
 
     <footer>
-        <p>© {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
+        <p>© {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier ⓚ</p>
     </footer>
 
-    <!-- NOUVEAU: Script pour gérer les clics et mettre à jour le thème actif -->
+    <!-- Script pour gérer les clics et mettre à jour le thème actif -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const themeSwitcher = document.querySelector('.theme-switcher');
-            const themeButtons = document.querySelectorAll('.theme-switcher button');
-            
-            function applyTheme(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                document.body.classList.add(`theme-${theme}`);
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
                 
-                themeButtons.forEach(btn => {
-                    btn.classList.remove('active');
+                /**
+                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
+                 * @param {string} theme - Le nom du thème à appliquer.
+                 */
+                function applyThemeUI(theme) {
+                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                    document.body.classList.add(`theme-${theme}`);
+                    
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) {
+                        activeButton.classList.add('active');
+                    }
+                }
+
+                // Écoute les clics sur le conteneur du sélecteur de thème pour déléguer l'événement.
+                themeSwitcher.addEventListener('click', function(event) {
+                    // Vérifie si l'élément cliqué est un bouton
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme; // Récupère le thème du data-attribute
+                        localStorage.setItem('appTheme', theme); // Sauvegarde le choix de l'utilisateur
+                        applyThemeUI(theme); // Applique le thème visuellement
+                    }
                 });
 
-                const activeButton = document.getElementById(`theme-btn-${theme}`);
-                if (activeButton) {
-                    activeButton.classList.add('active');
-                }
+                // Applique le thème sauvegardé au chargement DOM complet.
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme); 
             }
-
-            function setTheme(theme) {
-                localStorage.setItem('appTheme', theme);
-                applyTheme(theme);
-            }
-
-            themeSwitcher.addEventListener('click', function(event) {
-                if (event.target.tagName === 'BUTTON') {
-                    const theme = event.target.dataset.theme;
-                    setTheme(theme);
-                }
-            });
-
-            // Appliquer le thème actif au chargement
-            const savedTheme = localStorage.getItem('appTheme') || 'light';
-            applyTheme(savedTheme); 
         });
     </script>
 </body>

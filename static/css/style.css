@@ -92,8 +92,6 @@ body {
     min-height: 100vh;
     transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
     font-size: 1.2rem;
-    /* font-size: 1.0625rem;  Environ 17px */
-    /* font-size: 1.125rem;   Environ 18px */
 }
 
 /* --- Typographie --- */
@@ -168,13 +166,18 @@ nav ul strong { display: block; margin-top: 1rem; margin-bottom: 0.5rem; color: 
     color: var(--color-text-on-primary);
     border-color: var(--color-primary);
 }
+/* Groupe de boutons */
+ .button-group {
+    display: flex;
+    gap: 0.5rem; /* Espace entre les boutons */
+    flex-wrap: wrap; /* Permet aux boutons de passer à la ligne sur petit écran */
+    margin-top: 1rem;
+ }
 
 
 /* --- Messages Flash --- */
 .flash-messages { list-style-type: none; padding: 0; margin-bottom: 1.5rem; }
 .flash-messages li { padding: 1rem 1.5rem; margin-bottom: 1rem; border: 1px solid transparent; border-radius: var(--border-radius); font-weight: 500; }
-/* Les couleurs spécifiques sont définies globalement pour tous les thèmes.
-   Si un thème a besoin de couleurs de flash différentes, surchargez-les dans le bloc du thème. */
 .flash-messages .success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
 .flash-messages .error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
 .flash-messages .warning { background-color: #fff3cd; color: #856404; border-color: #ffeeba; }
@@ -207,240 +210,103 @@ select:focus {
 .checkbox-group input[type="checkbox"] { margin-right: 0.75rem; width: 1.25rem; height: 1.25rem; }
 .checkbox-group label { margin-bottom: 0; font-weight: normal; }
 
-button, .btn { display: inline-block; padding: 0.625rem 1.25rem; border: none; border-radius: var(--border-radius); font-size: 1rem; font-weight: 500; text-align: center; cursor: pointer; transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, transform var(--transition-speed) ease; }
-button:hover, .btn:hover { transform: translateY(-1px); }
+button, .btn { display: inline-block; padding: 0.625rem 1.25rem; border: none; border-radius: var(--border-radius); font-size: 1rem; font-weight: 500; text-align: center; cursor: pointer; transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, transform var(--transition-speed) ease; text-decoration: none; /* Pour les liens .btn */ }
+button:hover, .btn:hover { transform: translateY(-1px); text-decoration: none; /* Pour les liens .btn */ }
 button:disabled, .btn:disabled { background-color: var(--color-secondary); opacity: 0.65; cursor: not-allowed; transform: none; }
 .btn-primary { background-color: var(--color-primary); color: var(--color-text-on-primary); }
-.btn-primary:hover:not(:disabled) { background-color: var(--color-primary-hover); }
+.btn-primary:hover:not(:disabled) { background-color: var(--color-primary-hover); color: var(--color-text-on-primary); }
 .btn-success { background-color: var(--color-success); color: var(--color-text-on-primary); }
-.btn-success:hover:not(:disabled) { background-color: var(--color-success-hover); }
+.btn-success:hover:not(:disabled) { background-color: var(--color-success-hover); color: var(--color-text-on-primary); }
 .btn-danger { background-color: var(--color-danger); color: var(--color-text-on-primary); }
-.btn-danger:hover:not(:disabled) { background-color: var(--color-danger-hover); }
+.btn-danger:hover:not(:disabled) { background-color: var(--color-danger-hover); color: var(--color-text-on-primary); }
 .btn-info { background-color: var(--color-info); color: var(--color-text-on-primary); }
-.btn-info:hover:not(:disabled) { background-color: var(--color-info-hover); }
+.btn-info:hover:not(:disabled) { background-color: var(--color-info-hover); color: var(--color-text-on-primary); }
+.btn-secondary { background-color: var(--color-secondary); color: var(--color-text-on-primary); }
+.btn-secondary:hover:not(:disabled) { background-color: var(--color-primary-hover); }
 
 /* --- Tableaux --- */
-table { width: 100%; border-collapse: collapse; font-size: 0.9em; background-color: var(--color-surface); }
+table { width: 100%; border-collapse: collapse; font-size: 0.9em; background-color: var(--color-surface); margin-bottom: 1rem; }
 th, td { border: 1px solid var(--color-border); padding: 0.75rem; text-align: left; vertical-align: top; }
 th { background-color: var(--color-header-bg); font-weight: 600; }
 tbody tr:nth-of-type(odd) { background-color: color-mix(in srgb, var(--color-surface) 95%, var(--color-background)); }
-tbody tr:hover { background-color: var(--color-table-hover); }
+/* Éviter le hover sur les sous-titres */
+tbody tr:hover:not(.sous-titre-attributions-row) { background-color: var(--color-table-hover); }
 tfoot td { font-weight: bold; background-color: var(--color-header-bg); }
-
-/* ... [Le reste des styles que vous avez déjà validés, de .auth-form-container à @media print] ... */
-/* Le CSS existant que vous avez fourni fonctionnera très bien avec les variables, */
-/* donc je n'ai pas besoin de le modifier de manière significative. Les variables s'occuperont du theming. */
-/* Seuls les styles codés en dur (ex: background-color: #fff) ont été remplacés par des var(). */
 
 
 /* --- Composants spécifiques --- */
 /* Formulaires d'authentification */
-.auth-form-container {
-    max-width: 450px;
-    margin: 3rem auto;
-    padding: 2rem;
-    background-color: var(--color-surface);
-    border-radius: var(--border-radius);
-    box-shadow: var(--box-shadow);
-}
-.auth-form-container h2 {
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
-.auth-form-container button[type="submit"] {
-    width: 100%;
-    background-color: var(--color-primary);
-    color: var(--color-text-on-primary);
-}
-.auth-form-container button[type="submit"]:hover {
-    background-color: var(--color-primary-hover);
-}
-.auth-form-container p {
-    margin-top: 1.5rem;
-    font-size: 0.95em;
-    text-align: center;
-    color: var(--color-text-secondary);
-}
+.auth-form-container { max-width: 450px; margin: 3rem auto; padding: 2rem; background-color: var(--color-surface); border-radius: var(--border-radius); box-shadow: var(--box-shadow); }
+.auth-form-container h2 { text-align: center; margin-bottom: 1.5rem; }
+.auth-form-container button[type="submit"] { width: 100%; background-color: var(--color-primary); color: var(--color-text-on-primary); }
+.auth-form-container button[type="submit"]:hover { background-color: var(--color-primary-hover); }
+.auth-form-container p { margin-top: 1.5rem; font-size: 0.95em; text-align: center; color: var(--color-text-secondary); }
 
 /* Sections Admin */
-.admin-section {
-    background-color: var(--color-surface);
-    padding: 1.5rem;
-    border-radius: var(--border-radius);
-    margin-bottom: 2rem;
-    box-shadow: var(--box-shadow);
-}
-.admin-section h2 {
-    border-bottom: 1px solid var(--color-border);
-    padding-bottom: 0.75rem;
-    margin-bottom: 1.5rem;
-}
-.note-importation {
-    font-size: 0.9em;
-    color: var(--color-text-secondary);
-    margin-top: 1rem;
-    background-color: var(--color-background);
-    border: 1px solid var(--color-border);
-    padding: 1rem;
-    border-radius: var(--border-radius);
-}
-.note-importation ul {
-    padding-left: 1.25rem;
-}
-.warning-text {
-    color: var(--color-danger);
-    font-weight: bold;
-}
-.admin-info {
-    font-style: italic;
-    color: var(--color-text-secondary);
-    font-size: 0.9em;
-    margin-top: 5px;
-}
-.btn-importer {
-    background-color: var(--color-success);
-    color: var(--color-text-on-primary);
-}
-.btn-importer:hover:not(:disabled) {
-    background-color: var(--color-success-hover);
-}
+.admin-section { background-color: var(--color-surface); padding: 1.5rem; border-radius: var(--border-radius); margin-bottom: 2rem; box-shadow: var(--box-shadow); }
+.admin-section h2 { border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+.note-importation { font-size: 0.9em; color: var(--color-text-secondary); margin-top: 1rem; background-color: var(--color-background); border: 1px solid var(--color-border); padding: 1rem; border-radius: var(--border-radius); }
+.note-importation ul { padding-left: 1.25rem; }
+.warning-text { color: var(--color-danger); font-weight: bold; }
+.admin-info { font-style: italic; color: var(--color-text-secondary); font-size: 0.9em; margin-top: 5px; }
+.btn-importer { background-color: var(--color-success); color: var(--color-text-on-primary); }
+.btn-importer:hover:not(:disabled) { background-color: var(--color-success-hover); }
 
 /* Zone de messages API */
-.api-message {
-    margin-top: 1rem;
-    padding: 0.75rem 1.25rem;
-    border-radius: var(--border-radius);
-    display: none;
-    font-weight: 500;
-}
-/* Pas de changement de couleur pour les messages, ils sont universels. */
+.api-message { margin-top: 1rem; padding: 0.75rem 1.25rem; border-radius: var(--border-radius); display: none; font-weight: 500; }
+.api-message.success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; border: 1px solid;}
+.api-message.error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; border: 1px solid;}
+.api-message.info { background-color: #d1ecf1; color: #0c5460; border-color: #bee5eb; border: 1px solid;}
 
 
 /* --- Page CHAMP --- */
-.page-champ-container {
-    display: flex;
-    gap: 1.5rem;
-    flex-wrap: nowrap;
-}
-.enseignants-section, .cours-restants-section, .sommaire-champ-section {
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    padding: 1rem;
-    max-height: calc(100vh - 180px);
-    overflow-y: auto;
-}
+.page-champ-container { display: flex; gap: 1.5rem; flex-wrap: nowrap; }
+.print-button-group { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.enseignants-section, .cours-restants-section, .sommaire-champ-section { background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--border-radius); padding: 1rem; max-height: calc(100vh - 180px); overflow-y: auto; box-shadow: var(--box-shadow); }
 .enseignants-section { flex: 2; min-width: 450px; }
 .cours-restants-section, .sommaire-champ-section { flex: 1; min-width: 320px; }
-.section-title {
-    font-size: 1.2rem;
-    color: var(--color-text-primary);
-    border-bottom: 1px solid var(--color-border);
-    padding-bottom: 0.5rem;
-    margin-bottom: 1rem;
-}
-#lock-status-indicator {
-    font-size: 0.8em;
-    color: var(--color-danger);
-    margin-left: 0.75rem;
-}
-.enseignant-card {
-    border: 1px solid var(--color-border);
-    padding: 1rem;
-    margin-bottom: 1rem;
-    background-color: var(--color-surface);
-    border-radius: var(--border-radius);
-    transition: background-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
-    border-left: 5px solid transparent;
-}
+.section-title { font-size: 1.2rem; color: var(--color-text-primary); border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; margin-bottom: 1rem; }
+#lock-status-indicator { font-size: 0.8em; color: var(--color-danger); margin-left: 0.75rem; display: inline-flex; align-items: center; gap: 4px; }
+#lock-status-indicator svg { vertical-align: middle; }
+.enseignant-card { border: 1px solid var(--color-border); padding: 1rem; margin-bottom: 1rem; background-color: var(--color-surface); border-radius: var(--border-radius); transition: background-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease; border-left: 5px solid transparent; }
 body.theme-light .enseignant-fictif { background-color: #f0f8ff; border-left-color: #cce5ff; }
 body.theme-dark .enseignant-fictif { background-color: #2b3a4a; border-left-color: #4f7396; }
 body.theme-vintage .enseignant-fictif { background-color: #f5f0e3; border-left-color: #ccc8bc; }
-
-.enseignant-card.detail-visible {
-    border-left-color: var(--color-primary);
-    box-shadow: var(--box-shadow);
-}
+.enseignant-card.detail-visible { border-left-color: var(--color-primary); box-shadow: var(--box-shadow); }
 body.theme-light .enseignant-card.detail-visible { background-color: #e7f3fe; }
 body.theme-dark .enseignant-card.detail-visible { background-color: #344050; }
 body.theme-vintage .enseignant-card.detail-visible { background-color: #e6e0ce; }
-
-
-.entete-enseignant {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    padding: 0.25rem 0;
-}
-.entete-enseignant:hover .nom-enseignant-texte {
-    color: var(--color-primary);
-}
-.arrow-indicator {
-    transition: transform var(--transition-speed) ease;
-    width: 20px; height: 20px;
-    fill: currentColor;
-}
+.entete-enseignant { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 0.25rem 0; }
+.entete-enseignant:hover .nom-enseignant-texte { color: var(--color-primary); }
+.arrow-indicator { transition: transform var(--transition-speed) ease; width: 20px; height: 20px; fill: currentColor; flex-shrink: 0; margin-left: 8px; }
 .enseignant-card.detail-visible .arrow-indicator { transform: rotate(90deg); }
-.contenu-selection-cours {
-    display: none;
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px dashed var(--color-border);
-}
+.action-enseignant-fictif { text-align: right; margin-bottom: 0.5rem; }
+.contenu-selection-cours { display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--color-border); }
 .enseignant-card.detail-visible .contenu-selection-cours { display: block; }
-.cours-selection ul { list-style-type: none; padding-left: 0; }
-.cours-selection li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    border-bottom: 1px solid var(--color-border);
-}
+.cours-selection ul { list-style-type: none; padding-left: 0; margin-top: 0.5rem; margin-bottom: 1.5rem; }
+.cours-selection li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--color-border); font-size: 0.9em; }
 .cours-selection li:last-child { border-bottom: none; }
-.cours-selection button, .btn-retirer-cours, .btn-supprimer-enseignant {
-    padding: 0.25rem 0.6rem;
-    font-size: 0.85em;
-    background-color: var(--color-primary);
-    color: var(--color-text-on-primary);
-}
-.btn-retirer-cours, .btn-supprimer-enseignant {
-    background-color: var(--color-danger);
-}
-.btn-retirer-cours:hover:not(:disabled), .btn-supprimer-enseignant:hover:not(:disabled) {
-    background-color: var(--color-danger-hover);
-}
-.sous-titre-attributions td {
-    background-color: var(--color-header-bg);
-    font-weight: bold;
-    text-align: center;
-}
-.total-attributions-row td {
-    font-weight: bold;
-    background-color: var(--color-header-bg);
-    text-align: right;
-}
+.cours-selection button, .btn-retirer-cours, .btn-supprimer-enseignant { padding: 0.25rem 0.6rem; font-size: 0.85em; background-color: var(--color-primary); color: var(--color-text-on-primary); flex-shrink: 0; margin-left: 8px; }
+.btn-retirer-cours, .btn-supprimer-enseignant { background-color: var(--color-danger); }
+.btn-retirer-cours:hover:not(:disabled), .btn-supprimer-enseignant:hover:not(:disabled) { background-color: var(--color-danger-hover); }
+.sous-titre-attributions-row td, .sous-titre-attributions { background-color: var(--color-header-bg) !important; font-weight: bold; text-align: center; padding-top: 1rem; }
+.total-attributions-row td { font-weight: bold; background-color: var(--color-header-bg); text-align: right; }
 .total-attributions-row td:first-child { text-align: left; }
-.signature-line {
-    margin-top: 40px;
-    border-top: 1px solid var(--color-text-primary);
-    padding-top: 5px;
-    font-style: italic;
-}
+.signature-line { margin-top: 40px; border-top: 1px solid var(--color-text-primary); padding-top: 5px; font-style: italic; width: 60%; min-width: 250px; display: none; }
+.print-only { display: none; }
+
 
 /* --- Page SOMMAIRE --- */
-.container-principal-sommaire { display: flex; flex-grow: 1; overflow: hidden; gap: 1.5rem; }
-.colonne-sommaire { display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; padding: 1rem; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--border-radius); }
-.colonne-gauche { flex-basis: 35%; }
-.colonne-droite { flex-basis: 65%; }
+.container-principal-sommaire { display: flex; flex-grow: 1; overflow: hidden; gap: 1.5rem; flex-wrap: wrap; }
+.colonne-sommaire { display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; padding: 1rem; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--border-radius); box-shadow: var(--box-shadow); }
+.colonne-gauche { flex: 1 1 35%; min-width: 380px;}
+.colonne-droite { flex: 2 1 60%; min-width: 500px;}
 .section-sommaire { padding: 1.5rem; border-radius: var(--border-radius); background-color: var(--color-background); border: 1px solid var(--color-border); }
 #table-moyennes-par-champ td:last-child { text-align: center; vertical-align: middle; }
 .moyenne-generale-contenu { display: flex; justify-content: space-between; align-items: center; font-size: 1.2em; font-weight: bold; }
 .champ-header-row th.champ-title-cell { background-color: color-mix(in srgb, var(--color-primary) 15%, var(--color-surface)); font-size: 1.1em; padding: 0.75rem 1rem; text-align: center; font-weight: bold; position: sticky; top: 0; z-index: 2; }
-.column-header-row th { background-color: var(--color-header-bg); position: sticky; top: 48px; /* Ajuster selon hauteur de la ligne d'en-tête */ z-index: 1; }
+.column-header-row th { background-color: var(--color-header-bg); position: sticky; top: 48px; z-index: 1; }
 .statut-non-compte { color: var(--color-text-secondary); font-style: italic; }
-
-/* Styles pour les rangées du sommaire par statut */
 body.theme-light .enseignant-fictif-sommaire { background-color: #f0f8ff; }
 body.theme-light .enseignant-temps-partiel-sommaire { background-color: #fefae0; }
 body.theme-dark .enseignant-fictif-sommaire { background-color: #2b3a4a; }
@@ -459,29 +325,58 @@ body.theme-vintage .enseignant-temps-partiel-sommaire { background-color: #f9f4d
 /* --- Administration des Utilisateurs --- */
 .user-actions { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
 .btn-toggle-access, .btn-save-access, .btn-delete-user { padding: 5px 10px; font-size: 0.9em; white-space: nowrap; }
-.btn-toggle-access { background-color: var(--color-secondary); color: var(--color-text-on-primary); }
+.btn-toggle-access { background-color: var(--color-secondary); color: var(--color-text-on-primary); margin: 2px; }
+.btn-toggle-access:hover:not(:disabled) { background-color: var(--color-primary-hover);}
 .btn-toggle-access.active { background-color: var(--color-success); }
+.btn-toggle-access.active:hover:not(:disabled) { background-color: var(--color-success-hover); }
 .btn-save-access { background-color: var(--color-info); color: var(--color-text-on-primary); }
+.btn-save-access:hover:not(:disabled) { background-color: var(--color-info-hover); }
 .btn-delete-user { background-color: var(--color-danger); color: var(--color-text-on-primary); }
-.create-user-form .champ-selection-create { margin-top: 1rem; padding: 1rem; border: 1px solid var(--color-border); background-color: var(--color-background); border-radius: var(--border-radius); max-height: 150px; overflow-y: auto; }
+.btn-delete-user:hover:not(:disabled) { background-color: var(--color-danger-hover); }
+.create-user-form .champ-selection-create { margin-top: 1rem; padding: 1rem; border: 1px solid var(--color-border); background-color: var(--color-background); border-radius: var(--border-radius); max-height: 180px; overflow-y: auto; transition: opacity var(--transition-speed); }
+.champ-access-buttons { display: flex; flex-wrap: wrap; gap: 0; align-items: center; }
+#users-table .api-message { margin-top: 0.5rem; width: 100%;}
 
 
 /* --- Styles d'impression --- */
 @media print {
-    /* ... les styles d'impression restent inchangés ... */
-    .no-print { display: none !important; }
+     /* Règles de base pour l'impression */
+    .no-print, header, nav, footer, .theme-switcher, .button-group { display: none !important; }
     .print-only { display: block !important; }
-    body { margin: 0; padding: 1rem; background-color: #fff; display: block; color: #000; }
-    header, nav, footer, .theme-switcher { display: none !important; }
-    main, .page-champ-container, .enseignants-section, .sommaire-champ-section, .cours-restants-section { display: block !important; width: 100%; max-height: none; overflow: visible; border: none; padding: 0; box-shadow: none; background-color: transparent !important; }
-    .enseignant-card { border: 1px solid #000; padding: 15px; margin-bottom: 20px; page-break-inside: avoid; }
-    table { font-size: 9pt; width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #000; padding: 4px; }
-    th { background-color: #e0e0e0 !important; }
-    .total-attributions-row { border-top: 2px solid #000; }
+    body { margin: 0; padding: 0.5rem; background-color: #fff !important; display: block; color: #000 !important; font-size: 10pt; }
+    main, .page-champ-container, .enseignants-section { display: block !important; width: 100%; max-height: none; overflow: visible; border: none; padding: 0; box-shadow: none; background-color: transparent !important; gap: 0; margin: 0; }
     a { text-decoration: none; color: #000; }
-    #print-summary-page { page-break-after: always; }
-    #print-summary-page h2 { font-size: 14pt; margin-top: 0; }
-    #print-summary-page table { margin-bottom: 40px; }
-    #print-summary-page tfoot td { font-weight: bold; }
+    .signature-line { display: block !important; border-color: #000 !important; }
+    .arrow-indicator { display: none !important; }
+    .entete-enseignant { cursor: auto; }
+    .titre-enseignant-bascule { margin-bottom: 10px; color: #000 !important;}
+    h2.section-title { font-size: 14pt; border-color: #000 !important; }
+
+     /* Styles des tableaux à l'impression */
+    table { font-size: 9pt; width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; }
+    th, td { border: 1px solid #000; padding: 4px; background-color: transparent !important; }
+    th { background-color: #e0e0e0 !important; }
+    tbody tr:nth-of-type(odd) { background-color: #f9f9f9 !important; }
+    .total-attributions-row, tfoot tr { border-top: 2px solid #000; font-weight: bold;}
+    .sous-titre-attributions-row td, .sous-titre-attributions { background-color: #f0f0f0 !important; }
+
+     /* Style des cartes enseignant */
+    .enseignant-card { border: 1px solid #888 !important; padding: 10px; margin-bottom: 15px; page-break-inside: avoid; background-color: transparent !important; box-shadow: none !important; border-left: 1px solid #888 !important; }
+    #print-summary-page { display: none; } /* Caché par défaut */
+
+     /* --- Impression Spécifique : Mode "Imprimer le champ" --- */
+    body.printing-champ .enseignant-card.enseignant-fictif { display: none !important; }
+    body.printing-champ #print-summary-page { display: block !important; }
+    body.printing-champ .enseignants-section { display: block !important; }
+    body.printing-champ .enseignant-card:not(.enseignant-fictif) { display: block !important; }
+    /* Saut de page après le sommaire des tâches */
+    body.printing-champ #tableau-sommaire-champ-print { page-break-after: always; }
+    /* Saut de page après les périodes restantes */
+    body.printing-champ #tableau-cours-restants-print { page-break-after: always; }
+
+     /* --- Impression Spécifique : Mode "Imprimer les tâches restantes" --- */
+    body.printing-taches-restantes .enseignant-card:not(.enseignant-fictif) { display: none !important; }
+    body.printing-taches-restantes #print-summary-page { display: none !important; }
+    body.printing-taches-restantes .enseignants-section { display: block !important; }
+    body.printing-taches-restantes .enseignant-card.enseignant-fictif { display: block !important; }
 }

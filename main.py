@@ -406,7 +406,10 @@ def get_all_enseignants_avec_details() -> list[dict]:
 
 
 def get_cours_disponibles_par_champ(champ_no: str) -> list[dict]:
-    """Récupère les cours d'un champ, en calculant les groupes restants."""
+    """
+    Récupère les cours d'un champ, en calculant les groupes restants.
+    Les groupes assignés aux enseignants fictifs ne sont PAS décomptés.
+    """
     db = get_db()
     if not db:
         return []
@@ -414,9 +417,12 @@ def get_cours_disponibles_par_champ(champ_no: str) -> list[dict]:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
-                SELECT c.CodeCours, c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre, c.NbGroupeInitial,
-                       (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0)) AS grprestant
-                FROM Cours c LEFT JOIN AttributionsCours ac ON c.CodeCours = ac.CodeCours
+                SELECT
+                    c.CodeCours, c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre, c.NbGroupeInitial,
+                    (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris) FILTER (WHERE e.EstFictif = FALSE), 0)) AS grprestant
+                FROM Cours c
+                LEFT JOIN AttributionsCours ac ON c.CodeCours = ac.CodeCours
+                LEFT JOIN Enseignants e ON ac.EnseignantID = e.EnseignantID
                 WHERE c.ChampNo = %s
                 GROUP BY c.CodeCours
                 ORDER BY c.EstCoursAutre, c.CodeCours;
@@ -494,7 +500,9 @@ def calculer_periodes_enseignant(enseignant_id: int) -> dict[str, float]:
 
 
 def get_groupes_restants_pour_cours(code_cours: str) -> int:
-    """Calcule le nombre de groupes restants pour un cours."""
+    """
+    Calcule le nombre de groupes restants pour un cours, en ignorant les attributions aux enseignants fictifs.
+    """
     db = get_db()
     if not db:
         return 0
@@ -502,16 +510,17 @@ def get_groupes_restants_pour_cours(code_cours: str) -> int:
         with db.cursor() as cur:
             cur.execute(
                 """
-                SELECT (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0))
+                SELECT (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris) FILTER (WHERE e.EstFictif = FALSE), 0))
                 FROM Cours c
                 LEFT JOIN AttributionsCours ac ON c.CodeCours = ac.CodeCours
+                LEFT JOIN Enseignants e ON ac.EnseignantID = e.EnseignantID
                 WHERE c.CodeCours = %s
                 GROUP BY c.CodeCours;
                 """,
                 (code_cours,),
             )
             result = cur.fetchone()
-            return result[0] if result else 0
+            return int(result[0]) if result else 0
     except psycopg2.Error as e:
         app.logger.error(f"Erreur DAO get_groupes_restants_pour_cours pour {code_cours}: {e}")
         db.rollback()
@@ -1115,6 +1124,10 @@ def allowed_file(filename: str) -> bool:
 def api_importer_cours_excel() -> Any:
     """Importe les données des cours depuis un fichier Excel."""
     db = get_db()
+    if not db:
+        flash("Connexion à la base de données impossible.", "error")
+        return redirect(url_for("page_administration_donnees"))
+
     if "fichier_cours" not in request.files or not (file := request.files["fichier_cours"]) or not file.filename:
         flash("Aucun fichier valide sélectionné.", "warning")
         return redirect(url_for("page_administration_donnees"))
@@ -1133,19 +1146,29 @@ def api_importer_cours_excel() -> Any:
         for row_idx, row in enumerate(iter(sheet.rows), 1):
             if row_idx == 1:
                 continue  # Ignorer l'en-tête
-            # ... (logique de parsing détaillée)
-            # Pour la simplicité de la réponse, nous omettons la logique de parsing détaillée,
-            # car elle était déjà fonctionnelle. Nous nous concentrons sur la transaction.
-            # La logique complète de parsing de la version précédente est conservée.
-            champ_no, code_cours, desc, nb_grp, nb_per, est_autre = (c.value for c in row[:2] + row[3:6] + row[7:8])
-            if not all([champ_no, code_cours, desc]):
+            # Colonne A: Champ, B: Code Cours, D: Descriptif, E: Groupes, F: Périodes, H: Cours Autre
+            values = [cell.value for cell in row]
+            if not any(values):
+                continue  # Ignorer les lignes vides
+            if len(values) < 8:
+                values.extend([None] * (8 - len(values)))  # Remplir les cellules manquantes
+
+            champ_no, code_cours, desc, nb_grp, nb_per, est_autre = values[0], values[1], values[3], values[4], values[5], values[7]
+            if not all([champ_no, code_cours, desc, nb_grp, nb_per]):
                 flash(f"Ligne {row_idx} (Cours): Données essentielles manquantes, ligne ignorée.", "warning")
                 continue
-            nouveaux_cours.append({
-                "codecours": str(code_cours).strip(), "champno": str(champ_no).strip(),
-                "coursdescriptif": str(desc).strip(), "nbperiodes": float(str(nb_per).replace(",", ".")),
-                "nbgroupeinitial": int(nb_grp), "estcoursautre": str(est_autre).strip().upper() == "VRAI"
-            })
+            try:
+                nouveaux_cours.append({
+                    "codecours": str(code_cours).strip(),
+                    "champno": str(champ_no).strip(),
+                    "coursdescriptif": str(desc).strip(),
+                    "nbperiodes": float(str(nb_per).replace(",", ".")),
+                    "nbgroupeinitial": int(nb_grp),
+                    "estcoursautre": str(est_autre).strip().upper() == "VRAI",
+                })
+            except (ValueError, TypeError) as conversion_error:
+                flash(f"Ligne {row_idx} (Cours): Erreur de format de données ({conversion_error}), ligne ignorée.", "warning")
+                continue
 
         if not nouveaux_cours:
             flash("Aucun cours valide trouvé dans le fichier.", "warning")
@@ -1178,6 +1201,10 @@ def api_importer_cours_excel() -> Any:
 def api_importer_enseignants_excel() -> Any:
     """Importe les données des enseignants depuis un fichier Excel."""
     db = get_db()
+    if not db:
+        flash("Connexion à la base de données impossible.", "error")
+        return redirect(url_for("page_administration_donnees"))
+
     if "fichier_enseignants" not in request.files or not (file := request.files["fichier_enseignants"]) or not file.filename:
         flash("Aucun fichier valide sélectionné.", "warning")
         return redirect(url_for("page_administration_donnees"))
@@ -1196,15 +1223,24 @@ def api_importer_enseignants_excel() -> Any:
         for row_idx, row in enumerate(iter(sheet.rows), 1):
             if row_idx == 1:
                 continue  # Ignorer l'en-tête
-            # ... (logique de parsing détaillée conservée)
-            champ_no, nom, prenom, temps_plein = (c.value for c in row[:4])
+            values = [cell.value for cell in row]
+            if not any(values):
+                continue
+
+            # Colonne A: Champ, B: Nom, C: Prénom, D: Temps plein
+            if len(values) < 4:
+                values.extend([None] * (4 - len(values)))
+            champ_no, nom, prenom, temps_plein = values[0], values[1], values[2], values[3]
             if not all([champ_no, nom, prenom]):
                 flash(f"Ligne {row_idx} (Enseignants): Données essentielles manquantes, ligne ignorée.", "warning")
                 continue
             nom, prenom = str(nom).strip(), str(prenom).strip()
             nouveaux_enseignants.append({
-                "nomcomplet": f"{prenom} {nom}", "nom": nom, "prenom": prenom,
-                "champno": str(champ_no).strip(), "esttempsplein": str(temps_plein).strip().upper() == "VRAI"
+                "nomcomplet": f"{prenom} {nom}",
+                "nom": nom,
+                "prenom": prenom,
+                "champno": str(champ_no).strip(),
+                "esttempsplein": str(temps_plein).strip().upper() == "VRAI",
             })
 
         if not nouveaux_enseignants:
