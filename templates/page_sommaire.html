@@ -10,42 +10,42 @@
         body {
             display: flex;
             flex-direction: column;
-            height: 100vh; 
-            margin: 0; 
+            height: 100vh;
+            margin: 0;
         }
 
         header {
-            flex-shrink: 0; 
-            padding-bottom: 5px; 
+            flex-shrink: 0;
+            padding-bottom: 5px;
         }
-        header h1 { 
-            margin-top: 10px; 
-            margin-bottom: 5px; 
+        header h1 {
+            margin-top: 10px;
+            margin-bottom: 5px;
             margin-left: 20px;
             margin-right: 20px;
-            font-size: 1.8em; 
+            font-size: 1.8em;
         }
-        header p { 
-            margin-top: 0; 
-            margin-bottom: 10px; 
+        header p {
+            margin-top: 0;
+            margin-bottom: 10px;
             margin-left: 20px;
             margin-right: 20px;
         }
 
         .container-principal-sommaire {
             display: flex;
-            flex-grow: 1; 
-            overflow: hidden; 
-            padding: 10px 15px 15px 15px; 
-            gap: 15px; 
+            flex-grow: 1;
+            overflow: hidden;
+            padding: 10px 15px 15px 15px;
+            gap: 15px;
         }
 
         .colonne-sommaire {
             display: flex;
             flex-direction: column;
-            gap: 15px; 
-            overflow-y: auto; 
-            padding: 10px; 
+            gap: 15px;
+            overflow-y: auto;
+            padding: 10px;
             border: 1px solid #e0e0e0;
             border-radius: 5px;
             background-color: #ffffff;
@@ -60,28 +60,28 @@
         }
 
         .section-sommaire {
-            padding: 10px 15px 15px 15px; 
+            padding: 10px 15px 15px 15px;
             border: 1px solid #ccc;
             border-radius:5px;
             background-color: #f9f9f9;
         }
         .section-sommaire h2 {
-            margin-top: 0; 
-            margin-bottom: 10px; 
-            font-size: 1.2em; 
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.2em;
         }
-        
+
         table { width: 100%; border-collapse: collapse; margin-top:10px; font-size: 0.9em; }
-        th { 
-            background-color: #e9ecef; 
-            padding: 8px; 
-            text-align: left; 
+        th {
+            background-color: #e9ecef;
+            padding: 8px;
+            text-align: left;
             border: 1px solid #ddd;
         }
-        td { 
-            border: 1px solid #ddd; 
-            padding: 8px; 
-            text-align: left; 
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
         }
         #table-moyennes-par-champ th:last-child,
         #table-moyennes-par-champ td:last-child {
@@ -102,21 +102,21 @@
         }
 
         .statut-non-compte { color: #6c757d; font-style: italic; }
-        
+
         .champ-header-row th.champ-title-cell {
-            background-color: #ddeeff; 
-            font-size: 1.05em; 
-            padding: 8px 10px; 
-            text-align: center; 
+            background-color: #ddeeff;
+            font-size: 1.05em;
+            padding: 8px 10px;
+            text-align: center;
             font-weight: bold;
         }
         .column-header-row th {
             background-color: #f8f9fa;
-            position: sticky; 
-            top: 0; 
-            z-index: 1; 
-            font-size: 0.85em; 
-            padding: 6px 8px; 
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            font-size: 0.85em;
+            padding: 6px 8px;
         }
 
         /* STYLES POUR LES ICÔNES SVG */
@@ -142,17 +142,17 @@
         }
 
         footer {
-            flex-shrink: 0; 
+            flex-shrink: 0;
             text-align: center;
             padding: 10px;
-            background-color: #f1f1f1; 
+            background-color: #f1f1f1;
             border-top: 1px solid #ddd;
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>Sommaire global des tâches des enseignants</h1> 
+        <h1>Sommaire global des tâches des enseignants</h1>
         <p><a href="{{ url_for('index') }}">« Retour à la navigation par champ</a></p>
     </header>
 
@@ -197,7 +197,8 @@
                     </tbody>
                 </table>
                 <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
-                {% if not enseignants_par_champ %}
+                {# Affichage initial si pas de données, JavaScript cachera si des données sont chargées #}
+                {% if not enseignants_par_champ or not enseignants_par_champ | selectattr('enseignants') | list | join %}
                 <p>Aucun enseignant à afficher initialement.</p>
                 {% endif %}
             </section>
@@ -209,7 +210,7 @@
     </footer>
 
     <script>
-        const INTERVAL_MISE_A_JOUR = 7000; 
+        const INTERVAL_MISE_A_JOUR = 7000;
 
         // DÉFINITION DES ICÔNES SVG POUR UNE UTILISATION UNIVERSELLE
         const SVG_LOCKED = `
@@ -223,9 +224,9 @@
 
 
         document.addEventListener('DOMContentLoaded', function() {
-            mettreAJourDonneesSommaire(); 
+            mettreAJourDonneesSommaire();
             setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
-            
+
             const tableMoyennes = document.getElementById('table-moyennes-par-champ');
             if(tableMoyennes) {
                 tableMoyennes.addEventListener('click', function(event) {
@@ -250,18 +251,22 @@
                     mettreAJourTableauMoyennesChamp(data.moyennes_par_champ);
                 } else {
                     console.warn("Données 'moyennes_par_champ' non trouvées.");
-                    mettreAJourTableauMoyennesChamp({});
+                    mettreAJourTableauMoyennesChamp({}); // Passer un objet vide pour vider le tableau
                 }
 
-                if (data.enseignants_par_champ?.length) {
+                // Vérifier si enseignants_par_champ existe et a au moins un champ avec des enseignants
+                const aDesEnseignants = data.enseignants_par_champ && data.enseignants_par_champ.some(champ => champ.enseignants && champ.enseignants.length > 0);
+                if (aDesEnseignants) {
                     mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ);
                 } else {
-                    mettreAJourTableauEnseignantsGroupes([]);
+                     console.warn("Données 'enseignants_par_champ' non trouvées ou vides.");
+                    mettreAJourTableauEnseignantsGroupes([]); // Passer un tableau vide pour vider le tableau
                 }
+
 
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale) {
-                    if (data.moyenne_generale !== undefined) {
+                    if (data.moyenne_generale !== undefined && data.moyenne_generale !== null) {
                         elMoyenneGenerale.textContent = `${parseFloat(data.moyenne_generale).toFixed(2)} périodes`;
                     } else {
                         elMoyenneGenerale.textContent = `N/A périodes`;
@@ -269,11 +274,12 @@
                 }
             } catch (error) {
                 console.error("Erreur MàJ sommaire:", error);
+                // Optionnel: Afficher une notification à l'utilisateur ici
             }
         }
 
         async function basculerVerrouChamp(champNo, iconElement) {
-            iconElement.style.opacity = '0.5';
+            iconElement.style.opacity = '0.5'; // Indication visuelle de l'action en cours
             try {
                 const response = await fetch(`/api/champs/${champNo}/basculer_verrou`, {
                     method: 'POST',
@@ -286,12 +292,12 @@
                 mettreAJourIconeVerrou(iconElement, data.est_verrouille);
             } catch (error) {
                 console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
-                alert(error.message);
+                alert(error.message); // Ou une notification plus discrète
             } finally {
                 iconElement.style.opacity = '1';
             }
         }
-        
+
         /**
          * Met à jour l'icône de verrouillage SVG en fonction de son état.
          * @param {HTMLElement} iconElement - L'élément conteneur de l'icône à mettre à jour.
@@ -310,24 +316,29 @@
                 iconElement.title = 'Champ déverrouillé. Cliquer pour verrouiller.';
             }
         }
-        
+
         function mettreAJourTableauEnseignantsGroupes(enseignantsParChampData) {
             const tbody = document.querySelector('#table-detail-enseignants tbody');
             const aucunEnseignantMsg = document.getElementById('aucun-enseignant-message');
             const tableDetailEnseignants = document.getElementById('table-detail-enseignants');
 
-            if (!tbody) return; 
-            tbody.innerHTML = ''; 
+            if (!tbody) return;
+            tbody.innerHTML = ''; // Vider le contenu précédent
 
-            if (enseignantsParChampData.length > 0) {
+            if (enseignantsParChampData && enseignantsParChampData.length > 0 && enseignantsParChampData.some(champ => champ.enseignants && champ.enseignants.length > 0)) {
                 if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'none';
                 if (tableDetailEnseignants) tableDetailEnseignants.style.display = 'table';
 
                 enseignantsParChampData.forEach(champData => {
+                    // Ne pas afficher un champ s'il n'a pas d'enseignants
+                    if (!champData.enseignants || champData.enseignants.length === 0) {
+                        return;
+                    }
+
                     const champHeaderRow = tbody.insertRow();
                     champHeaderRow.classList.add('champ-header-row');
-                    const champTitleCell = document.createElement('th'); 
-                    champTitleCell.colSpan = 5; 
+                    const champTitleCell = document.createElement('th');
+                    champTitleCell.colSpan = 5; // Nom, Pér. cours, Pér. autres, Total pér., Compte moyenne
                     champTitleCell.classList.add('champ-title-cell');
                     champTitleCell.textContent = `Champ ${champData.champno} - ${champData.champnom}`;
                     champHeaderRow.appendChild(champTitleCell);
@@ -340,20 +351,29 @@
                         columnHeaderRow.appendChild(th);
                     });
 
+                    // Les enseignants sont déjà triés par Nom, Prénom par le backend (via get_all_enseignants_avec_details)
                     champData.enseignants.forEach(ens => {
                         const row = tbody.insertRow();
                         row.dataset.enseignantId = ens.enseignantid;
-                        row.insertCell().textContent = ens.nomcomplet;
+
+                        // Affichage Nom, Prénom ou NomComplet
+                        const nomCell = row.insertCell();
+                        if (ens.nom && ens.prenom) {
+                            nomCell.textContent = `${ens.nom}, ${ens.prenom}`;
+                        } else {
+                            nomCell.textContent = ens.nomcomplet; // Pour les tâches fictives
+                        }
+
                         row.insertCell().textContent = ens.periodes_cours;
                         row.insertCell().textContent = ens.periodes_autres;
                         row.insertCell().textContent = ens.total_periodes;
-                        
+
                         const cellCompteMoyenne = row.insertCell();
                         if (ens.compte_pour_moyenne_champ) {
                             cellCompteMoyenne.textContent = 'Oui';
                         } else {
                             let nonCompteText = 'Non';
-                            if (ens.estfictif) nonCompteText += ' (Fictif)';
+                            if (ens.estfictif) nonCompteText += ' (Tâche restante)';
                             else if (!ens.esttempsplein) nonCompteText += ' (T. Partiel)';
                             cellCompteMoyenne.innerHTML = `<span class="statut-non-compte">${nonCompteText}</span>`;
                         }
@@ -364,13 +384,13 @@
                 if (aucunEnseignantMsg) aucunEnseignantMsg.style.display = 'block';
             }
         }
-        
+
         function comparerNumerosChamp(a, b) {
-            const regex = /^(\d+)([a-zA-Z]*)$/; 
+            const regex = /^(\d+)([a-zA-Z]*)$/;
             const matchA = a.match(regex);
             const matchB = b.match(regex);
-            if (!matchA || !matchB) { 
-                return a.localeCompare(b);
+            if (!matchA || !matchB) {
+                return a.localeCompare(b); // Fallback pour les formats non numériques
             }
             const numA = parseInt(matchA[1], 10);
             const letterA = matchA[2];
@@ -379,7 +399,7 @@
             if (numA !== numB) {
                 return numA - numB;
             }
-            return letterA.localeCompare(letterB);
+            return letterA.localeCompare(letterB); // Comparer les parties littérales si les nombres sont égaux
         }
 
         function mettreAJourTableauMoyennesChamp(moyennesChampData) {
@@ -388,14 +408,14 @@
             const tableMoyennesChamp = document.getElementById('table-moyennes-par-champ');
 
             if (!tbody) return;
-            tbody.innerHTML = ''; 
+            tbody.innerHTML = ''; // Vider le contenu précédent
             const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
 
             if (champNosTries.length > 0) {
                  if (aucuneMoyenneMsg) aucuneMoyenneMsg.style.display = 'none';
                  if (tableMoyennesChamp) tableMoyennesChamp.style.display = 'table';
 
-                champNosTries.forEach(champ_no => { 
+                champNosTries.forEach(champ_no => {
                     const data = moyennesChampData[champ_no];
                     const row = tbody.insertRow();
                     row.dataset.champNo = champ_no;
@@ -405,11 +425,11 @@
 
                     const cellStatut = row.insertCell();
                     const icon = document.createElement('span');
-                    icon.className = 'lock-icon';
+                    icon.className = 'lock-icon'; // La classe de base
                     icon.dataset.champNo = champ_no;
-                    
-                    mettreAJourIconeVerrou(icon, data.est_verrouille);
-                    
+
+                    mettreAJourIconeVerrou(icon, data.est_verrouille); // Appelle la fonction pour configurer l'icône
+
                     cellStatut.appendChild(icon);
                 });
             } else {

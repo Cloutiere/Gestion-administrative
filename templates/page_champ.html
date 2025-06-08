@@ -11,60 +11,60 @@
         }
 
         /* Styles spécifiques pour la page de gestion d'un champ */
-        .container { 
-            display: flex; 
-            gap: 20px; 
+        .container {
+            display: flex;
+            gap: 20px;
             flex-wrap: nowrap;
         }
 
-        .enseignants-section { 
-            flex: 2; 
-            min-width: 400px; 
+        .enseignants-section {
+            flex: 2;
+            min-width: 400px;
             max-height: calc(100vh - 200px); /* Hauteur maximale pour permettre le défilement interne */
             overflow-y: auto; /* Défilement vertical pour la section des enseignants si elle dépasse la hauteur max */
-            padding:10px; 
-            border: 1px solid #ccc; 
-            border-radius:5px; 
+            padding:10px;
+            border: 1px solid #ccc;
+            border-radius:5px;
             background-color: #f9f9f9;
         }
 
-        .cours-restants-section, .sommaire-champ-section { 
-            flex: 1; 
-            min-width: 300px; 
-            padding:10px; 
-            border: 1px solid #ccc; 
-            border-radius:5px; 
+        .cours-restants-section, .sommaire-champ-section {
+            flex: 1;
+            min-width: 300px;
+            padding:10px;
+            border: 1px solid #ccc;
+            border-radius:5px;
             background-color: #f9f9f9;
             max-height: calc(100vh - 200px); /* Hauteur maximale pour ces sections aussi */
             overflow-y: auto; /* Permettre le défilement si le contenu est trop grand */
         }
-        
+
         #lock-status-indicator {
             font-size: 0.8em;
             color: #dc3545;
             margin-left: 10px;
         }
 
-        .enseignant-card { 
-            border: 1px solid #ddd; 
-            padding: 10px; 
-            margin-bottom: 10px; 
-            background-color: #fff; 
+        .enseignant-card {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #fff;
             transition: background-color 0.3s ease;
         }
 
-        .enseignant-fictif { background-color: #f0f8ff; border-left: 5px solid #cce5ff; } 
+        .enseignant-fictif { background-color: #f0f8ff; border-left: 5px solid #cce5ff; }
 
         .enseignant-card.detail-visible {
-            background-color: #e7f3fe; 
-            border-left: 5px solid #007bff; 
+            background-color: #e7f3fe;
+            border-left: 5px solid #007bff;
         }
 
         .entete-enseignant {
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            cursor: pointer; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
         }
         .entete-enseignant:hover { background-color: #f0f0f0; }
         .entete-enseignant .arrow-indicator { margin-left: 10px; transition: transform 0.3s ease; }
@@ -82,12 +82,12 @@
 
         th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
         th { background-color: #e9ecef; }
-        
+
         .sous-titre-cours-restants td, .sous-titre-attributions td {
             background-color: #f0f0f0; font-weight: bold; text-align: center;
             border-top: 2px solid #ccc; border-bottom: 1px solid #ccc;
         }
-        
+
         .total-attributions-row td { font-weight: bold; background-color: #e9ecef; text-align: right; }
         .total-attributions-row td:first-child { text-align: left; }
 
@@ -99,12 +99,12 @@
         .btn-retirer-cours, .btn-supprimer-enseignant { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
         .btn-retirer-cours:hover, .btn-supprimer-enseignant:hover { background-color: #f5c6cb;}
         .section-title { margin-top: 20px; margin-bottom:10px; font-size: 1.2em; color: #333; border-bottom: 1px solid #eee; padding-bottom:5px;}
-        
+
         .cours-selection { margin-top: 15px; }
         .cours-selection ul { list-style-type: none; padding-left: 0; margin-top: 5px; margin-bottom: 5px; }
         .cours-selection li { margin-bottom: 2px; padding: 3px 5px; border-bottom: 1px dashed #eee; }
         .cours-selection li:last-child { border-bottom: none; }
-        
+
         /* Styles pour le verrouillage */
         .champ-verrouille .btn-retirer-cours:disabled,
         .champ-verrouille .cours-selection button:disabled {
@@ -134,13 +134,13 @@
             .print-only {
                 display: block;
             }
-            
+
             .container {
                 display: block; /* Change le flexbox en block pour l'impression */
                 width: 100%;
                 gap: 0;
             }
-            
+
             .enseignants-section {
                 display: block;
                 width: 100%;
@@ -149,7 +149,7 @@
                 border: none;
                 padding: 0;
             }
-            
+
             .enseignant-card {
                 border: 1px solid #000;
                 padding: 15px;
@@ -160,11 +160,11 @@
             .entete-enseignant { cursor: default; }
             .entete-enseignant .arrow-indicator { display: none; }
             .contenu-selection-cours, .action-enseignant-fictif { display: none !important; }
-            
+
             table { font-size: 9pt; border-collapse: collapse; width: 100%; }
             th, td { border: 1px solid #000; padding: 4px; text-align: left; }
             .total-attributions-row { border-top: 2px solid #000; }
-            
+
             .signature-line { margin-top: 40px; border-top: 1px solid #000; padding-top: 5px; font-style: italic; }
 
             /* Styles pour la première page (Sommaire) */
@@ -182,7 +182,7 @@
         <h1>
             Gestion des tâches - Champ : {{ champ.champnom }} ({{ champ.champno }})
             {% if champ.estverrouille %}
-                <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées."> Verrouillé</span>
+                <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées.">🔒 Verrouillé</span>
             {% endif %}
         </h1>
         <p><a href="{{ url_for('index') }}">« Retour à la liste des champs</a></p>
@@ -203,11 +203,12 @@
 
                 <div class="entete-enseignant">
                     <h3 class="titre-enseignant-bascule nom-enseignant-texte">
-                        {{ enseignant.nomcomplet }}
-                        {# CORRECTION: Logique d'affichage pour ne pas afficher (Tâche restante) #}
-                        {% if enseignant.estfictif %}
-                            {# Rien à ajouter ici, le nom est suffisant #}
-                        {% elif not enseignant.esttempsplein %}
+                        {% if enseignant.nom and enseignant.prenom %}
+                            {{ enseignant.nom }}, {{ enseignant.prenom }}
+                        {% else %}
+                            {{ enseignant.nomcomplet }} {# Cas des tâches fictives #}
+                        {% endif %}
+                        {% if not enseignant.estfictif and not enseignant.esttempsplein %}
                             <small>(Temps Partiel)</small>
                         {% endif %}
                         {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
@@ -220,7 +221,7 @@
                         <button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer tâche</button>
                     {% endif %}
                 </div>
-                
+
                 <div class="cours-attribues">
                     <table id="table-attributions-{{ enseignant.enseignantid }}">
                         <thead>
@@ -241,6 +242,11 @@
 
                 <div class="signature-line print-only">
                     Signature de l'enseignant :
+                    {% if enseignant.nom and enseignant.prenom %}
+                        {{ enseignant.nom }}, {{ enseignant.prenom }}
+                    {% else %}
+                        {{ enseignant.nomcomplet }}
+                    {% endif %}
                 </div>
 
                 <div class="contenu-selection-cours no-print">
@@ -286,7 +292,13 @@
                 <tbody>
                     {% for enseignant in enseignants_data %}
                     <tr data-enseignant-id="{{ enseignant.enseignantid }}" class="{{ 'enseignant-fictif-sommaire' if enseignant.estfictif else ('enseignant-temps-partiel-sommaire' if not enseignant.esttempsplein else 'enseignant-temps-plein-sommaire') }}">
-                        <td>{{ enseignant.nomcomplet }}</td>
+                        <td>
+                            {% if enseignant.nom and enseignant.prenom %}
+                                {{ enseignant.nom }}, {{ enseignant.prenom }}
+                            {% else %}
+                                {{ enseignant.nomcomplet }}
+                            {% endif %}
+                        </td>
                         <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours }}</td>
                         <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres }}</td>
                         <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes }}</td>
@@ -303,11 +315,10 @@
     </div>
 
     <template id="enseignant-card-template">
-        {# CORRECTION: L'étiquette (Tâche Restante) est retirée du template. #}
         <div class="enseignant-card enseignant-fictif" data-template-id="enseignant-card-ID">
             <div class="entete-enseignant">
                 <h3 class="titre-enseignant-bascule nom-enseignant-texte" data-template-nom="nom-enseignant">
-                    NOM_PLACEHOLDER
+                    NOM_COMPLET_PLACEHOLDER {# Sera le NomComplet pour les tâches fictives #}
                 </h3>
                 <span class="arrow-indicator no-print">▶</span>
             </div>
@@ -322,7 +333,9 @@
                     <tbody data-template-id-tbody="tbody-attributions-ID"></tbody>
                 </table>
             </div>
-            <div class="signature-line print-only">Signature de l'enseignant :</div>
+            <div class="signature-line print-only">
+                Signature de l'enseignant : NOM_COMPLET_PLACEHOLDER_PRINT {# Pour l'impression des tâches fictives #}
+            </div>
             <div class="contenu-selection-cours no-print">
                 <div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div>
                 <div class="cours-selection"><h4>Autres tâches disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div>
@@ -334,11 +347,11 @@
     <script>
         const G_COURS_ENSEIGNEMENT_CHAMP = {{ cours_enseignement_champ|tojson }};
         const G_COURS_AUTRES_TACHES_CHAMP = {{ cours_autres_taches_champ|tojson }};
-        const G_ENSEIGNANTS_INITIAL_DATA = {{ enseignants_data|tojson }};
-        const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}"; 
+        const G_ENSEIGNANTS_INITIAL_DATA = {{ enseignants_data|tojson }}; // Contient maintenant Nom et Prenom
+        const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}";
         const G_CHAMP_EST_VERROUILLE = {{ champ.estverrouille|tojson }};
     </script>
-    
+
     <!-- Étape 2: Chargement du fichier de logique externe -->
     <script src="{{ url_for('static', filename='js/page_champ.js') }}"></script>
 

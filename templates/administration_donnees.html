@@ -11,7 +11,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
-            margin-bottom: 30px; 
+            margin-bottom: 30px;
         }
         th, td {
             border: 1px solid #ddd;
@@ -39,7 +39,7 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
-        
+
         /* Styles pour les messages flash et les sections d'importation */
         .flash-messages {
             list-style-type: none;
@@ -67,7 +67,7 @@
             color: #856404;
             border: 1px solid #ffeeba;
         }
-        .flash-messages .info { 
+        .flash-messages .info {
             background-color: #d1ecf1;
             color: #0c5460;
             border: 1px solid #bee5eb;
@@ -111,7 +111,7 @@
             padding-left: 20px; /* Indentation pour la liste des colonnes */
         }
         .warning-text {
-            color: #dc3545; 
+            color: #dc3545;
             font-weight: bold;
         }
 
@@ -120,7 +120,7 @@
             margin-top: 15px;
             padding: 10px;
             border-radius: 4px;
-            display: none; 
+            display: none;
         }
         .message-success {
             background-color: #d4edda;
@@ -177,8 +177,8 @@
                 Le fichier Excel doit respecter le format suivant :
                 <ul>
                     <li>Colonne A : Champ (Numéro du champ, ex: 01)</li>
-                    <li>Colonne B : NOM (Nom de famille)</li>
-                    <li>Colonne C : PRÉNOM (Prénom)</li>
+                    <li>Colonne B : NOM (Nom de famille de l'enseignant)</li>
+                    <li>Colonne C : PRÉNOM (Prénom de l'enseignant)</li>
                     <li>Colonne D : Temps plein (VRAI ou FAUX)</li>
                 </ul>
                 Les colonnes `EstFictif` et `PeutChoisirHorsChampPrincipal` seront initialisées à `FAUX` pour tous les enseignants importés.
@@ -189,7 +189,7 @@
             </p>
         </section>
 
-        <hr> 
+        <hr>
 
         <!-- Section pour l'importation des COURS via Excel -->
         <section class="admin-section">
@@ -220,12 +220,12 @@
             </p>
         </section>
 
-        <hr> 
+        <hr>
 
         <!-- Section existante pour la réassignation des cours -->
         <section class="admin-section">
             <h2>Réassigner un Cours à un Champ</h2>
-            <div id="message-container-reassign" class="message-area"></div> 
+            <div id="message-container-reassign" class="message-area"></div>
             {% if cours_a_reassigner and champs_destination %}
                 <table>
                     <thead>
@@ -287,7 +287,7 @@
                     const selectElement = document.getElementById(`select-champ-${codeCours}`);
                     const nouveauChampNo = selectElement.value;
                     const ancienChampNoCell = document.querySelector(`#cours-row-${codeCours} .champ-actuel-no`);
-                    const ancienChampNo = ancienChampNoCell.dataset.champno; 
+                    const ancienChampNo = ancienChampNoCell.dataset.champno;
 
                     if (!nouveauChampNo) {
                         displayReassignMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
@@ -298,7 +298,7 @@
                          displayReassignMessage('Le cours est déjà assigné à ce champ. Aucune action effectuée.', 'info');
                         return;
                     }
-                    
+
                     const nomCoursEl = document.querySelector(`#cours-row-${codeCours} td:nth-child(2)`);
                     const nomCours = nomCoursEl ? nomCoursEl.textContent : "Inconnu";
                     const nomNouveauChamp = selectElement.options[selectElement.selectedIndex].text;
@@ -358,27 +358,29 @@
             }
 
             function updateSelectOptions(selectElement, nouveauChampNoActuel, ancienChampNoPrecedent) {
-                while (selectElement.options.length > 1) {
+                while (selectElement.options.length > 1) { // Conserver la première option "-- Sélectionner..."
                     selectElement.remove(1);
                 }
 
+                // Ajouter l'ancien champ à la liste si différent du nouveau champ actuel
                 const champPrecedentInfo = champsDestinationData.find(ch => ch.champno === ancienChampNoPrecedent);
-                if (champPrecedentInfo && champPrecedentInfo.champno !== nouveauChampNoActuel) {
+                if (champPrecedentInfo && String(champPrecedentInfo.champno) !== String(nouveauChampNoActuel)) {
                     const optionAncien = document.createElement('option');
                     optionAncien.value = champPrecedentInfo.champno;
                     optionAncien.textContent = `${champPrecedentInfo.champnom} (${champPrecedentInfo.champno})`;
                     selectElement.appendChild(optionAncien);
                 }
                 
+                // Ajouter les autres champs de destination, en excluant le nouveau champ actuel et l'ancien (s'il a déjà été ajouté)
                 champsDestinationData.forEach(champ => {
-                    if (champ.champno !== nouveauChampNoActuel && champ.champno !== ancienChampNoPrecedent) {
+                    if (String(champ.champno) !== String(nouveauChampNoActuel) && String(champ.champno) !== String(ancienChampNoPrecedent)) {
                         const option = document.createElement('option');
                         option.value = champ.champno;
                         option.textContent = `${champ.champnom} (${champ.champno})`;
                         selectElement.appendChild(option);
                     }
                 });
-                selectElement.value = "";
+                selectElement.value = ""; // Réinitialiser la sélection
             }
         });
     </script>

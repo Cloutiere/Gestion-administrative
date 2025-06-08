@@ -94,11 +94,14 @@ ALTER TABLE public.cours OWNER TO neondb_owner;
 
 CREATE TABLE public.enseignants (
     enseignantid integer NOT NULL,
-    nomcomplet text NOT NULL,
+    nomcomplet text NOT NULL, -- Maintenu pour "Prénom Nom" ou nom de tâche fictive
+    nom text, -- Nom de famille
+    prenom text, -- Prénom
     champno text NOT NULL,
     esttempsplein boolean DEFAULT true NOT NULL,
     estfictif boolean DEFAULT false NOT NULL,
-    peutchoisirhorschampprincipal boolean DEFAULT false NOT NULL
+    peutchoisirhorschampprincipal boolean DEFAULT false NOT NULL,
+    CONSTRAINT enseignants_nom_prenom_si_reel_check CHECK (((estfictif = true) OR ((nom IS NOT NULL) AND (prenom IS NOT NULL))))
 );
 
 
@@ -191,6 +194,13 @@ CREATE INDEX idx_cours_champno ON public.cours USING btree (champno);
 --
 
 CREATE INDEX idx_enseignants_champno ON public.enseignants USING btree (champno);
+
+
+--
+-- Name: idx_enseignants_nom_prenom; Type: INDEX; Schema: public; Owner: neondb_owner
+--
+
+CREATE INDEX idx_enseignants_nom_prenom ON public.enseignants USING btree (nom, prenom);
 
 
 --
