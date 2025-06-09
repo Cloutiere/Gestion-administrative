@@ -1,31 +1,31 @@
 [project]
-name = "python-template" # Nom du projet (peut être personnalisé)
-version = "0.1.0" # Version actuelle du projet
-description = "Une application Flask pour la gestion des tâches enseignants." # Description concise du projet
+name = "gestion-taches-enseignants"
+version = "0.1.0"
+description = "Une application Flask pour la gestion des tâches d'enseignement."
 authors = [
-    {name = "Votre Nom", email = "vous@example.com"} # Informations sur l'auteur (à personnaliser)
+    {name = "Votre Nom", email = "vous@example.com"}
 ]
-requires-python = ">=3.11" # Version minimale de Python requise
+requires-python = ">=3.11"
 dependencies = [
-    "flask>=3.0.0", # Dépendance principale pour le framework web Flask
-    "psycopg2-binary>=2.9.9", # Connecteur PostgreSQL (binaire pour faciliter l'installation)
-    "openpyxl>=3.1.0", # Bibliothèque pour lire et écrire les fichiers Excel XLSX
-    "Flask-Login>=0.6.3", # Nouvelle dépendance pour la gestion de l'authentification utilisateur
-    "werkzeug>=3.1.3",
+    "flask>=3.0.0",
+    "psycopg2-binary>=2.9.9",
+    "openpyxl>=3.1.0",
+    "Flask-Login>=0.6.3",
+    "werkzeug>=3.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ruff", # Outil de linting et formatage (pour le développement)
+    "ruff", # Outil de linting et de formatage pour le développement.
 ]
 
 # --- Configuration de Ruff (Linter et Formateur) ---
 [tool.ruff]
-# Répertoires source à analyser par Ruff. "." signifie le répertoire courant.
+# Répertoires source à analyser. "." signifie le répertoire courant.
 src = ["."]
 
-# Exclure les répertoires et fichiers typiquement non analysés.
-# Utile pour éviter d'analyser les environnements virtuels, caches, builds, etc.
+# Liste des répertoires et fichiers à exclure de l'analyse.
+# Essentiel pour ignorer les environnements virtuels, caches, et autres.
 exclude = [
     ".bzr",
     ".direnv",
@@ -38,60 +38,46 @@ exclude = [
     ".ruff_cache",
     ".svn",
     ".tox",
-    ".venv", # Environnement virtuel Python standard
+    ".venv",
     "__pypackages__",
     "_build",
     "buck-out",
     "build",
     "dist",
-    "node_modules", # Dépendances JavaScript/Node.js
-    "venv", # Autre nom commun pour l'environnement virtuel
-    ".pythonlibs", # Utilisé par certains environnements comme Replit
+    "node_modules",
+    "venv",
 ]
 
-# Longueur maximale des lignes (s'applique au linter et au formateur).
+# Longueur maximale des lignes, respectée par le linter et le formateur.
 line-length = 150
 
-# Définir la version Python cible pour Ruff.
-# Doit correspondre à votre `requires-python` pour assurer la compatibilité.
-target-version = "py311" # Correspond à Python 3.11
+# Version de Python ciblée pour garantir la compatibilité des suggestions.
+target-version = "py311" # Doit correspondre à `requires-python`.
 
 
-# --- Configuration spécifique au Linter de Ruff ([tool.ruff.lint]) ---
+# --- Configuration du Linter de Ruff ([tool.ruff.lint]) ---
 [tool.ruff.lint]
-# Règles de linter à activer.
-# E: Erreurs Pyflakes (erreurs de syntaxe, noms non définis, etc.)
-# F: Flakes Pyflakes (logique potentiellement erronée, variables non utilisées)
-# W: Warnings Pycodestyle (erreurs de style, ex: E501 ligne trop longue)
-# I: Isort (vérification et correction des imports)
-# UP: Pyupgrade (suggestions pour moderniser la syntaxe Python)
+# Sélection des catégories de règles à activer.
+# E: Erreurs (Pyflakes)
+# F: Flakes (logique erronée, variables inutilisées)
+# W: Warnings de style (Pycodestyle)
+# I: Organisation des imports (isort)
+# UP: Suggestions de modernisation de la syntaxe (pyupgrade)
 select = ["E", "F", "W", "I", "UP"]
 
-# Règles spécifiques à ignorer.
-# Par exemple, E501 (longueur de ligne) est souvent géré par le formateur seul.
-# ignore = ["E501"] # Décommenter si vous souhaitez ignorer cette règle pour le linter.
-
-# Déclarer des variables globales que Ruff pourrait ne pas détecter,
-# afin d'éviter des erreurs F821 (undefined name).
-# globals = [
-#   "g",
-#   "request"
-# ]
-
-# Configuration des règles "fixables" ou "non-fixables".
-# Généralement, la configuration par défaut de Ruff est suffisante.
-# fixable = ["A", "B"]
-# unfixable = []
+# Règles spécifiques à ignorer si nécessaire.
+# Par exemple, "E501" (ligne trop longue) est géré par le formateur.
+# ignore = ["E501"]
 
 
-# --- Configuration spécifique au Formateur de Ruff ([tool.ruff.format]) ---
+# --- Configuration du Formateur de Ruff ([tool.ruff.format]) ---
 [tool.ruff.format]
-# Style de guillemets pour les chaînes de caractères.
+# Style de guillemets à utiliser pour les chaînes de caractères.
 quote-style = "double"
 
-# Type d'indentation : "space" ou "tab".
+# Style d'indentation à utiliser ("space" ou "tab").
 indent-style = "space"
 
-# `skip-magic-trailing-comma` (Commenté car la valeur par défaut `false` est souvent préférée)
-# Laisser à `false` (défaut) est généralement bien pour la cohérence.
+# `skip-magic-trailing-comma`: La valeur par défaut `false` est généralement
+# recommandée pour la cohérence du formatage, notamment avec les virgules de fin.
 # skip-magic-trailing-comma = false
