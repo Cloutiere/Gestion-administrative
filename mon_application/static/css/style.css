@@ -31,7 +31,6 @@
     --transition-speed: 0.2s;
 }
 
-/* CORRECTION: Les thèmes sont maintenant appliqués à l'élément <html> */
 /* --- Thème Sombre --- */
 html.theme-dark {
     --color-primary: #4dabf7;
@@ -363,6 +362,11 @@ button:disabled,
 .btn-secondary:hover:not(:disabled) {
     background-color: var(--color-primary-hover);
 }
+/* Modificateur pour des boutons plus petits, idéal pour les tableaux */
+.btn-sm {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.85rem;
+}
 
 /* --- Tableaux --- */
 table {
@@ -395,6 +399,19 @@ tfoot td {
     background-color: var(--color-header-bg);
 }
 
+/* Conteneur pour les boutons d'action dans les tableaux */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+}
+td.col-actions .action-buttons {
+    justify-content: flex-end; /* Aligne à droite spécifiquement dans la colonne d'actions */
+}
+
+
 /* --- Composants spécifiques --- */
 /* Formulaires d'authentification */
 .auth-form-container {
@@ -424,6 +441,133 @@ tfoot td {
     color: var(--color-text-secondary);
 }
 
+/* --- Fenêtres Modales --- */
+.modal-backdrop {
+    display: none; /* Caché par défaut */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 1050;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem; /* Espace pour éviter que la modale touche les bords de l'écran */
+}
+
+.modal-backdrop.visible {
+    display: flex;
+}
+
+.modal {
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+    border-radius: var(--border-radius);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    width: 100%;
+    max-width: 600px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh; /* Limite la hauteur */
+}
+
+.modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    font-weight: bold;
+    line-height: 1;
+    color: var(--color-text-secondary);
+    opacity: 0.8;
+    cursor: pointer;
+    padding: 0 0.5rem;
+}
+
+.modal-close-btn:hover {
+    color: var(--color-text-primary);
+    opacity: 1;
+    transform: none; /* Annule l'effet de hover des boutons généraux */
+}
+
+.modal-body {
+    padding: 1.5rem;
+    overflow-y: auto; /* Permet le défilement si le contenu est trop long */
+    flex-grow: 1;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+    text-align: right;
+    background-color: var(--color-background);
+    border-bottom-left-radius: var(--border-radius);
+    border-bottom-right-radius: var(--border-radius);
+    flex-shrink: 0;
+}
+.modal-footer .button-group {
+    margin-top: 0;
+    justify-content: flex-end;
+}
+
+/* --- Composants Dépliables (Accordéon) --- */
+.collapsible-header {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color var(--transition-speed);
+    padding: 0.75rem 1.25rem;
+    background-color: var(--color-header-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+}
+
+.collapsible-header:hover {
+    background-color: color-mix(in srgb, var(--color-primary) 10%, var(--color-header-bg));
+}
+
+.collapsible-header.active {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.collapsible-header .arrow-indicator {
+    transition: transform var(--transition-speed) ease;
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.collapsible-header.active .arrow-indicator {
+    transform: rotate(90deg);
+}
+
+.collapsible-content {
+    display: none;
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-top: none;
+    border-bottom-left-radius: var(--border-radius);
+    border-bottom-right-radius: var(--border-radius);
+    background-color: var(--color-surface);
+}
+
 /* Sections Admin */
 .admin-section {
     background-color: var(--color-surface);
@@ -432,7 +576,7 @@ tfoot td {
     margin-bottom: 2rem;
     box-shadow: var(--box-shadow);
 }
-.admin-section h2 {
+.admin-section h2:not(.collapsible-header) {
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 0.75rem;
     margin-bottom: 1.5rem;
@@ -550,7 +694,6 @@ tfoot td {
     transition: background-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
     border-left: 5px solid transparent;
 }
-/* CORRECTION: Cibler les thèmes depuis html */
 html.theme-light .enseignant-fictif {
     background-color: #f0f8ff;
     border-left-color: #cce5ff;

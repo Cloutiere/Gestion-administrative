@@ -78,7 +78,7 @@ CREATE TABLE public.cours (
     codecours text NOT NULL,
     champno text NOT NULL,
     coursdescriptif text NOT NULL,
-    nbperiodes NUMERIC(5, 2) NOT NULL,
+    nbperiodes numeric(5, 2) NOT NULL,
     nbgroupeinitial integer NOT NULL,
     estcoursautre boolean DEFAULT false NOT NULL,
     CONSTRAINT cours_nbgroupeinitial_check CHECK ((nbgroupeinitial >= 0)),
@@ -282,7 +282,8 @@ CREATE INDEX idx_enseignants_nom_prenom ON public.enseignants USING btree (nom, 
 
 ALTER TABLE ONLY public.attributionscours
     ADD CONSTRAINT attributionscours_codecours_fkey FOREIGN KEY (codecours) REFERENCES public.cours(codecours) ON DELETE RESTRICT;
-
+-- NOTE: ON DELETE RESTRICT empêche la suppression d'un cours s'il est encore attribué.
+-- C'est une sécurité importante pour la nouvelle fonctionnalité de suppression de cours.
 
 --
 -- Name: attributionscours attributionscours_enseignantid_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
@@ -290,7 +291,8 @@ ALTER TABLE ONLY public.attributionscours
 
 ALTER TABLE ONLY public.attributionscours
     ADD CONSTRAINT attributionscours_enseignantid_fkey FOREIGN KEY (enseignantid) REFERENCES public.enseignants(enseignantid) ON DELETE CASCADE;
-
+-- NOTE: ON DELETE CASCADE supprime automatiquement les attributions d'un enseignant lorsqu'il est supprimé.
+-- Ce comportement est crucial pour la nouvelle fonctionnalité de suppression d'enseignant.
 
 --
 -- Name: cours cours_champno_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
@@ -313,6 +315,7 @@ ALTER TABLE ONLY public.enseignants
 
 ALTER TABLE public.user_champ_access
     ADD CONSTRAINT user_champ_access_champ_no_fkey FOREIGN KEY (champ_no) REFERENCES public.champs(champno) ON DELETE CASCADE;
+-- NOTE: ON DELETE CASCADE supprime automatiquement les droits d'accès d'un utilisateur sur un champ si ce champ est supprimé.
 
 --
 -- Name: user_champ_access user_champ_access_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
@@ -320,6 +323,7 @@ ALTER TABLE public.user_champ_access
 
 ALTER TABLE public.user_champ_access
     ADD CONSTRAINT user_champ_access_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+-- NOTE: ON DELETE CASCADE supprime automatiquement les droits d'accès d'un utilisateur si cet utilisateur est supprimé.
 
 
 --
@@ -338,3 +342,4 @@ ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON TABL
 
 --
 -- PostgreSQL database dump complete
+--

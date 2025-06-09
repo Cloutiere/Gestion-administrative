@@ -86,11 +86,12 @@ def page_sommaire() -> str:
 @login_required
 @admin_required
 def page_administration_donnees() -> str:
-    """Affiche la page d'administration des données (imports, etc.)."""
+    """Affiche la page d'administration des données (imports, CRUD)."""
     return render_template(
         "administration_donnees.html",
-        cours_a_reassigner=db.get_all_cours_avec_details_champ(),
-        champs_destination=db.get_all_champs(),
+        cours_par_champ=db.get_all_cours_grouped_by_champ(),
+        enseignants_par_champ=db.get_all_enseignants_grouped_by_champ(),
+        tous_les_champs=db.get_all_champs(),
     )
 
 
@@ -196,6 +197,122 @@ def api_delete_user(user_id: int) -> Any:
     if db.delete_user_data(user_id):
         return jsonify({"success": True, "message": "Utilisateur supprimé."})
     return jsonify({"success": False, "message": "Échec de la suppression."}), 500
+
+
+# --- Nouvelles API pour la gestion manuelle des Cours (CRUD) ---
+
+
+@bp.route("/api/cours/creer", methods=["POST"])
+@admin_api_required
+def api_create_cours() -> Any:
+    """API pour créer un nouveau cours."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ["codecours", "champno", "coursdescriptif", "nbperiodes", "nbgroupeinitial"]):
+        return jsonify({"success": False, "message": "Données manquantes pour la création du cours."}), 400
+    try:
+        new_cours = db.create_cours(data)
+        return jsonify({"success": True, "message": "Cours créé avec succès.", "cours": new_cours}), 201
+    except psycopg2.errors.UniqueViolation:
+        return jsonify({"success": False, "message": "Le code du cours existe déjà."}), 409
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DB lors de la création du cours: {e}")
+        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+
+
+@bp.route("/api/cours/<path:code_cours>", methods=["GET"])
+@admin_api_required
+def api_get_cours_details(code_cours: str) -> Any:
+    """API pour récupérer les détails d'un cours."""
+    cours = db.get_cours_details(code_cours)
+    if not cours:
+        return jsonify({"success": False, "message": "Cours non trouvé."}), 404
+    return jsonify({"success": True, "cours": cours})
+
+
+@bp.route("/api/cours/<path:code_cours>/modifier", methods=["POST"])
+@admin_api_required
+def api_update_cours(code_cours: str) -> Any:
+    """API pour modifier un cours existant."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ["champno", "coursdescriptif", "nbperiodes", "nbgroupeinitial"]):
+        return jsonify({"success": False, "message": "Données de mise à jour manquantes."}), 400
+    try:
+        updated_cours = db.update_cours(code_cours, data)
+        if not updated_cours:
+            return jsonify({"success": False, "message": "Cours non trouvé."}), 404
+        return jsonify({"success": True, "message": "Cours mis à jour avec succès.", "cours": updated_cours})
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DB lors de la mise à jour du cours {code_cours}: {e}")
+        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+
+
+@bp.route("/api/cours/<path:code_cours>/supprimer", methods=["POST"])
+@admin_api_required
+def api_delete_cours(code_cours: str) -> Any:
+    """API pour supprimer un cours."""
+    success, message = db.delete_cours(code_cours)
+    status_code = 200 if success else 400
+    return jsonify({"success": success, "message": message}), status_code
+
+
+# --- Nouvelles API pour la gestion manuelle des Enseignants (CRUD) ---
+
+
+@bp.route("/api/enseignants/creer", methods=["POST"])
+@admin_api_required
+def api_create_enseignant() -> Any:
+    """API pour créer un nouvel enseignant."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ["nom", "prenom", "champno", "esttempsplein"]):
+        return jsonify({"success": False, "message": "Données manquantes pour la création de l'enseignant."}), 400
+    try:
+        new_enseignant = db.create_enseignant(data)
+        return jsonify({"success": True, "message": "Enseignant créé avec succès.", "enseignant": new_enseignant}), 201
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DB lors de la création de l'enseignant: {e}")
+        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+
+
+@bp.route("/api/enseignants/<int:enseignant_id>", methods=["GET"])
+@admin_api_required
+def api_get_enseignant_details(enseignant_id: int) -> Any:
+    """API pour récupérer les détails d'un enseignant."""
+    enseignant = db.get_enseignant_details(enseignant_id)
+    if not enseignant or enseignant["estfictif"]:
+        return jsonify({"success": False, "message": "Enseignant non trouvé ou non modifiable."}), 404
+    return jsonify({"success": True, "enseignant": enseignant})
+
+
+@bp.route("/api/enseignants/<int:enseignant_id>/modifier", methods=["POST"])
+@admin_api_required
+def api_update_enseignant(enseignant_id: int) -> Any:
+    """API pour modifier un enseignant existant."""
+    data = request.get_json()
+    if not data or not all(k in data for k in ["nom", "prenom", "champno", "esttempsplein"]):
+        return jsonify({"success": False, "message": "Données de mise à jour manquantes."}), 400
+    try:
+        updated_enseignant = db.update_enseignant(enseignant_id, data)
+        if not updated_enseignant:
+            return jsonify({"success": False, "message": "Enseignant non trouvé ou non modifiable."}), 404
+        return jsonify({"success": True, "message": "Enseignant mis à jour avec succès.", "enseignant": updated_enseignant})
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DB lors de la mise à jour de l'enseignant {enseignant_id}: {e}")
+        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+
+
+@bp.route("/api/enseignants/<int:enseignant_id>/supprimer", methods=["POST"])
+@admin_api_required
+def api_delete_enseignant(enseignant_id: int) -> Any:
+    """API pour supprimer un enseignant."""
+    enseignant = db.get_enseignant_details(enseignant_id)
+    if not enseignant:
+        return jsonify({"success": False, "message": "Enseignant non trouvé."}), 404
+    if enseignant["estfictif"]:
+        return jsonify({"success": False, "message": "Impossible de supprimer un enseignant fictif via cette interface."}), 403
+
+    if db.delete_enseignant(enseignant_id):
+        return jsonify({"success": True, "message": "Enseignant et ses attributions supprimés avec succès."})
+    return jsonify({"success": False, "message": "Échec de la suppression de l'enseignant."}), 500
 
 
 # --- Fonctions et routes pour l'importation de données Excel ---
