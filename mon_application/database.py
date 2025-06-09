@@ -396,8 +396,8 @@ def get_all_enseignants_avec_details() -> list[dict[str, Any]]:
 def get_cours_disponibles_par_champ(champ_no: str) -> list[dict[str, Any]]:
     """
     Récupère les cours associés à un champ spécifique, en calculant le nombre
-    de groupes restants. Un cours assigné à un enseignant fictif (tâche restante)
-    est toujours considéré comme disponible.
+    de groupes restants. Pour une logique d'interface utilisateur cohérente,
+    toutes les attributions (y compris aux enseignants fictifs) sont soustraites.
     Retourne une liste de dictionnaires, chacun représentant un cours.
     """
     db = get_db()
@@ -405,16 +405,19 @@ def get_cours_disponibles_par_champ(champ_no: str) -> list[dict[str, Any]]:
         return []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # CORRECTION : Seules les attributions à des enseignants NON fictifs
-            # sont soustraites pour calculer les groupes restants.
+            # CORRECTION : Le filtre `FILTER (WHERE e.EstFictif = FALSE)` a été retiré.
+            # Maintenant, toutes les attributions, qu'elles soient à des enseignants
+            # réels ou fictifs, sont soustraites pour calculer `grprestant`.
+            # Cela garantit que l'interface web reflète correctement la disponibilité
+            # des cours, en les considérant non disponibles dès qu'ils sont assignés.
+            # La jointure sur Enseignants n'est plus nécessaire ici.
             cur.execute(
                 """
                 SELECT
                     c.CodeCours, c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre, c.NbGroupeInitial,
-                    (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris) FILTER (WHERE e.EstFictif = FALSE), 0)) AS grprestant
+                    (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0)) AS grprestant
                 FROM Cours c
                 LEFT JOIN AttributionsCours ac ON c.CodeCours = ac.CodeCours
-                LEFT JOIN Enseignants e ON ac.EnseignantID = e.EnseignantID
                 WHERE c.ChampNo = %s
                 GROUP BY c.CodeCours
                 ORDER BY c.EstCoursAutre, c.CodeCours;
@@ -509,7 +512,7 @@ def calculer_periodes_enseignant(enseignant_id: int) -> dict[str, float]:
 def get_groupes_restants_pour_cours(code_cours: str) -> int:
     """
     Calcule le nombre de groupes restants disponibles pour un cours donné,
-    en soustrayant TOUS les groupes déjà attribués.
+    en soustrayant TOUS les groupes déjà attribués (réels et fictifs).
     Retourne le nombre de groupes restants ou 0 en cas d'erreur ou si le cours n'existe pas.
     """
     db = get_db()
@@ -517,8 +520,9 @@ def get_groupes_restants_pour_cours(code_cours: str) -> int:
         return 0
     try:
         with db.cursor() as cur:
-            # CORRECTION: Suppression du "FILTER" et de la jointure sur Enseignants qui est maintenant inutile ici.
-            # On compte toutes les attributions pour ce cours.
+            # CORRECTION : Suppression du "FILTER" et de la jointure sur Enseignants,
+            # qui est inutile ici. On compte toutes les attributions pour ce cours,
+            # ce qui est cohérent avec la logique de `get_cours_disponibles_par_champ`.
             cur.execute(
                 """
                 SELECT (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0))

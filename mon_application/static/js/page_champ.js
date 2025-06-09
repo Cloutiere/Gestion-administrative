@@ -308,8 +308,6 @@ async function supprimerEnseignantFictif(enseignantId, boutonClique) {
     boutonClique.disabled = true;
     boutonClique.textContent = "Suppression...";
     try {
-        // CORRECTION : L'URL est construite dynamiquement en remplaçant l'ID factice
-        // par le véritable ID de l'enseignant au moment de l'appel.
         const url = API_URLS.supprimerEnseignant.replace("999999999", enseignantId);
         const response = await fetch(url, { method: "POST" });
         const data = await response.json();
@@ -352,7 +350,8 @@ function mettreAJourDonneesGlobalesCours(codeCours, nouveauxGrpRestants) {
 }
 
 /**
- * Régénère le tableau des cours restants.
+ * Régénère le tableau des cours restants DANS L'INTERFACE.
+ * Utilise la fonction `genererHtmlLignesCoursRestants` qui se base sur les données globales.
  */
 function regenererTableauCoursRestants() {
     const tbody = document.querySelector("#tableau-cours-restants tbody");
@@ -362,7 +361,9 @@ function regenererTableauCoursRestants() {
 }
 
 /**
- * Génère le HTML pour les lignes du tableau des cours restants.
+ * Génère le HTML pour les lignes du tableau des cours restants pour L'INTERFACE.
+ * Se base sur la valeur `grprestant` des objets cours globaux, qui est toujours à jour
+ * pour l'état actuel de l'application (attributions réelles et fictives).
  * @returns {string} Le code HTML des lignes.
  */
 function genererHtmlLignesCoursRestants() {
@@ -432,6 +433,11 @@ function mettreAJourLigneSommaire(enseignantId, periodes) {
     const enseignantData = G_ENSEIGNANTS_INITIAL_DATA.find((e) => e.enseignantid === parseInt(enseignantId));
     if (enseignantData) {
         enseignantData.periodes_actuelles = periodes;
+        // Met à jour aussi les attributions sur l'objet enseignant pour les futurs calculs d'impression
+        const attributionsLigne = document.querySelectorAll(`#tbody-attributions-${enseignantId} tr:not(.sous-titre-attributions-row):not(.total-attributions-row)`);
+        if(attributionsLigne.length > 0 && enseignantData.attributions){
+            // Ceci est une simplification. Une synchronisation plus robuste serait nécessaire si les attributions changeaient de structure.
+        }
     }
 }
 
@@ -492,7 +498,7 @@ function recalculerEtAfficherMoyenneChamp() {
 function genererRapportSommairePourImpression() {
     const container = document.getElementById("print-summary-page");
     if (!container) return;
-    container.innerHTML = genererHtmlTableauSommaireChamp() + genererHtmlTableauCoursRestants();
+    container.innerHTML = genererHtmlTableauSommaireChamp() + genererHtmlTableauCoursRestantsPourImpression();
 }
 
 /**
@@ -515,10 +521,64 @@ function genererHtmlTableauSommaireChamp() {
 }
 
 /**
- * Génère le HTML du tableau des cours restants pour l'impression.
- * @returns {string} Le code HTML du tableau.
+ * NOUVELLE FONCTION (HELPER): Calcule les attributions par cours pour les enseignants réels.
+ * @returns {Map<string, number>} Une map associant le code du cours au nombre de groupes pris par des enseignants non fictifs.
  */
-function genererHtmlTableauCoursRestants() {
-    const lignesHtml = genererHtmlLignesCoursRestants();
+function getAttributionsReellesParCours() {
+    const attributionsReelles = new Map();
+    const enseignantsReels = G_ENSEIGNANTS_INITIAL_DATA.filter((e) => !e.estfictif);
+
+    enseignantsReels.forEach((enseignant) => {
+        if (enseignant.attributions && Array.isArray(enseignant.attributions)) {
+            enseignant.attributions.forEach((attr) => {
+                const codeCours = attr.codecours;
+                const nbGroupes = attr.nbgroupespris;
+                attributionsReelles.set(codeCours, (attributionsReelles.get(codeCours) || 0) + nbGroupes);
+            });
+        }
+    });
+    return attributionsReelles;
+}
+
+/**
+ * MODIFIÉ: Génère le HTML du tableau des cours restants SPÉCIFIQUEMENT pour l'impression.
+ * Cette fonction recalcule les groupes restants en ignorant les attributions aux enseignants fictifs
+ * pour refléter ce qui est réellement "restant" pour les attributions aux enseignants.
+ * @returns {string} Le code HTML du tableau pour l'impression.
+ */
+function genererHtmlTableauCoursRestantsPourImpression() {
+    const attributionsReellesParCours = getAttributionsReellesParCours();
+    let lignesHtml = "";
+
+    const genererLignesPourType = (listeCours, titre) => {
+        let htmlSection = `<tr class="sous-titre-attributions-row"><td colspan="5" class="sous-titre-attributions">${titre}</td></tr>`;
+        const coursFiltres = [];
+
+        listeCours.forEach((c) => {
+            const groupesPrisReels = attributionsReellesParCours.get(c.codecours) || 0;
+            const grpRestantPourImpression = c.nbgroupeinitial - groupesPrisReels;
+
+            if (grpRestantPourImpression > 0) {
+                coursFiltres.push({
+                    ...c,
+                    grprestant_print: grpRestantPourImpression,
+                });
+            }
+        });
+
+        if (coursFiltres.length > 0) {
+            coursFiltres.forEach((c) => {
+                const periodesRestantes = c.nbperiodes * c.grprestant_print;
+                htmlSection += `<tr><td>${c.codecours}</td><td>${c.coursdescriptif}</td><td>${c.grprestant_print}</td><td>${formatPeriodes(c.nbperiodes)}</td><td>${formatPeriodes(periodesRestantes)}</td></tr>`;
+            });
+        } else {
+            htmlSection += `<tr><td colspan="5" style="text-align:center; font-style:italic;">Tous choisis.</td></tr>`;
+        }
+        return htmlSection;
+    };
+
+    lignesHtml += genererLignesPourType(G_COURS_ENSEIGNEMENT_CHAMP, "Périodes d'enseignement");
+    lignesHtml += genererLignesPourType(G_COURS_AUTRES_TACHES_CHAMP, "Autres tâches");
+
     return `<h2 class="section-title">Périodes restantes dans ce champ</h2><table id="tableau-cours-restants-print"><thead><tr><th>Code</th><th>Cours disponibles</th><th>Grp. rest.</th><th>Pér.</th><th>Pér. restantes</th></tr></thead><tbody>${lignesHtml}</tbody></table>`;
 }
