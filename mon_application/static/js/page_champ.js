@@ -6,11 +6,11 @@
 // - G_ENSEIGNANTS_INITIAL_DATA: Liste complète des enseignants du champ avec leurs données.
 // - G_CHAMP_NO_ACTUEL: Le numéro du champ actuellement affiché.
 // - G_CHAMP_EST_VERROUILLE: Un booléen indiquant si le champ est verrouillé.
+// - API_URLS: Un objet contenant les URLs pour les appels fetch.
 
 /**
  * Fonction utilitaire pour formater les nombres de périodes.
  * Affiche les décimales uniquement si elles sont non nulles.
- * Exemples : 5.00 -> "5", 1.50 -> "1.5", 0.75 -> "0.75".
  * @param {number|null|undefined} value Le nombre à formater.
  * @returns {string} Le nombre formaté en chaîne de caractères.
  */
@@ -30,9 +30,6 @@ function formatPeriodes(value) {
  * Point d'entrée principal du script, exécuté une fois le DOM entièrement chargé.
  */
 document.addEventListener("DOMContentLoaded", function () {
-    // Le rendu HTML initial est déjà effectué par le serveur (Jinja2).
-    // Ce script se concentre sur l'initialisation des parties dynamiques et la liaison des événements.
-
     regenererTableauCoursRestants();
 
     if (typeof G_ENSEIGNANTS_INITIAL_DATA !== "undefined") {
@@ -43,8 +40,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     appliquerStatutVerrouillageUI();
 
-    // Utilisation de la délégation d'événements pour une meilleure performance.
-    // Un seul écouteur sur la section parente gère tous les clics sur les éléments enfants.
     const enseignantsSection = document.querySelector(".enseignants-section");
     if (enseignantsSection) {
         enseignantsSection.addEventListener("click", gestionnaireClicsEnseignantsSection);
@@ -54,28 +49,18 @@ document.addEventListener("DOMContentLoaded", function () {
         creerTacheRestante(this);
     });
 
-    // Écouteur pour le bouton "Imprimer ce champ"
     document.getElementById("btn-imprimer-champ")?.addEventListener("click", function () {
-        // S'assurer que toutes les cartes sont repliées.
         document.querySelectorAll(".enseignant-card.detail-visible").forEach((card) => {
             card.classList.remove("detail-visible");
         });
-
-        // Générer le sommaire spécifique pour l'impression du champ (sans les tâches restantes).
         genererRapportSommairePourImpression();
-
-        // Lancer l'impression en mode "champ".
         prepareAndPrint("champ");
     });
 
-    // Écouteur pour le bouton "Imprimer Tâches Restantes"
     document.getElementById("btn-imprimer-taches-restantes")?.addEventListener("click", function () {
-        // S'assurer que toutes les cartes sont repliées.
         document.querySelectorAll(".enseignant-card.detail-visible").forEach((card) => {
             card.classList.remove("detail-visible");
         });
-
-        // Lancer l'impression en mode "tâches restantes" (aucun sommaire n'est généré).
         prepareAndPrint("taches-restantes");
     });
 });
@@ -86,36 +71,27 @@ document.addEventListener("DOMContentLoaded", function () {
  */
 function prepareAndPrint(mode) {
     const printClass = `printing-${mode}`;
-    document.body.classList.add(printClass);
+    document.documentElement.classList.add(printClass);
 
-    // Fonction pour nettoyer la classe après l'impression.
     const cleanup = () => {
-        document.body.classList.remove(printClass);
+        document.documentElement.classList.remove(printClass);
         window.removeEventListener("afterprint", cleanup);
     };
 
-    // Attacher l'écouteur pour le nettoyage.
     window.addEventListener("afterprint", cleanup);
-
-    // Lancer l'impression.
     window.print();
-
-    // Fallback : au cas où l'événement `afterprint` ne se déclencherait pas (ex: annulation de la boîte de dialogue),
-    // nous retirons la classe après un court délai pour restaurer l'état normal de la page.
     setTimeout(cleanup, 1000);
 }
 
 /**
- * Applique l'état de verrouillage (désactivation des boutons) à une seule carte d'enseignant.
- * Ne s'applique qu'aux enseignants réels si le champ est verrouillé.
- * @param {HTMLElement} card La carte d'enseignant (élément .enseignant-card) à mettre à jour.
+ * Applique l'état de verrouillage à une seule carte d'enseignant.
+ * @param {HTMLElement} card La carte d'enseignant à mettre à jour.
  */
 function appliquerStatutVerrouillagePourCarte(card) {
     const estVerrouille = G_CHAMP_EST_VERROUILLE;
     const estFictif = card.classList.contains("enseignant-fictif");
     const doitDesactiver = estVerrouille && !estFictif;
 
-    // Cible tous les boutons d'action pertinents à l'intérieur de la carte.
     card.querySelectorAll(".btn-retirer-cours, .cours-selection button").forEach((button) => {
         button.disabled = doitDesactiver;
         button.title = doitDesactiver ? "Les modifications sont désactivées car le champ est verrouillé." : "";
@@ -123,7 +99,7 @@ function appliquerStatutVerrouillagePourCarte(card) {
 }
 
 /**
- * Applique l'état de verrouillage à l'ensemble de l'interface utilisateur au chargement de la page.
+ * Applique l'état de verrouillage à l'ensemble de l'interface.
  */
 function appliquerStatutVerrouillageUI() {
     document.querySelectorAll(".enseignant-card").forEach(appliquerStatutVerrouillagePourCarte);
@@ -131,45 +107,36 @@ function appliquerStatutVerrouillageUI() {
 
 /**
  * Gère le basculement de l'affichage détaillé d'une carte d'enseignant.
- * Au premier dépliage, génère les listes de cours disponibles.
- * @param {HTMLElement} enseignantCard La carte d'enseignant (.enseignant-card) concernée.
+ * @param {HTMLElement} enseignantCard La carte d'enseignant concernée.
  */
 function toggleEnseignantDetails(enseignantCard) {
     if (!enseignantCard) return;
 
     const etaitVisible = enseignantCard.classList.contains("detail-visible");
 
-    // Replier toutes les autres cartes pour une interface plus propre.
     document.querySelectorAll(".enseignant-card.detail-visible").forEach((card) => {
         if (card !== enseignantCard) {
             card.classList.remove("detail-visible");
         }
     });
 
-    // Basculer l'état de la carte cliquée.
     enseignantCard.classList.toggle("detail-visible", !etaitVisible);
 
-    // Si la carte vient d'être dépliée, générer son contenu dynamique.
     if (!etaitVisible) {
         const enseignantId = enseignantCard.id.split("-").pop();
         const ulEnseignement = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
         const ulAutres = enseignantCard.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
 
-        if (ulEnseignement) {
-            ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, "enseignement");
-        }
-        if (ulAutres) {
-            ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, "autre");
-        }
+        if (ulEnseignement) ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId);
+        if (ulAutres) ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId);
         appliquerStatutVerrouillagePourCarte(enseignantCard);
     }
 }
 
 /**
- * Régénère le contenu du tableau des attributions pour un enseignant donné,
- * en regroupant les attributions par cours et en calculant les totaux.
+ * Régénère le tableau des attributions pour un enseignant.
  * @param {number|string} enseignantId L'ID de l'enseignant.
- * @param {Array} attributionsArray La liste de ses attributions brutes.
+ * @param {Array} attributionsArray La liste de ses attributions.
  */
 function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray) {
     const tbody = document.getElementById(`tbody-attributions-${enseignantId}`);
@@ -187,23 +154,15 @@ function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray)
         return acc;
     }, {});
 
-    const attributionsEnseignement = Object.values(attributionsAgregees).filter((attr) => !attr.estcoursautre).sort((a, b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
-    const attributionsAutres = Object.values(attributionsAgregees).filter((attr) => attr.estcoursautre).sort((a, b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
+    const attributionsEnseignement = Object.values(attributionsAgregees).filter((a) => !a.estcoursautre).sort((a, b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
+    const attributionsAutres = Object.values(attributionsAgregees).filter((a) => a.estcoursautre).sort((a, b) => a.coursdescriptif.localeCompare(b.coursdescriptif));
 
     if (attributionsEnseignement.length > 0) {
         tbody.innerHTML += `<tr class="sous-titre-attributions-row"><td colspan="6" class="sous-titre-attributions">Périodes d'enseignement</td></tr>`;
         attributionsEnseignement.forEach((attr) => {
             const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
             totalPeriodesEnseignantCalcule += totalPeriodesAttr;
-            tbody.innerHTML += `
-                <tr>
-                    <td>${attr.codecours}</td>
-                    <td>${attr.coursdescriptif}</td>
-                    <td>${attr.nbgroupespris}</td>
-                    <td>${formatPeriodes(attr.nbperiodes)}</td>
-                    <td>${formatPeriodes(totalPeriodesAttr)}</td>
-                    <td class="no-print"><button class="btn-retirer-cours" data-attribution-id="${attr.attributionIds.at(-1)}">Retirer</button></td>
-                </tr>`;
+            tbody.innerHTML += `<tr><td>${attr.codecours}</td><td>${attr.coursdescriptif}</td><td>${attr.nbgroupespris}</td><td>${formatPeriodes(attr.nbperiodes)}</td><td>${formatPeriodes(totalPeriodesAttr)}</td><td class="no-print"><button class="btn-retirer-cours" data-attribution-id="${attr.attributionIds.at(-1)}">Retirer</button></td></tr>`;
         });
     }
 
@@ -212,34 +171,19 @@ function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray)
         attributionsAutres.forEach((attr) => {
             const totalPeriodesAttr = attr.nbperiodes * attr.nbgroupespris;
             totalPeriodesEnseignantCalcule += totalPeriodesAttr;
-            tbody.innerHTML += `
-                <tr>
-                    <td>${attr.codecours}</td>
-                    <td>${attr.coursdescriptif}</td>
-                    <td>${attr.nbgroupespris}</td>
-                    <td>${formatPeriodes(attr.nbperiodes)}</td>
-                    <td>${formatPeriodes(totalPeriodesAttr)}</td>
-                    <td class="no-print"><button class="btn-retirer-cours" data-attribution-id="${attr.attributionIds.at(-1)}">Retirer</button></td>
-                </tr>`;
+            tbody.innerHTML += `<tr><td>${attr.codecours}</td><td>${attr.coursdescriptif}</td><td>${attr.nbgroupespris}</td><td>${formatPeriodes(attr.nbperiodes)}</td><td>${formatPeriodes(totalPeriodesAttr)}</td><td class="no-print"><button class="btn-retirer-cours" data-attribution-id="${attr.attributionIds.at(-1)}">Retirer</button></td></tr>`;
         });
     }
 
     if (tbody.innerHTML === "") {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; font-style: italic;">Aucune période choisie pour le moment.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; font-style: italic;">Aucune période choisie.</td></tr>`;
     } else {
-        tbody.innerHTML += `
-            <tr class="total-attributions-row">
-                <td colspan="4">Total périodes choisies:</td>
-                <td>${formatPeriodes(totalPeriodesEnseignantCalcule)}</td>
-                <td class="no-print"></td>
-            </tr>`;
+        tbody.innerHTML += `<tr class="total-attributions-row"><td colspan="4">Total périodes choisies:</td><td>${formatPeriodes(totalPeriodesEnseignantCalcule)}</td><td class="no-print"></td></tr>`;
     }
 }
 
-
 /**
- * Gestionnaire d'événements unique pour la section des enseignants (délégation).
- * Traite les clics sur les en-têtes de carte, les boutons "Choisir", "Retirer" et "Supprimer".
+ * Gestionnaire d'événements pour la section des enseignants.
  * @param {Event} event L'objet événement du clic.
  */
 function gestionnaireClicsEnseignantsSection(event) {
@@ -249,24 +193,24 @@ function gestionnaireClicsEnseignantsSection(event) {
 
     if (target.closest(".entete-enseignant")) {
         toggleEnseignantDetails(card);
-    } else if (target.matches('.cours-selection button')) {
+    } else if (target.matches(".cours-selection button")) {
         attribuerCours(target.dataset.enseignantId, target.dataset.coursCode, target);
     } else if (target.matches(".btn-retirer-cours")) {
         if (confirm("Êtes-vous sûr de vouloir retirer une attribution de ce cours ?")) {
             retirerCours(target.dataset.attributionId, target);
         }
     } else if (target.matches(".btn-supprimer-enseignant")) {
-        if (confirm("Êtes-vous sûr de vouloir supprimer cette tâche restante et tous ses cours attribués ?")) {
+        if (confirm("Êtes-vous sûr de vouloir supprimer cette tâche restante ?")) {
             supprimerEnseignantFictif(target.dataset.enseignantId, target);
         }
     }
 }
 
 /**
- * Appelle l'API pour attribuer un cours et met à jour l'interface.
+ * Appelle l'API pour attribuer un cours.
  * @param {string} enseignantId L'ID de l'enseignant.
- * @param {string} codeCours Le code du cours à attribuer.
- * @param {HTMLElement} boutonClique Le bouton "Choisir" qui a été cliqué.
+ * @param {string} codeCours Le code du cours.
+ * @param {HTMLElement} boutonClique Le bouton cliqué.
  */
 async function attribuerCours(enseignantId, codeCours, boutonClique) {
     const card = boutonClique.closest(".enseignant-card");
@@ -275,15 +219,14 @@ async function attribuerCours(enseignantId, codeCours, boutonClique) {
     boutonClique.textContent = "...";
 
     try {
-        const response = await fetch("/api/attributions/ajouter", {
+        const response = await fetch(API_URLS.attribuerCours, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ enseignant_id: parseInt(enseignantId), code_cours: codeCours }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Erreur lors de l'attribution du cours.");
+        if (!response.ok) throw new Error(data.message || "Erreur d'attribution.");
 
-        // Mettre à jour toutes les parties de l'interface qui dépendent de ces données.
         mettreAJourLigneSommaire(enseignantId, data.periodes_enseignant);
         regenererTableauAttributionsEnseignant(enseignantId, data.attributions_enseignant || []);
         mettreAJourDonneesGlobalesCours(codeCours, data.groupes_restants_cours);
@@ -303,21 +246,20 @@ async function attribuerCours(enseignantId, codeCours, boutonClique) {
 }
 
 /**
- * Appelle l'API pour retirer une attribution de cours et met à jour l'interface.
- * @param {string} attributionId L'ID de l'attribution à supprimer.
- * @param {HTMLElement} _boutonClique Le bouton "Retirer" cliqué (préfixé par `_` car non utilisé).
+ * Appelle l'API pour retirer une attribution.
+ * @param {string} attributionId L'ID de l'attribution.
+ * @param {HTMLElement} _boutonClique Le bouton cliqué.
  */
 async function retirerCours(attributionId, _boutonClique) {
     try {
-        const response = await fetch("/api/attributions/supprimer", {
+        const response = await fetch(API_URLS.retirerCours, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ attribution_id: parseInt(attributionId) }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Erreur lors du retrait du cours.");
+        if (!response.ok) throw new Error(data.message || "Erreur de retrait.");
 
-        // Mettre à jour toutes les parties de l'interface.
         mettreAJourLigneSommaire(data.enseignant_id, data.periodes_enseignant);
         regenererTableauAttributionsEnseignant(data.enseignant_id, data.attributions_enseignant || []);
         mettreAJourDonneesGlobalesCours(data.code_cours, data.groupes_restants_cours);
@@ -333,18 +275,17 @@ async function retirerCours(attributionId, _boutonClique) {
 }
 
 /**
- * Appelle l'API pour créer une tâche restante (enseignant fictif).
- * @param {HTMLElement} boutonClique Le bouton "Créer une tâche restante".
+ * Appelle l'API pour créer une tâche restante.
+ * @param {HTMLElement} boutonClique Le bouton cliqué.
  */
 async function creerTacheRestante(boutonClique) {
     boutonClique.disabled = true;
     boutonClique.textContent = "Création...";
     try {
-        const response = await fetch(`/api/champs/${G_CHAMP_NO_ACTUEL}/taches_restantes/creer`, { method: "POST" });
+        const response = await fetch(API_URLS.creerTacheRestante, { method: "POST" });
         const data = await response.json();
-        if (!response.ok || !data.enseignant) throw new Error(data.message || "Erreur lors de la création de la tâche.");
+        if (!response.ok || !data.enseignant) throw new Error(data.message || "Erreur de création.");
 
-        // Mettre à jour les données et l'interface.
         G_ENSEIGNANTS_INITIAL_DATA.push(data.enseignant);
         ajouterEnseignantDynamiquement(data.enseignant);
         ajouterAuTableauSommaire(data.enseignant, data.periodes_actuelles || {});
@@ -354,24 +295,26 @@ async function creerTacheRestante(boutonClique) {
         alert(error.message);
     } finally {
         boutonClique.disabled = false;
-        boutonClique.textContent = "Créer une tâche restante";
+        boutonClique.textContent = "Créer une Tâche Restante";
     }
 }
 
 /**
- * Appelle l'API pour supprimer un enseignant fictif (tâche restante).
- * @param {string} enseignantId L'ID de l'enseignant fictif à supprimer.
- * @param {HTMLElement} boutonClique Le bouton "Supprimer tâche".
+ * Appelle l'API pour supprimer un enseignant fictif.
+ * @param {string} enseignantId L'ID de l'enseignant.
+ * @param {HTMLElement} boutonClique Le bouton cliqué.
  */
 async function supprimerEnseignantFictif(enseignantId, boutonClique) {
     boutonClique.disabled = true;
     boutonClique.textContent = "Suppression...";
     try {
-        const response = await fetch(`/api/enseignants/${enseignantId}/supprimer`, { method: "POST" });
+        // CORRECTION : L'URL est construite dynamiquement en remplaçant l'ID factice
+        // par le véritable ID de l'enseignant au moment de l'appel.
+        const url = API_URLS.supprimerEnseignant.replace("999999999", enseignantId);
+        const response = await fetch(url, { method: "POST" });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Erreur lors de la suppression de la tâche.");
+        if (!response.ok) throw new Error(data.message || "Erreur de suppression.");
 
-        // Mettre à jour les données et l'interface.
         document.getElementById(`enseignant-card-${enseignantId}`)?.remove();
         document.querySelector(`.sommaire-champ-section tbody tr[data-enseignant-id="${enseignantId}"]`)?.remove();
         G_ENSEIGNANTS_INITIAL_DATA = G_ENSEIGNANTS_INITIAL_DATA.filter((e) => e.enseignantid !== parseInt(enseignantId));
@@ -395,11 +338,11 @@ async function supprimerEnseignantFictif(enseignantId, boutonClique) {
     }
 }
 
+
 /**
- * Met à jour les données globales d'un cours (nombre de groupes restants).
- * Ces données sont la "source de vérité" pour tous les affichages dynamiques.
- * @param {string} codeCours Le code du cours à mettre à jour.
- * @param {number} nouveauxGrpRestants Le nouveau nombre de groupes restants.
+ * Met à jour les données globales d'un cours.
+ * @param {string} codeCours Le code du cours.
+ * @param {number} nouveauxGrpRestants Le nouveau nombre de groupes.
  */
 function mettreAJourDonneesGlobalesCours(codeCours, nouveauxGrpRestants) {
     const coursE = G_COURS_ENSEIGNEMENT_CHAMP.find((c) => c.codecours === codeCours);
@@ -409,7 +352,7 @@ function mettreAJourDonneesGlobalesCours(codeCours, nouveauxGrpRestants) {
 }
 
 /**
- * Régénère le contenu HTML du tableau des cours restants à partir des données globales.
+ * Régénère le tableau des cours restants.
  */
 function regenererTableauCoursRestants() {
     const tbody = document.querySelector("#tableau-cours-restants tbody");
@@ -419,8 +362,8 @@ function regenererTableauCoursRestants() {
 }
 
 /**
- * Génère le code HTML pour les lignes du tableau des cours restants.
- * @returns {string} Le code HTML des lignes (`<tr>...</tr>`).
+ * Génère le HTML pour les lignes du tableau des cours restants.
+ * @returns {string} Le code HTML des lignes.
  */
 function genererHtmlLignesCoursRestants() {
     const coursEnseignement = G_COURS_ENSEIGNEMENT_CHAMP.filter((c) => c.grprestant > 0);
@@ -445,29 +388,24 @@ function genererHtmlLignesCoursRestants() {
 }
 
 /**
- * Régénère les listes de cours disponibles pour toutes les cartes d'enseignants actuellement dépliées.
- * C'est une fonction clé pour assurer la cohérence de l'UI après chaque action.
+ * Régénère toutes les listes de cours à choisir.
  */
 function regenererToutesLesListesDeCoursAChoisirGlobale() {
     document.querySelectorAll(".enseignant-card.detail-visible").forEach((card) => {
         const enseignantId = card.id.split("-").pop();
         const ulEnseignement = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="enseignement"]');
-        if (ulEnseignement) {
-            ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId, "enseignement");
-        }
+        if (ulEnseignement) ulEnseignement.innerHTML = genererListeHTMLCoursDispo(G_COURS_ENSEIGNEMENT_CHAMP, enseignantId);
         const ulAutres = card.querySelector('ul.liste-cours-a-choisir[data-type-cours="autre"]');
-        if (ulAutres) {
-            ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId, "autre");
-        }
+        if (ulAutres) ulAutres.innerHTML = genererListeHTMLCoursDispo(G_COURS_AUTRES_TACHES_CHAMP, enseignantId);
         appliquerStatutVerrouillagePourCarte(card);
     });
 }
 
 /**
- * Génère le code HTML pour une liste (`<ul>`) de cours disponibles à l'attribution.
- * @param {Array} listeCoursGlobale - La liste des cours (enseignement ou autres).
- * @param {string} enseignantId - L'ID de l'enseignant pour les `data-attributes`.
- * @returns {string} Le code HTML des éléments de la liste (`<li>...</li>`).
+ * Génère le HTML pour une liste de cours disponibles.
+ * @param {Array} listeCoursGlobale La liste des cours.
+ * @param {string} enseignantId L'ID de l'enseignant.
+ * @returns {string} Le code HTML des éléments de la liste.
  */
 function genererListeHTMLCoursDispo(listeCoursGlobale, enseignantId) {
     const coursAffichables = listeCoursGlobale.filter((c) => c.grprestant > 0);
@@ -475,20 +413,14 @@ function genererListeHTMLCoursDispo(listeCoursGlobale, enseignantId) {
         return `<li>Aucun cours de ce type disponible.</li>`;
     }
     return coursAffichables
-        .map(
-            (c) => `
-        <li>
-            <span>${c.codecours} - ${c.coursdescriptif} (${formatPeriodes(c.nbperiodes)} p. - ${c.grprestant} grp.)</span>
-            <button data-enseignant-id="${enseignantId}" data-cours-code="${c.codecours}">Choisir</button>
-        </li>`
-        )
+        .map((c) => `<li><span>${c.codecours} - ${c.coursdescriptif} (${c.grprestant} grp. - ${formatPeriodes(c.nbperiodes)} p.)</span><button data-enseignant-id="${enseignantId}" data-cours-code="${c.codecours}">Choisir</button></li>`)
         .join("");
 }
 
 /**
- * Met à jour une ligne dans le tableau de sommaire du champ et la donnée globale correspondante.
- * @param {string|number} enseignantId - L'ID de l'enseignant.
- * @param {object} periodes - Objet contenant { periodes_cours, periodes_autres, total_periodes }.
+ * Met à jour une ligne dans le tableau de sommaire.
+ * @param {string|number} enseignantId L'ID de l'enseignant.
+ * @param {object} periodes Objet contenant les totaux de périodes.
  */
 function mettreAJourLigneSommaire(enseignantId, periodes) {
     const ligne = document.querySelector(`.sommaire-champ-section tbody tr[data-enseignant-id="${enseignantId}"]`);
@@ -504,8 +436,8 @@ function mettreAJourLigneSommaire(enseignantId, periodes) {
 }
 
 /**
- * Ajoute dynamiquement une carte d'enseignant à l'interface à partir d'un template.
- * @param {object} enseignant - L'objet enseignant avec ses données.
+ * Ajoute dynamiquement une carte d'enseignant.
+ * @param {object} enseignant L'objet enseignant.
  */
 function ajouterEnseignantDynamiquement(enseignant) {
     const container = document.querySelector(".enseignants-section");
@@ -528,9 +460,9 @@ function ajouterEnseignantDynamiquement(enseignant) {
 }
 
 /**
- * Ajoute une ligne au tableau de sommaire pour un nouvel enseignant.
- * @param {object} enseignant - L'objet enseignant.
- * @param {object} periodes - L'objet des périodes.
+ * Ajoute une ligne au tableau de sommaire.
+ * @param {object} enseignant L'objet enseignant.
+ * @param {object} periodes L'objet des périodes.
  */
 function ajouterAuTableauSommaire(enseignant, periodes) {
     const tbody = document.querySelector("#tableau-sommaire-champ tbody");
@@ -538,16 +470,11 @@ function ajouterAuTableauSommaire(enseignant, periodes) {
     const row = tbody.insertRow();
     row.dataset.enseignantId = enseignant.enseignantid;
     row.className = enseignant.estfictif ? "enseignant-fictif-sommaire" : "";
-    row.innerHTML = `
-        <td>${enseignant.nomcomplet}</td>
-        <td class="sum-cours-val">${formatPeriodes(periodes.periodes_cours)}</td>
-        <td class="sum-autres-val">${formatPeriodes(periodes.periodes_autres)}</td>
-        <td class="sum-total-val">${formatPeriodes(periodes.total_periodes)}</td>
-        <td>Tâche Restante</td>`;
+    row.innerHTML = `<td>${enseignant.nomcomplet}</td><td class="sum-cours-val">${formatPeriodes(periodes.periodes_cours)}</td><td class="sum-autres-val">${formatPeriodes(periodes.periodes_autres)}</td><td class="sum-total-val">${formatPeriodes(periodes.total_periodes)}</td><td>Tâche Restante</td>`;
 }
 
 /**
- * Recalcule et met à jour la moyenne des périodes pour les enseignants à temps plein du champ.
+ * Recalcule et met à jour la moyenne des périodes du champ.
  */
 function recalculerEtAfficherMoyenneChamp() {
     const enseignantsTempsPlein = G_ENSEIGNANTS_INITIAL_DATA.filter((e) => e.esttempsplein && !e.estfictif);
@@ -559,61 +486,32 @@ function recalculerEtAfficherMoyenneChamp() {
     }
 }
 
-// --- Fonctions spécifiques à l'impression ---
-
 /**
- * Génère et insère le HTML de la page de résumé pour l'impression.
- * Cette page est construite à partir des données globales pour garantir leur exactitude.
+ * Génère et insère le HTML du résumé pour l'impression.
  */
 function genererRapportSommairePourImpression() {
     const container = document.getElementById("print-summary-page");
     if (!container) return;
-
-    const htmlSommaire = genererHtmlTableauSommaireChamp();
-    const htmlRestants = genererHtmlTableauCoursRestants();
-
-    // L'ordre est important : d'abord le sommaire des tâches, puis les cours restants.
-    container.innerHTML = htmlSommaire + htmlRestants;
+    container.innerHTML = genererHtmlTableauSommaireChamp() + genererHtmlTableauCoursRestants();
 }
 
 /**
- * Génère le HTML du tableau sommaire du champ pour l'impression.
- * IMPORTANT : Cette version exclut les enseignants fictifs (tâches restantes).
+ * Génère le HTML du tableau sommaire pour l'impression.
  * @returns {string} Le code HTML du tableau.
  */
 function genererHtmlTableauSommaireChamp() {
     let tbodyHtml = "";
-    // Filtrer les enseignants fictifs avant de trier et d'afficher.
     const enseignantsReels = G_ENSEIGNANTS_INITIAL_DATA.filter((e) => !e.estfictif);
-
-    const enseignantsTries = [...enseignantsReels].sort((a, b) => {
-        return (a.nom || "").localeCompare(b.nom || "") || (a.prenom || "").localeCompare(b.prenom || "");
-    });
+    const enseignantsTries = [...enseignantsReels].sort((a, b) => (a.nomcomplet || "").localeCompare(b.nomcomplet || ""));
 
     enseignantsTries.forEach((enseignant) => {
         const p = enseignant.periodes_actuelles || { periodes_cours: 0, periodes_autres: 0, total_periodes: 0 };
-        const nom = `${enseignant.nom}, ${enseignant.prenom}`;
-        let statut = "Temps Plein";
-        if (!enseignant.esttempsplein) statut = "Temps Partiel";
-
-        tbodyHtml += `
-            <tr>
-                <td>${nom}</td>
-                <td>${formatPeriodes(p.periodes_cours)}</td>
-                <td>${formatPeriodes(p.periodes_autres)}</td>
-                <td>${formatPeriodes(p.total_periodes)}</td>
-                <td>${statut}</td>
-            </tr>`;
+        const statut = enseignant.esttempsplein ? "Temps Plein" : "Temps Partiel";
+        tbodyHtml += `<tr><td>${enseignant.nomcomplet}</td><td>${formatPeriodes(p.periodes_cours)}</td><td>${formatPeriodes(p.periodes_autres)}</td><td>${formatPeriodes(p.total_periodes)}</td><td>${statut}</td></tr>`;
     });
 
     const moyenneChamp = document.getElementById("moyenne-champ-val")?.textContent || "0";
-    return `
-        <h2 class="section-title">Tâches du champ : ${G_CHAMP_NO_ACTUEL}</h2>
-        <table id="tableau-sommaire-champ-print">
-            <thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead>
-            <tbody>${tbodyHtml}</tbody>
-            <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td>${moyenneChamp}</td><td></td></tr></tfoot>
-        </table>`;
+    return `<h2 class="section-title">Tâches du champ : ${G_CHAMP_NO_ACTUEL}</h2><table id="tableau-sommaire-champ-print"><thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead><tbody>${tbodyHtml}</tbody><tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td>${moyenneChamp}</td><td></td></tr></tfoot></table>`;
 }
 
 /**
@@ -622,10 +520,5 @@ function genererHtmlTableauSommaireChamp() {
  */
 function genererHtmlTableauCoursRestants() {
     const lignesHtml = genererHtmlLignesCoursRestants();
-    return `
-        <h2 class="section-title">Périodes restantes dans ce champ</h2>
-        <table id="tableau-cours-restants-print">
-            <thead><tr><th>Code</th><th>Cours disponibles</th><th>Grp. rest.</th><th>Pér.</th><th>Pér. restantes</th></tr></thead>
-            <tbody>${lignesHtml}</tbody>
-        </table>`;
+    return `<h2 class="section-title">Périodes restantes dans ce champ</h2><table id="tableau-cours-restants-print"><thead><tr><th>Code</th><th>Cours disponibles</th><th>Grp. rest.</th><th>Pér.</th><th>Pér. restantes</th></tr></thead><tbody>${lignesHtml}</tbody></table>`;
 }

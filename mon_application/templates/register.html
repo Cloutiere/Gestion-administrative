@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inscription - Gestion des Tâches Enseignants</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <!-- Script pour appliquer le thème instantanément -->
     <script>
         (function() {
             function applyTheme(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage');
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
                 if (theme === 'dark') document.body.classList.add('theme-dark');
                 else if (theme === 'vintage') document.body.classList.add('theme-vintage');
+                else document.body.classList.add('theme-light');
             }
             const savedTheme = localStorage.getItem('appTheme') || 'light';
             applyTheme(savedTheme);
@@ -24,10 +25,11 @@
         <h1>Inscription</h1>
         <nav>
             <ul>
-                <li><a href="{{ url_for('index') }}">Accueil</a></li>
+                {# CORRECTION: 'views.index' #}
+                <li><a href="{{ url_for('views.index') }}">Accueil</a></li>
             </ul>
         </nav>
-        
+
         <!-- Sélecteur de thème -->
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light">Clair</button>
@@ -63,8 +65,10 @@
                     <label for="confirm_password">Confirmer le mot de passe :</label>
                     <input type="password" id="confirm_password" name="confirm_password" required>
                 </div>
-                
+
                 {% if not first_user %}
+                    {# Cette section n'est plus utilisée car l'inscription est bloquée après le premier utilisateur #}
+                    {# mais on la garde pour l'exemple. #}
                     <div class="checkbox-group">
                         <input type="checkbox" id="is_admin" name="is_admin" {{ 'checked' if is_admin_checked else '' }}>
                         <label for="is_admin">Accès Administrateur</label>
@@ -74,38 +78,41 @@
                 <button type="submit">S'inscrire</button>
             </form>
 
-            <p>Déjà un compte ? <a href="{{ url_for('login') }}">Se connecter</a>.</p>
+            {# CORRECTION: 'auth.login' #}
+            <p>Déjà un compte ? <a href="{{ url_for('auth.login') }}">Se connecter</a>.</p>
         </div>
     </main>
 
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
-    
+
     <!-- Script de gestion du thème -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const themeSwitcher = document.querySelector('.theme-switcher');
-            const themeButtons = document.querySelectorAll('.theme-switcher button');
-            
-            function applyThemeUI(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                document.body.classList.add(`theme-${theme}`);
-                themeButtons.forEach(btn => btn.classList.remove('active'));
-                const activeButton = document.getElementById(`theme-btn-${theme}`);
-                if (activeButton) activeButton.classList.add('active');
-            }
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
 
-            themeSwitcher.addEventListener('click', function(event) {
-                if (event.target.tagName === 'BUTTON') {
-                    const theme = event.target.dataset.theme;
-                    localStorage.setItem('appTheme', theme);
-                    applyThemeUI(theme);
+                function applyThemeUI(theme) {
+                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                    document.body.classList.add(`theme-${theme}`);
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) activeButton.classList.add('active');
                 }
-            });
 
-            const savedTheme = localStorage.getItem('appTheme') || 'light';
-            applyThemeUI(savedTheme); 
+                themeSwitcher.addEventListener('click', function(event) {
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme;
+                        localStorage.setItem('appTheme', theme);
+                        applyThemeUI(theme);
+                    }
+                });
+
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme);
+            }
         });
     </script>
 </body>

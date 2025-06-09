@@ -1,0 +1,982 @@
+/* static/css/style.css */
+/* Fichier de style global et unifié pour toute l'application. */
+@import url("https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Source+Sans+Pro:wght@400;600&display=swap");
+
+/* --- Thème par défaut (Clair) --- */
+:root {
+    --color-primary: #007bff;
+    --color-primary-hover: #0056b3;
+    --color-secondary: #6c757d;
+    --color-success: #28a745;
+    --color-success-hover: #218838;
+    --color-danger: #dc3545;
+    --color-danger-hover: #c82333;
+    --color-warning: #ffc107;
+    --color-info: #17a2b8;
+    --color-info-hover: #138496;
+
+    --color-text-primary: #212529;
+    --color-text-secondary: #6c757d;
+    --color-text-on-primary: #ffffff;
+    --color-background: #f8f9fa;
+    --color-surface: #ffffff;
+    --color-border: #dee2e6;
+    --color-header-bg: #e9ecef;
+    --color-table-hover: rgba(0, 123, 255, 0.05);
+
+    --font-family-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --border-radius: 0.375rem; /* 6px */
+    --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --transition-speed: 0.2s;
+}
+
+/* CORRECTION: Les thèmes sont maintenant appliqués à l'élément <html> */
+/* --- Thème Sombre --- */
+html.theme-dark {
+    --color-primary: #4dabf7;
+    --color-primary-hover: #74c0fc;
+    --color-secondary: #adb5bd;
+    --color-success: #40c057;
+    --color-danger: #f06565;
+    --color-info: #3bc9db;
+
+    --color-text-primary: #e9ecef;
+    --color-text-secondary: #adb5bd;
+    --color-text-on-primary: #000000;
+    --color-background: #1a1b1e;
+    --color-surface: #2c2e33;
+    --color-border: #495057;
+    --color-header-bg: #343a40;
+    --color-table-hover: rgba(77, 171, 247, 0.1);
+    --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* --- Thème Vintage --- */
+html.theme-vintage {
+    --color-primary: #b58900;
+    --color-primary-hover: #cb4b16;
+    --color-secondary: #93a1a1;
+    --color-success: #859900;
+    --color-danger: #dc322f;
+    --color-info: #268bd2;
+
+    --color-text-primary: #586e75;
+    --color-text-secondary: #839496;
+    --color-text-on-primary: #fdf6e3;
+    --color-background: #fdf6e3;
+    --color-surface: #eee8d5;
+    --color-border: #93a1a1;
+    --color-header-bg: #eee8d5;
+    --color-table-hover: rgba(181, 137, 0, 0.08);
+
+    --font-family-body: "Source Sans Pro", sans-serif;
+    --font-family-heading: "Lora", serif;
+    --border-radius: 0.2rem;
+    --box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* --- Styles de base et réinitialisation --- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-family-body);
+    line-height: 1.6;
+    margin: 0;
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
+    font-size: 1.1rem;
+}
+
+/* --- Typographie --- */
+h1,
+h2,
+h3,
+h4 {
+    font-family: var(--font-family-heading);
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+}
+h1 {
+    font-size: 2rem;
+}
+h2 {
+    font-size: 1.5rem;
+}
+h3 {
+    font-size: 1.25rem;
+}
+p {
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color var(--transition-speed) ease;
+}
+a:hover {
+    color: var(--color-primary-hover);
+    text-decoration: underline;
+}
+hr {
+    border: 0;
+    height: 1px;
+    background-color: var(--color-border);
+    margin: 2rem 0;
+}
+small {
+    font-size: 0.875em;
+}
+
+/* --- Conteneurs principaux --- */
+header,
+main,
+footer {
+    padding: 1.5rem;
+    transition: background-color var(--transition-speed) ease;
+}
+header {
+    background-color: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+main {
+    flex-grow: 1;
+}
+footer {
+    text-align: center;
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+    background-color: var(--color-background);
+    border-top: 1px solid var(--color-border);
+    flex-shrink: 0;
+    padding: 1rem 1.5rem;
+}
+
+/* --- Navigation & Sélecteur de thème --- */
+nav ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+nav li {
+    margin-bottom: 0.5rem;
+}
+nav ul strong {
+    display: block;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+.locked-indicator {
+    color: var(--color-secondary);
+    font-size: 0.9em;
+    margin-left: 0.5rem;
+    display: inline-block;
+}
+
+.theme-switcher {
+    display: flex;
+    gap: 0.5rem;
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+}
+.theme-switcher button {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--color-border);
+    background-color: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+.theme-switcher button:hover {
+    background-color: var(--color-header-bg);
+    color: var(--color-text-primary);
+}
+.theme-switcher button.active {
+    background-color: var(--color-primary);
+    color: var(--color-text-on-primary);
+    border-color: var(--color-primary);
+}
+/* Groupe de boutons */
+.button-group {
+    display: flex;
+    gap: 0.5rem; /* Espace entre les boutons */
+    flex-wrap: wrap; /* Permet aux boutons de passer à la ligne sur petit écran */
+    margin-top: 1rem;
+}
+
+/* --- Messages Flash --- */
+.flash-messages {
+    list-style-type: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+}
+.flash-messages li {
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--border-radius);
+    font-weight: 500;
+}
+.flash-messages .success {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+.flash-messages .error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+.flash-messages .warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeeba;
+}
+.flash-messages .info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-color: #bee5eb;
+}
+
+/* --- Formulaires et Boutons --- */
+.form-group {
+    margin-bottom: 1.25rem;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+.form-group input[type="text"],
+.form-group input[type="password"],
+.form-group input[type="file"],
+select {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    transition: border-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+}
+.form-group input[type="text"]:focus,
+.form-group input[type="password"]:focus,
+select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent);
+}
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+.checkbox-group input[type="checkbox"] {
+    margin-right: 0.75rem;
+    width: 1.25rem;
+    height: 1.25rem;
+}
+.checkbox-group label {
+    margin-bottom: 0;
+    font-weight: normal;
+}
+
+button,
+.btn {
+    display: inline-block;
+    padding: 0.625rem 1.25rem;
+    border: none;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, transform var(--transition-speed) ease;
+    text-decoration: none; /* Pour les liens .btn */
+}
+button:hover,
+.btn:hover {
+    transform: translateY(-1px);
+    text-decoration: none; /* Pour les liens .btn */
+}
+button:disabled,
+.btn:disabled {
+    background-color: var(--color-secondary);
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+}
+.btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-text-on-primary);
+}
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+    color: var(--color-text-on-primary);
+}
+.btn-success {
+    background-color: var(--color-success);
+    color: var(--color-text-on-primary);
+}
+.btn-success:hover:not(:disabled) {
+    background-color: var(--color-success-hover);
+    color: var(--color-text-on-primary);
+}
+.btn-danger {
+    background-color: var(--color-danger);
+    color: var(--color-text-on-primary);
+}
+.btn-danger:hover:not(:disabled) {
+    background-color: var(--color-danger-hover);
+    color: var(--color-text-on-primary);
+}
+.btn-info {
+    background-color: var(--color-info);
+    color: var(--color-text-on-primary);
+}
+.btn-info:hover:not(:disabled) {
+    background-color: var(--color-info-hover);
+    color: var(--color-text-on-primary);
+}
+.btn-secondary {
+    background-color: var(--color-secondary);
+    color: var(--color-text-on-primary);
+}
+.btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+}
+
+/* --- Tableaux --- */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+    background-color: var(--color-surface);
+    margin-bottom: 1rem;
+}
+th,
+td {
+    border: 1px solid var(--color-border);
+    padding: 0.75rem;
+    text-align: left;
+    vertical-align: top;
+}
+th {
+    background-color: var(--color-header-bg);
+    font-weight: 600;
+}
+tbody tr:nth-of-type(odd) {
+    background-color: color-mix(in srgb, var(--color-surface) 95%, var(--color-background));
+}
+/* Éviter le hover sur les sous-titres */
+tbody tr:hover:not(.sous-titre-attributions-row) {
+    background-color: var(--color-table-hover);
+}
+tfoot td {
+    font-weight: bold;
+    background-color: var(--color-header-bg);
+}
+
+/* --- Composants spécifiques --- */
+/* Formulaires d'authentification */
+.auth-form-container {
+    max-width: 450px;
+    margin: 3rem auto;
+    padding: 2rem;
+    background-color: var(--color-surface);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+}
+.auth-form-container h2 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+.auth-form-container button[type="submit"] {
+    width: 100%;
+    background-color: var(--color-primary);
+    color: var(--color-text-on-primary);
+}
+.auth-form-container button[type="submit"]:hover {
+    background-color: var(--color-primary-hover);
+}
+.auth-form-container p {
+    margin-top: 1.5rem;
+    font-size: 0.95em;
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+
+/* Sections Admin */
+.admin-section {
+    background-color: var(--color-surface);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 2rem;
+    box-shadow: var(--box-shadow);
+}
+.admin-section h2 {
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+.note-importation {
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+    margin-top: 1rem;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    padding: 1rem;
+    border-radius: var(--border-radius);
+}
+.note-importation ul {
+    padding-left: 1.25rem;
+}
+.warning-text {
+    color: var(--color-danger);
+    font-weight: bold;
+}
+.admin-info {
+    font-style: italic;
+    color: var(--color-text-secondary);
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+.btn-importer {
+    background-color: var(--color-success);
+    color: var(--color-text-on-primary);
+}
+.btn-importer:hover:not(:disabled) {
+    background-color: var(--color-success-hover);
+}
+
+/* Zone de messages API */
+.api-message {
+    margin-top: 1rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--border-radius);
+    display: none;
+    font-weight: 500;
+}
+.api-message.message-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.api-message.message-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+.api-message.message-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* --- Page CHAMP --- */
+.page-champ-container {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: nowrap;
+}
+.print-button-group {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+.enseignants-section,
+.cours-restants-section,
+.sommaire-champ-section {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+    box-shadow: var(--box-shadow);
+}
+.enseignants-section {
+    flex: 2;
+    min-width: 450px;
+}
+.cours-restants-section,
+.sommaire-champ-section {
+    flex: 1;
+    min-width: 320px;
+}
+.section-title {
+    font-size: 1.2rem;
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+#lock-status-indicator {
+    font-size: 0.8em;
+    color: var(--color-danger);
+    margin-left: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+#lock-status-indicator svg {
+    vertical-align: middle;
+}
+.enseignant-card {
+    border: 1px solid var(--color-border);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background-color: var(--color-surface);
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+    border-left: 5px solid transparent;
+}
+/* CORRECTION: Cibler les thèmes depuis html */
+html.theme-light .enseignant-fictif {
+    background-color: #f0f8ff;
+    border-left-color: #cce5ff;
+}
+html.theme-dark .enseignant-fictif {
+    background-color: #2b3a4a;
+    border-left-color: #4f7396;
+}
+html.theme-vintage .enseignant-fictif {
+    background-color: #f5f0e3;
+    border-left-color: #ccc8bc;
+}
+.enseignant-card.detail-visible {
+    border-left-color: var(--color-primary);
+    box-shadow: var(--box-shadow);
+}
+html.theme-light .enseignant-card.detail-visible {
+    background-color: #e7f3fe;
+}
+html.theme-dark .enseignant-card.detail-visible {
+    background-color: #344050;
+}
+html.theme-vintage .enseignant-card.detail-visible {
+    background-color: #e6e0ce;
+}
+.entete-enseignant {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 0.25rem 0;
+}
+.entete-enseignant:hover .nom-enseignant-texte {
+    color: var(--color-primary);
+}
+.arrow-indicator {
+    transition: transform var(--transition-speed) ease;
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+.enseignant-card.detail-visible .arrow-indicator {
+    transform: rotate(90deg);
+}
+.action-enseignant-fictif {
+    text-align: right;
+    margin-bottom: 0.5rem;
+}
+.contenu-selection-cours {
+    display: none;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--color-border);
+}
+.enseignant-card.detail-visible .contenu-selection-cours {
+    display: block;
+}
+.cours-selection ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin-top: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+.cours-selection li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9em;
+}
+.cours-selection li:last-child {
+    border-bottom: none;
+}
+.cours-selection button,
+.btn-retirer-cours,
+.btn-supprimer-enseignant {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.85em;
+    background-color: var(--color-primary);
+    color: var(--color-text-on-primary);
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+.btn-retirer-cours,
+.btn-supprimer-enseignant {
+    background-color: var(--color-danger);
+}
+.btn-retirer-cours:hover:not(:disabled),
+.btn-supprimer-enseignant:hover:not(:disabled) {
+    background-color: var(--color-danger-hover);
+}
+.sous-titre-attributions-row td,
+.sous-titre-attributions {
+    background-color: var(--color-header-bg) !important;
+    font-weight: bold;
+    text-align: center;
+    padding-top: 1rem;
+}
+.total-attributions-row td {
+    font-weight: bold;
+    background-color: var(--color-header-bg);
+    text-align: right;
+}
+.total-attributions-row td:first-child {
+    text-align: left;
+}
+.signature-line {
+    margin-top: 40px;
+    border-top: 1px solid var(--color-text-primary);
+    padding-top: 5px;
+    font-style: italic;
+    width: 60%;
+    min-width: 250px;
+    display: none;
+}
+.print-only {
+    display: none;
+}
+
+/* --- Page SOMMAIRE --- */
+.container-principal-sommaire {
+    display: flex;
+    flex-grow: 1;
+    overflow: hidden;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+.colonne-sommaire {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    overflow-y: auto;
+    padding: 1rem;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+}
+.colonne-gauche {
+    flex: 1 1 35%;
+    min-width: 380px;
+}
+.colonne-droite {
+    flex: 2 1 60%;
+    min-width: 500px;
+}
+.section-sommaire {
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+}
+#table-moyennes-par-champ td:last-child {
+    text-align: center;
+    vertical-align: middle;
+}
+.moyenne-generale-contenu {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.2em;
+    font-weight: bold;
+}
+.champ-header-row th.champ-title-cell {
+    background-color: color-mix(in srgb, var(--color-primary) 15%, var(--color-surface));
+    font-size: 1.1em;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.column-header-row th {
+    background-color: var(--color-header-bg);
+    position: sticky;
+    top: 48px;
+    z-index: 1;
+}
+.statut-non-compte {
+    color: var(--color-text-secondary);
+    font-style: italic;
+}
+html.theme-light .enseignant-fictif-sommaire {
+    background-color: #f0f8ff;
+}
+html.theme-light .enseignant-temps-partiel-sommaire {
+    background-color: #fefae0;
+}
+html.theme-dark .enseignant-fictif-sommaire {
+    background-color: #2b3a4a;
+}
+html.theme-dark .enseignant-temps-partiel-sommaire {
+    background-color: #4b4431;
+}
+html.theme-vintage .enseignant-fictif-sommaire {
+    background-color: #f5f0e3;
+}
+html.theme-vintage .enseignant-temps-partiel-sommaire {
+    background-color: #f9f4d7;
+}
+
+/* --- Icônes (Verrou, etc.) --- */
+.lock-icon {
+    cursor: pointer;
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    transition: transform var(--transition-speed) ease, fill var(--transition-speed) ease;
+}
+.lock-icon:hover {
+    transform: scale(1.15);
+}
+.lock-icon svg {
+    width: 100%;
+    height: 100%;
+}
+.lock-icon.unlocked svg {
+    fill: var(--color-success);
+}
+.lock-icon.locked svg {
+    fill: var(--color-danger);
+}
+
+/* --- Administration des Utilisateurs --- */
+.user-actions {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.btn-toggle-access,
+.btn-save-access,
+.btn-delete-user {
+    padding: 5px 10px;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+.btn-toggle-access {
+    background-color: var(--color-secondary);
+    color: var(--color-text-on-primary);
+    margin: 2px;
+}
+.btn-toggle-access:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+}
+.btn-toggle-access.active {
+    background-color: var(--color-success);
+}
+.btn-toggle-access.active:hover:not(:disabled) {
+    background-color: var(--color-success-hover);
+}
+.btn-save-access {
+    background-color: var(--color-info);
+    color: var(--color-text-on-primary);
+}
+.btn-save-access:hover:not(:disabled) {
+    background-color: var(--color-info-hover);
+}
+.btn-delete-user {
+    background-color: var(--color-danger);
+    color: var(--color-text-on-primary);
+}
+.btn-delete-user:hover:not(:disabled) {
+    background-color: var(--color-danger-hover);
+}
+.create-user-form .champ-selection-create {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-background);
+    border-radius: var(--border-radius);
+    max-height: 180px;
+    overflow-y: auto;
+    transition: opacity var(--transition-speed);
+}
+.champ-access-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    align-items: center;
+}
+#users-table .api-message {
+    margin-top: 0.5rem;
+    width: 100%;
+}
+
+/* --- Styles d'impression --- */
+@media print {
+    /* Règles de base pour l'impression */
+    .no-print,
+    header,
+    nav,
+    footer,
+    .theme-switcher,
+    .button-group {
+        display: none !important;
+    }
+    .print-only {
+        display: block !important;
+    }
+    body {
+        margin: 0;
+        padding: 0.5rem;
+        background-color: #fff !important;
+        display: block;
+        color: #000 !important;
+        font-size: 10pt;
+    }
+    main,
+    .page-champ-container,
+    .enseignants-section {
+        display: block !important;
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+        border: none;
+        padding: 0;
+        box-shadow: none;
+        background-color: transparent !important;
+        gap: 0;
+        margin: 0;
+    }
+    a {
+        text-decoration: none;
+        color: #000;
+    }
+    .signature-line {
+        display: block !important;
+        border-color: #000 !important;
+    }
+    .arrow-indicator {
+        display: none !important;
+    }
+    .entete-enseignant {
+        cursor: auto;
+    }
+    .titre-enseignant-bascule {
+        margin-bottom: 10px;
+        color: #000 !important;
+    }
+    h2.section-title {
+        font-size: 14pt;
+        border-color: #000 !important;
+    }
+
+    /* Styles des tableaux à l'impression */
+    table {
+        font-size: 9pt;
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        page-break-inside: auto;
+    }
+    th,
+    td {
+        border: 1px solid #000;
+        padding: 4px;
+        background-color: transparent !important;
+    }
+    th {
+        background-color: #e0e0e0 !important;
+    }
+    tbody tr:nth-of-type(odd) {
+        background-color: #f9f9f9 !important;
+    }
+    .total-attributions-row,
+    tfoot tr {
+        border-top: 2px solid #000;
+        font-weight: bold;
+    }
+    .sous-titre-attributions-row td,
+    .sous-titre-attributions {
+        background-color: #f0f0f0 !important;
+    }
+
+    /* Style des cartes enseignant */
+    .enseignant-card {
+        border: 1px solid #888 !important;
+        padding: 10px;
+        margin-bottom: 15px;
+        page-break-inside: avoid;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        border-left: 1px solid #888 !important;
+    }
+    #print-summary-page {
+        display: none;
+    } /* Caché par défaut */
+
+    /* --- Impression Spécifique : Mode "Imprimer le champ" --- */
+    html.printing-champ .enseignant-card.enseignant-fictif {
+        display: none !important;
+    }
+    html.printing-champ #print-summary-page {
+        display: block !important;
+    }
+    html.printing-champ .enseignants-section {
+        display: block !important;
+    }
+    html.printing-champ .enseignant-card:not(.enseignant-fictif) {
+        display: block !important;
+    }
+    /* Saut de page après le sommaire des tâches */
+    html.printing-champ #tableau-sommaire-champ-print {
+        page-break-after: always;
+    }
+    /* Saut de page après les périodes restantes */
+    html.printing-champ #tableau-cours-restants-print {
+        page-break-after: always;
+    }
+
+    /* --- Impression Spécifique : Mode "Imprimer les tâches restantes" --- */
+    html.printing-taches-restantes .enseignant-card:not(.enseignant-fictif) {
+        display: none !important;
+    }
+    html.printing-taches-restantes #print-summary-page {
+        display: none !important;
+    }
+    html.printing-taches-restantes .enseignants-section {
+        display: block !important;
+    }
+    html.printing-taches-restantes .enseignant-card.enseignant-fictif {
+        display: block !important;
+    }
+}

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Administration - Gestion des utilisateurs</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
     <script>
         (function() {
@@ -34,17 +34,18 @@
         <h1>Administration - Gestion des utilisateurs</h1>
         <nav>
             <ul>
-                <li><a href="{{ url_for('index') }}">Accueil</a></li>
-                <li><a href="{{ url_for('page_administration_donnees') }}">Administration (Données)</a></li>
+                {# CORRECTION: 'views.index', 'admin.page_administration_donnees', etc. #}
+                <li><a href="{{ url_for('views.index') }}">Accueil</a></li>
+                <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                 {% if current_user.is_authenticated %}
-                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                    <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
-                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
-                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                    <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
+                    <li><a href="{{ url_for('auth.register') }}">S'inscrire</a></li>
                 {% endif %}
             </ul>
         </nav>
-        
+
         <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
@@ -155,7 +156,7 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
-    
+
     <!-- Script JS spécifique à la page d'administration des utilisateurs -->
     <script>
         const ALL_CHAMPS_DATA = {{ all_champs | tojson | safe }};
@@ -200,7 +201,7 @@
             form.reset(); // Réinitialise les champs du formulaire.
             document.getElementById('new_is_admin').checked = false; // Décoche la case admin.
             handleAdminCheckboxChange.call(document.getElementById('new_is_admin')); // Applique l'état visuel du sélecteur de champ.
-            
+
             // Supprime la classe 'active' de tous les boutons de sélection de champ.
             form.querySelectorAll('.champ-selection-create .btn-toggle-access.active').forEach(btn => {
                 btn.classList.remove('active');
@@ -249,7 +250,8 @@
 
             try {
                 // Envoie la requête à l'API pour créer l'utilisateur.
-                const response = await fetch('/api/utilisateurs/creer', {
+                // CORRECTION: Utilise url_for pour l'URL de l'API
+                const response = await fetch("{{ url_for('admin.api_create_user') }}", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password, is_admin, allowed_champs })
@@ -278,7 +280,8 @@
          */
         async function refreshUsersTable() {
             try {
-                const response = await fetch('/api/utilisateurs');
+                // CORRECTION: Utilise url_for pour l'URL de l'API
+                const response = await fetch("{{ url_for('admin.api_get_all_users') }}");
                 if (!response.ok) {
                     throw new Error(`Erreur HTTP! Statut: ${response.status}`);
                 }
@@ -383,7 +386,7 @@
             const saveButton = this;
             const userId = saveButton.dataset.userId;
             const messageDiv = document.getElementById(`message-user-${userId}`); // Message spécifique à l'utilisateur.
-            
+
             saveButton.disabled = true; // Désactive le bouton pendant l'opération.
             saveButton.textContent = 'Sauvegarde...';
 
@@ -391,7 +394,8 @@
             const selectedChampNos = Array.from(document.querySelectorAll(`#user-row-${userId} .btn-toggle-access.active`)).map(btn => btn.dataset.champNo);
 
             try {
-                const response = await fetch(`/api/utilisateurs/${userId}/update_access`, {
+                // CORRECTION: Utilise url_for pour l'URL de l'API
+                const response = await fetch(`/admin/api/utilisateurs/${userId}/update_access`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ champ_nos: selectedChampNos })
@@ -445,7 +449,8 @@
             deleteButton.textContent = 'Suppression...';
 
             try {
-                const response = await fetch(`/api/utilisateurs/${userId}/delete`, {
+                // CORRECTION: Utilise l'URL relative car le blueprint a un préfixe
+                const response = await fetch(`/admin/api/utilisateurs/${userId}/delete`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -458,7 +463,7 @@
                         await refreshUsersTable(); // Met à jour l'UI en supprimant la ligne.
                         // Si l'utilisateur s'est supprimé lui-même, le déconnecter.
                         if (parseInt(userId) === CURRENT_USER_ID) {
-                            window.location.href = "{{ url_for('logout') }}";
+                            window.location.href = "{{ url_for('auth.logout') }}";
                         }
                     }, 1000);
                 } else {
@@ -499,7 +504,7 @@
             const themeSwitcher = document.querySelector('.theme-switcher');
             if (themeSwitcher) {
                 const themeButtons = themeSwitcher.querySelectorAll('button');
-                
+
                 /**
                  * Applique la classe de thème au corps et met à jour l'état actif des boutons.
                  * @param {string} theme - Le nom du thème à appliquer.
@@ -507,7 +512,7 @@
                 function applyThemeUI(theme) {
                     document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
                     document.body.classList.add(`theme-${theme}`);
-                    
+
                     themeButtons.forEach(btn => btn.classList.remove('active'));
                     const activeButton = document.getElementById(`theme-btn-${theme}`);
                     if (activeButton) {
@@ -527,7 +532,7 @@
 
                 // Applique le thème sauvegardé au chargement DOM complet.
                 const savedTheme = localStorage.getItem('appTheme') || 'light';
-                applyThemeUI(savedTheme); 
+                applyThemeUI(savedTheme);
             }
         });
     </script>

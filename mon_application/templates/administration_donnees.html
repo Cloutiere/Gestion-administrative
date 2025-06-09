@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Administration - Gestion des données</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
     <script>
         (function() {
@@ -34,20 +34,21 @@
         <h1>Administration - Gestion des données</h1>
         <nav>
             <ul>
-                <li><a href="{{ url_for('index') }}">Accueil</a></li>
+                {# CORRECTION: 'views.index', 'admin.page_sommaire', etc. #}
+                <li><a href="{{ url_for('views.index') }}">Accueil</a></li>
                 {% if current_user.is_authenticated and current_user.is_admin %}
-                    <li><a href="{{ url_for('page_sommaire') }}">Sommaire Global</a></li>
-                    <li><a href="{{ url_for('page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                    <li><a href="{{ url_for('admin.page_sommaire') }}">Sommaire Global</a></li>
+                    <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
                 {% endif %}
                 {% if current_user.is_authenticated %}
-                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                    <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
-                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
-                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                    <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
+                    <li><a href="{{ url_for('auth.register') }}">S'inscrire</a></li>
                 {% endif %}
             </ul>
         </nav>
-        
+
         <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
@@ -70,7 +71,8 @@
         <!-- Section pour l'importation des ENSEIGNANTS via Excel -->
         <section class="admin-section">
             <h2>Importer des Enseignants depuis un Fichier Excel</h2>
-            <form method="POST" action="{{ url_for('api_importer_enseignants_excel') }}" enctype="multipart/form-data">
+            {# CORRECTION: 'admin.api_importer_enseignants_excel' #}
+            <form method="POST" action="{{ url_for('admin.api_importer_enseignants_excel') }}" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="fichier_enseignants">Sélectionner un fichier Excel (.xlsx) :</label>
                     <input type="file" id="fichier_enseignants" name="fichier_enseignants" accept=".xlsx" required>
@@ -95,7 +97,8 @@
         <!-- Section pour l'importation des COURS via Excel -->
         <section class="admin-section">
             <h2>Importer des Cours depuis un Fichier Excel</h2>
-            <form method="POST" action="{{ url_for('api_importer_cours_excel') }}" enctype="multipart/form-data">
+            {# CORRECTION: 'admin.api_importer_cours_excel' #}
+            <form method="POST" action="{{ url_for('admin.api_importer_cours_excel') }}" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="fichier_cours">Sélectionner un fichier Excel (.xlsx) :</label>
                     <input type="file" id="fichier_cours" name="fichier_cours" accept=".xlsx" required>
@@ -174,7 +177,7 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
-    
+
     <!-- Script JS spécifique à la page d'administration des données -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -218,7 +221,7 @@
                     this.disabled = true; // Désactive le bouton pour éviter les clics multiples.
 
                     // Envoie la requête à l'API.
-                    fetch('/api/cours/reassigner_champ', {
+                    fetch("{{ url_for('admin.api_reassigner_cours_champ') }}", { // CORRECTION: Utilise url_for pour l'URL de l'API
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -306,7 +309,7 @@
             const themeSwitcher = document.querySelector('.theme-switcher');
             if (themeSwitcher) {
                 const themeButtons = themeSwitcher.querySelectorAll('button');
-                
+
                 /**
                  * Applique la classe de thème au corps et met à jour l'état actif des boutons.
                  * @param {string} theme - Le nom du thème à appliquer.
@@ -314,7 +317,7 @@
                 function applyThemeUI(theme) {
                     document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
                     document.body.classList.add(`theme-${theme}`);
-                    
+
                     themeButtons.forEach(btn => btn.classList.remove('active'));
                     const activeButton = document.getElementById(`theme-btn-${theme}`);
                     if (activeButton) {
@@ -334,7 +337,7 @@
 
                 // Applique le thème sauvegardé au chargement DOM complet.
                 const savedTheme = localStorage.getItem('appTheme') || 'light';
-                applyThemeUI(savedTheme); 
+                applyThemeUI(savedTheme);
             }
         });
     </script>

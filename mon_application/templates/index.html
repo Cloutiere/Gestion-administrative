@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion des Tâches Enseignants</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <!-- Script pour appliquer le thème instantanément et éviter le FOUC -->
     <script>
         (function() {
@@ -60,10 +60,12 @@
                     <!-- Liens d'authentification et informations utilisateur -->
                     {% if current_user.is_authenticated %}
                         <li>Connecté(e) en tant que: <strong>{{ current_user.username }}</strong></li>
-                        <li><a href="{{ url_for('logout') }}">Déconnexion</a></li>
+                        {# CORRECTION: 'auth.logout' au lieu de 'logout' #}
+                        <li><a href="{{ url_for('auth.logout') }}">Déconnexion</a></li>
                     {% else %}
-                        <li><a href="{{ url_for('login') }}"><strong>Connexion</strong></a></li>
-                        <li><a href="{{ url_for('register') }}"><strong>S'inscrire</strong></a></li>
+                        {# CORRECTION: 'auth.login' et 'auth.register' #}
+                        <li><a href="{{ url_for('auth.login') }}"><strong>Connexion</strong></a></li>
+                        <li><a href="{{ url_for('auth.register') }}"><strong>S'inscrire</strong></a></li>
                     {% endif %}
 
                     <hr>
@@ -71,9 +73,10 @@
                     <!-- Liens principaux de l'application -->
                     {% if current_user.is_authenticated and current_user.is_admin %}
                         <li><strong>Outils Administrateur</strong></li>
-                        <li><a href="{{ url_for('page_sommaire') }}">Voir le Sommaire Global</a></li>
-                        <li><a href="{{ url_for('page_administration_donnees') }}">Gérer les données (Import, Réassignation)</a></li>
-                        <li><a href="{{ url_for('page_administration_utilisateurs') }}">Gérer les utilisateurs</a></li>
+                        {# CORRECTION: 'admin.page_sommaire', 'admin.page_administration_donnees', etc. #}
+                        <li><a href="{{ url_for('admin.page_sommaire') }}">Voir le Sommaire Global</a></li>
+                        <li><a href="{{ url_for('admin.page_administration_donnees') }}">Gérer les données (Import, Réassignation)</a></li>
+                        <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Gérer les utilisateurs</a></li>
                         <hr>
                     {% endif %}
 
@@ -82,7 +85,8 @@
                     {% if champs %}
                         {% for champ in champs %}
                         <li>
-                            <a href="{{ url_for('page_champ', champ_no=champ.champno) }}">
+                            {# CORRECTION: 'views.page_champ' #}
+                            <a href="{{ url_for('views.page_champ', champ_no=champ.champno) }}">
                                 {{ champ.champno }} - {{ champ.champnom }}
                             </a>
                             {% if champ.estverrouille %}
@@ -109,7 +113,7 @@
             const themeSwitcher = document.querySelector('.theme-switcher');
             if (themeSwitcher) {
                 const themeButtons = themeSwitcher.querySelectorAll('button');
-                
+
                 /**
                  * Applique la classe de thème au corps et met à jour l'état actif des boutons.
                  * @param {string} theme - Le nom du thème à appliquer.
@@ -117,7 +121,7 @@
                 function applyThemeUI(theme) {
                     document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
                     document.body.classList.add(`theme-${theme}`);
-                    
+
                     themeButtons.forEach(btn => btn.classList.remove('active'));
                     const activeButton = document.getElementById(`theme-btn-${theme}`);
                     if (activeButton) {
@@ -137,7 +141,7 @@
 
                 // Applique le thème sauvegardé au chargement DOM complet.
                 const savedTheme = localStorage.getItem('appTheme') || 'light';
-                applyThemeUI(savedTheme); 
+                applyThemeUI(savedTheme);
             }
         });
     </script>

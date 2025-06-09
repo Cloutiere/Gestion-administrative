@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sommaire global des tâches</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
     <script>
         (function() {
@@ -34,18 +34,19 @@
         <h1>Sommaire global des tâches des enseignants</h1>
         <nav>
             <ul>
-                <li><a href="{{ url_for('index') }}">« Retour à la navigation par champ</a></li>
+                {# CORRECTION: 'views.index', 'admin.page_administration_donnees', etc. #}
+                <li><a href="{{ url_for('views.index') }}">« Retour à la navigation par champ</a></li>
                 {% if current_user.is_authenticated %}
-                    <li><a href="{{ url_for('page_administration_donnees') }}">Administration (Données)</a></li>
-                    <li><a href="{{ url_for('page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
-                    <li><a href="{{ url_for('logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                    <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
+                    <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                    <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
-                    <li><a href="{{ url_for('login') }}">Connexion</a></li>
-                    <li><a href="{{ url_for('register') }}">S'inscrire</a></li>
+                    <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
+                    <li><a href="{{ url_for('auth.register') }}">S'inscrire</a></li>
                 {% endif %}
             </ul>
         </nav>
-        
+
         <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
@@ -118,11 +119,11 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre École</p>
     </footer>
-    
+
     <!-- Script JS spécifique à la page sommaire -->
     <script>
         const INTERVAL_MISE_A_JOUR = 7000;
-        const IS_ADMIN = {{ current_user.is_authenticated and current_user.is_admin | tojson }};
+        const IS_ADMIN = {{ current_user.is_admin | tojson }};
 
         /**
          * Fonction utilitaire pour formater les nombres de périodes.
@@ -185,7 +186,8 @@
          */
         async function mettreAJourDonneesSommaire() {
             try {
-                const response = await fetch('/api/sommaire/donnees');
+                // CORRECTION: Utilise url_for pour l'URL de l'API
+                const response = await fetch("{{ url_for('admin.api_get_donnees_sommaire') }}");
                 if (!response.ok) {
                     // Si l'API retourne une erreur (ex: 401 Unauthorized), recharger la page pour rediriger vers le login.
                     if (response.status === 401 || response.status === 403) {
@@ -223,7 +225,8 @@
         async function basculerVerrouChamp(champNo, iconElement) {
             iconElement.style.opacity = '0.5'; // Indication visuelle de l'action en cours
             try {
-                const response = await fetch(`/api/champs/${champNo}/basculer_verrou`, {
+                // CORRECTION: Utilise l'URL relative car le blueprint a un préfixe
+                const response = await fetch(`/admin/api/champs/${champNo}/basculer_verrou`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                 });
@@ -417,7 +420,7 @@
             const themeSwitcher = document.querySelector('.theme-switcher');
             if (themeSwitcher) {
                 const themeButtons = themeSwitcher.querySelectorAll('button');
-                
+
                 /**
                  * Applique la classe de thème au corps et met à jour l'état actif des boutons.
                  * @param {string} theme - Le nom du thème à appliquer.
@@ -425,7 +428,7 @@
                 function applyThemeUI(theme) {
                     document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
                     document.body.classList.add(`theme-${theme}`);
-                    
+
                     themeButtons.forEach(btn => btn.classList.remove('active'));
                     const activeButton = document.getElementById(`theme-btn-${theme}`);
                     if (activeButton) {
@@ -445,7 +448,7 @@
 
                 // Applique le thème sauvegardé au chargement DOM complet.
                 const savedTheme = localStorage.getItem('appTheme') || 'light';
-                applyThemeUI(savedTheme); 
+                applyThemeUI(savedTheme);
             }
         });
     </script>

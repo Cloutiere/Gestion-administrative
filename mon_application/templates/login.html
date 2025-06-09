@@ -5,16 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connexion - Gestion des Tâches Enseignants</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
+
     <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
     <script>
         (function() {
             function applyTheme(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage');
+                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
                 if (theme === 'dark') {
                     document.body.classList.add('theme-dark');
                 } else if (theme === 'vintage') {
                     document.body.classList.add('theme-vintage');
+                } else {
+                    document.body.classList.add('theme-light');
                 }
             }
             const savedTheme = localStorage.getItem('appTheme') || 'light';
@@ -27,10 +29,11 @@
         <h1>Connexion</h1>
         <nav>
             <ul>
-                <li><a href="{{ url_for('index') }}">Accueil</a></li>
+                {# CORRECTION: 'views.index' #}
+                <li><a href="{{ url_for('views.index') }}">Accueil</a></li>
             </ul>
         </nav>
-        
+
         <!-- Sélecteur de thème -->
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light">Clair</button>
@@ -64,9 +67,10 @@
                 </div>
                 <button type="submit">Se connecter</button>
             </form>
-            
+
             {% if first_user %}
-                <p>Pas encore de compte ? <a href="{{ url_for('register') }}">S'inscrire ici</a>.</p>
+                {# CORRECTION: 'auth.register' #}
+                <p>Pas encore de compte ? <a href="{{ url_for('auth.register') }}">S'inscrire ici</a>.</p>
             {% endif %}
         </div>
     </main>
@@ -74,31 +78,33 @@
     <footer>
         <p>© {{ SCRIPT_YEAR }} Votre Application de Gestion</p>
     </footer>
-    
+
     <!-- Script pour gérer les clics et mettre à jour le thème actif -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const themeSwitcher = document.querySelector('.theme-switcher');
-            const themeButtons = document.querySelectorAll('.theme-switcher button');
-            
-            function applyThemeUI(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                document.body.classList.add(`theme-${theme}`);
-                themeButtons.forEach(btn => btn.classList.remove('active'));
-                const activeButton = document.getElementById(`theme-btn-${theme}`);
-                if (activeButton) activeButton.classList.add('active');
-            }
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
 
-            themeSwitcher.addEventListener('click', function(event) {
-                if (event.target.tagName === 'BUTTON') {
-                    const theme = event.target.dataset.theme;
-                    localStorage.setItem('appTheme', theme);
-                    applyThemeUI(theme);
+                function applyThemeUI(theme) {
+                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
+                    document.body.classList.add(`theme-${theme}`);
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) activeButton.classList.add('active');
                 }
-            });
 
-            const savedTheme = localStorage.getItem('appTheme') || 'light';
-            applyThemeUI(savedTheme); 
+                themeSwitcher.addEventListener('click', function(event) {
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme;
+                        localStorage.setItem('appTheme', theme);
+                        applyThemeUI(theme);
+                    }
+                });
+
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme);
+            }
         });
     </script>
 </body>
