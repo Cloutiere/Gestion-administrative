@@ -50,7 +50,7 @@ def close_db(_exception: BaseException | None = None) -> None:
 
 def init_app(app: Flask) -> None:
     """Initialise la gestion de la base de données pour l'application Flask."""
-    app.teardown_appcontext(close_db)
+    app.teardown_appcontext(close_db)  # Cette ligne enregistre close_db pour qu'elle soit appelée à la fin de chaque requête.
 
 
 # --- Fonctions d'accès aux données (DAO) - Années Scolaires ---
@@ -538,7 +538,7 @@ def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
 
 
 def get_verrou_info_enseignant(enseignant_id: int) -> dict[str, Any] | None:
-    """Récupère le statut de verrouillage et fictif pour un enseignant."""
+    """Récupère le statut de verrouillage, fictif et le champno pour un enseignant."""
     db = get_db()
     if not db:
         return None
@@ -546,8 +546,10 @@ def get_verrou_info_enseignant(enseignant_id: int) -> dict[str, Any] | None:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
-                SELECT e.EstFictif, ch.EstVerrouille FROM Enseignants e
-                JOIN Champs ch ON e.ChampNo = ch.ChampNo WHERE e.EnseignantID = %s;
+                SELECT e.EstFictif, ch.EstVerrouille, e.ChampNo
+                FROM Enseignants e
+                JOIN Champs ch ON e.ChampNo = ch.ChampNo
+                WHERE e.EnseignantID = %s;
                 """,
                 (enseignant_id,),
             )
