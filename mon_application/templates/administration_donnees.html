@@ -14,7 +14,12 @@
 </head>
 <body>
     <header>
-        <h1>Administration - Gestion des données</h1>
+        <h1>
+            Administration - Gestion des données
+            {% if annee_active %}
+                <span class="annee-active-header">({{ annee_active.libelle_annee }})</span>
+            {% endif %}
+        </h1>
         <nav>
             <ul>
                 <li><a href="{{ url_for('views.index') }}">Accueil</a></li>
@@ -26,7 +31,6 @@
                     <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
                     <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
-                    <li><a href="{{ url_for('auth.register') }}">S'inscrire</a></li>
                 {% endif %}
             </ul>
         </nav>
@@ -50,10 +54,38 @@
 
         <div id="api-message-container" class="api-message" style="margin-bottom: 1.5rem;"></div>
 
+        <!-- Section de gestion des ANNÉES SCOLAIRES -->
+        <section class="admin-section">
+            <h2>Gestion des Années Scolaires</h2>
+            <div id="gestion-annees-container">
+                <div class="form-container-inline">
+                    <form id="form-creer-annee">
+                        <input type="text" id="input-libelle-annee" placeholder="Ex: 2024-2025" required>
+                        <button type="submit" class="btn btn-success">Créer Année</button>
+                    </form>
+                </div>
+                <div id="liste-annees">
+                    {% for annee in toutes_les_annees %}
+                    <div class="annee-item {% if annee_active and annee.annee_id == annee_active.annee_id %}active{% endif %}">
+                        <span class="annee-libelle">{{ annee.libelle_annee }}</span>
+                        {% if annee.est_courante %}
+                            <span class="badge badge-courante">Courante</span>
+                        {% endif %}
+                        <div class="annee-actions">
+                            <button class="btn btn-secondary btn-sm btn-select-annee" data-annee-id="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}disabled{% endif %}>Sélectionner</button>
+                            <button class="btn btn-info btn-sm btn-set-courante" data-annee-id="{{ annee.annee_id }}" {% if annee.est_courante %}disabled{% endif %}>Définir comme courante</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        {% if annee_active %}
         <!-- Section de gestion des COURS (CRUD et Réassignation) -->
         <section class="admin-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2>Gestion des Cours</h2>
+                <h2>Gestion des Cours (Année : {{ annee_active.libelle_annee }})</h2>
                 <button id="btn-open-add-cours-modal" class="btn btn-success">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: middle; margin-right: 5px;"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
                     Ajouter un Cours
@@ -83,7 +115,7 @@
                             </thead>
                             <tbody>
                             {% for cours in data.cours|sort(attribute='codecours') %}
-                                <tr id="cours-row-{{ cours.codecours }}">
+                                <tr id="cours-row-{{ cours.codecours|replace('.', '-')|replace('/', '-') }}">
                                     <td>{{ cours.codecours }}</td>
                                     <td>{{ cours.coursdescriptif }}</td>
                                     <td>{{ "%.2f"|format(cours.nbperiodes|float) }}</td>
@@ -91,7 +123,7 @@
                                     <td>{{ 'Oui' if cours.estcoursautre else 'Non' }}</td>
                                     <td>
                                         <div class="action-buttons">
-                                            <select id="select-champ-{{ cours.codecours }}" style="flex-grow: 1;">
+                                            <select id="select-champ-{{ cours.codecours|replace('.', '-')|replace('/', '-') }}" style="flex-grow: 1;">
                                                 <option value="">-- Sélectionner --</option>
                                                 {% for champ_dest in tous_les_champs %}
                                                     {% if champ_dest.champno != champ_no %}
@@ -116,7 +148,7 @@
                 </div>
                 {% endfor %}
             {% else %}
-                <p>Aucun cours trouvé dans la base de données.</p>
+                <p>Aucun cours trouvé pour cette année scolaire.</p>
             {% endif %}
             </div>
         </section>
@@ -124,7 +156,7 @@
         <!-- Section de gestion des ENSEIGNANTS (CRUD) -->
         <section class="admin-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2>Gestion des Enseignants</h2>
+                <h2>Gestion des Enseignants (Année : {{ annee_active.libelle_annee }})</h2>
                 <button id="btn-open-add-enseignant-modal" class="btn btn-success">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: middle; margin-right: 5px;"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
                     Ajouter un Enseignant
@@ -166,17 +198,17 @@
                 </div>
                 {% endfor %}
             {% else %}
-                <p>Aucun enseignant (non fictif) trouvé dans la base de données.</p>
+                <p>Aucun enseignant (non fictif) trouvé pour cette année scolaire.</p>
             {% endif %}
             </div>
         </section>
 
         <!-- Section pour l'importation de données via Excel -->
         <section class="admin-section">
-            <h2>Importation groupée par Fichier Excel</h2>
+            <h2>Importation groupée (Année : {{ annee_active.libelle_annee }})</h2>
             <div class="note-importation">
                 <p class="warning-text">
-                    ATTENTION : L'importation depuis un fichier Excel écrasera TOUTES les données existantes du même type (enseignants ou cours) ainsi que TOUTES les attributions. Utilisez cette fonction avec la plus grande prudence.
+                    ATTENTION : L'importation pour l'année <strong>{{ annee_active.libelle_annee }}</strong> écrasera TOUTES les données existantes de cette année (enseignants ou cours) ainsi que TOUTES les attributions associées. L'historique des autres années sera conservé.
                 </p>
             </div>
             <div style="display: flex; gap: 2rem; margin-top: 1.5rem; flex-wrap: wrap;">
@@ -200,7 +232,13 @@
                 </div>
             </div>
         </section>
-
+        {% else %}
+        <section class="admin-section">
+            <div class="flash-messages">
+                <li class="warning">Aucune année scolaire n'a été créée. Veuillez en créer une ci-dessus pour commencer à gérer les données.</li>
+            </div>
+        </section>
+        {% endif %}
     </main>
 
     <footer>
@@ -306,7 +344,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         // --- Constantes et variables globales du script ---
         const apiMessageContainer = document.getElementById('api-message-container');
-        const tousLesChamps = JSON.parse('{{ tous_les_champs | tojson | safe }}');
 
         // --- Gestion des messages API globaux ---
         function displayApiMessage(message, type) {
@@ -338,199 +375,265 @@
             });
         });
 
-        // --- Logique CRUD pour les COURS ---
+        // --- NOUVEAU : Logique de gestion des années scolaires ---
+        const gestionAnneesContainer = document.getElementById('gestion-annees-container');
+        const formCreerAnnee = document.getElementById('form-creer-annee');
+
+        if (formCreerAnnee) {
+            formCreerAnnee.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const input = document.getElementById('input-libelle-annee');
+                const libelle = input.value.trim();
+                if (!libelle) return;
+
+                const response = await fetch("{{ url_for('admin.api_creer_annee') }}", {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ libelle: libelle })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    location.reload(); // Recharger pour voir la nouvelle année et potentiellement l'activer
+                } else {
+                    displayApiMessage(data.message, 'error');
+                }
+            });
+        }
+
+        if (gestionAnneesContainer) {
+            gestionAnneesContainer.addEventListener('click', async (e) => {
+                let url = '';
+                let anneeId = null;
+
+                if (e.target.classList.contains('btn-select-annee')) {
+                    anneeId = e.target.dataset.anneeId;
+                    url = "{{ url_for('admin.api_changer_annee_active') }}";
+                } else if (e.target.classList.contains('btn-set-courante')) {
+                    anneeId = e.target.dataset.anneeId;
+                    url = "{{ url_for('admin.api_set_annee_courante') }}";
+                }
+
+                if (url && anneeId) {
+                    const response = await fetch(url, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ annee_id: parseInt(anneeId) })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        location.reload(); // Recharger pour que les changements (session, badge) soient pris en compte
+                    } else {
+                        displayApiMessage(data.message, 'error');
+                    }
+                }
+            });
+        }
+
+        // --- Logique CRUD pour les COURS (adaptée pour utiliser encodeURIComponent) ---
         const coursAccordionContainer = document.getElementById('cours-accordion-container');
         const coursModal = document.getElementById('cours-modal-backdrop');
         const coursForm = document.getElementById('cours-form');
         const coursModalTitle = document.getElementById('cours-modal-title');
+        const btnOpenAddCoursModal = document.getElementById('btn-open-add-cours-modal');
+        if (btnOpenAddCoursModal) {
+            btnOpenAddCoursModal.addEventListener('click', () => {
+                coursForm.reset();
+                coursModalTitle.textContent = 'Ajouter un nouveau cours';
+                coursForm.querySelector('#cours-mode').value = 'add';
+                coursForm.querySelector('#form-codecours').readOnly = false;
+                openModal(coursModal);
+            });
+        }
 
-        document.getElementById('btn-open-add-cours-modal').addEventListener('click', () => {
-            coursForm.reset();
-            coursModalTitle.textContent = 'Ajouter un nouveau cours';
-            coursForm.querySelector('#cours-mode').value = 'add';
-            coursForm.querySelector('#form-codecours').readOnly = false;
-            openModal(coursModal);
-        });
-
-        coursAccordionContainer.addEventListener('click', async (e) => {
-            // Modifier un cours
-            if (e.target.classList.contains('btn-edit-cours')) {
-                const codeCours = e.target.dataset.codecours;
-                const response = await fetch(`/admin/api/cours/${encodeURIComponent(codeCours)}`);
-                const data = await response.json();
-
-                if (data.success) {
-                    const cours = data.cours;
-                    coursForm.reset();
-                    coursModalTitle.textContent = `Modifier le cours : ${cours.codecours}`;
-                    coursForm.querySelector('#cours-mode').value = 'edit';
-                    coursForm.querySelector('#original-codecours').value = cours.codecours;
-                    coursForm.querySelector('#form-codecours').value = cours.codecours;
-                    coursForm.querySelector('#form-codecours').readOnly = true;
-                    coursForm.querySelector('#form-coursdescriptif').value = cours.coursdescriptif;
-                    coursForm.querySelector('#form-champno-cours').value = cours.champno;
-                    coursForm.querySelector('#form-nbperiodes').value = cours.nbperiodes;
-                    coursForm.querySelector('#form-nbgroupeinitial').value = cours.nbgroupeinitial;
-                    coursForm.querySelector('#form-estcoursautre').checked = cours.estcoursautre;
-                    openModal(coursModal);
-                } else {
-                    displayApiMessage(data.message, 'error');
-                }
-            }
-            // Supprimer un cours
-            if (e.target.classList.contains('btn-delete-cours')) {
-                const codeCours = e.target.dataset.codecours;
-                if (confirm(`Êtes-vous sûr de vouloir supprimer le cours "${codeCours}" ? Cette action est irréversible.`)) {
-                    const response = await fetch(`/admin/api/cours/${encodeURIComponent(codeCours)}/supprimer`, { method: 'POST' });
+        if (coursAccordionContainer) {
+            coursAccordionContainer.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('btn-edit-cours')) {
+                    const codeCours = e.target.dataset.codecours;
+                    const response = await fetch(`/admin/api/cours/${encodeURIComponent(codeCours)}`);
                     const data = await response.json();
+
                     if (data.success) {
-                        document.getElementById(`cours-row-${codeCours}`).remove();
-                        displayApiMessage(data.message, 'success');
+                        const cours = data.cours;
+                        coursForm.reset();
+                        coursModalTitle.textContent = `Modifier le cours : ${cours.codecours}`;
+                        coursForm.querySelector('#cours-mode').value = 'edit';
+                        coursForm.querySelector('#original-codecours').value = cours.codecours;
+                        coursForm.querySelector('#form-codecours').value = cours.codecours;
+                        coursForm.querySelector('#form-codecours').readOnly = true;
+                        coursForm.querySelector('#form-coursdescriptif').value = cours.coursdescriptif;
+                        coursForm.querySelector('#form-champno-cours').value = cours.champno;
+                        coursForm.querySelector('#form-nbperiodes').value = cours.nbperiodes;
+                        coursForm.querySelector('#form-nbgroupeinitial').value = cours.nbgroupeinitial;
+                        coursForm.querySelector('#form-estcoursautre').checked = cours.estcoursautre;
+                        openModal(coursModal);
                     } else {
                         displayApiMessage(data.message, 'error');
                     }
                 }
-            }
-        });
-
-        coursForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(coursForm);
-            const data = Object.fromEntries(formData.entries());
-            data.estcoursautre = coursForm.querySelector('#form-estcoursautre').checked;
-
-            const mode = data['cours-mode'];
-            const originalCodeCours = data['original-codecours'];
-            let url = (mode === 'add') ? '/admin/api/cours/creer' : `/admin/api/cours/${encodeURIComponent(originalCodeCours)}/modifier`;
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
+                if (e.target.classList.contains('btn-delete-cours')) {
+                    const codeCours = e.target.dataset.codecours;
+                    if (confirm(`Êtes-vous sûr de vouloir supprimer le cours "${codeCours}" pour l'année active ?`)) {
+                        const response = await fetch(`/admin/api/cours/${encodeURIComponent(codeCours)}/supprimer`, { method: 'POST' });
+                        const data = await response.json();
+                        if (data.success) {
+                            const sanitizedId = codeCours.replace(/\./g, '-').replace(/\//g, '-');
+                            document.getElementById(`cours-row-${sanitizedId}`).remove();
+                            displayApiMessage(data.message, 'success');
+                        } else {
+                            displayApiMessage(data.message, 'error');
+                        }
+                    }
+                }
             });
-            const result = await response.json();
+        }
 
-            if (result.success) {
-                closeModal(coursModal);
-                displayApiMessage(result.message, 'success');
-                // Recharger la page pour refléter le changement de champ potentiel
-                location.reload();
-            } else {
-                alert(`Erreur: ${result.message}`);
-            }
-        });
+        if (coursForm) {
+            coursForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(coursForm);
+                const data = Object.fromEntries(formData.entries());
+                data.nbperiodes = parseFloat(data.nbperiodes);
+                data.nbgroupeinitial = parseInt(data.nbgroupeinitial, 10);
+                data.estcoursautre = coursForm.querySelector('#form-estcoursautre').checked;
 
-        // --- Logique CRUD pour les ENSEIGNANTS ---
+                const mode = data['cours-mode'];
+                const originalCodeCours = data['original-codecours'];
+                let url = (mode === 'add') ? '/admin/api/cours/creer' : `/admin/api/cours/${encodeURIComponent(originalCodeCours)}/modifier`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    closeModal(coursModal);
+                    displayApiMessage(result.message, 'success');
+                    location.reload();
+                } else {
+                    alert(`Erreur: ${result.message}`);
+                }
+            });
+        }
+
+
+        // --- Logique CRUD pour les ENSEIGNANTS (inchangée dans sa structure) ---
         const enseignantsAccordionContainer = document.getElementById('enseignants-accordion-container');
         const enseignantModal = document.getElementById('enseignant-modal-backdrop');
         const enseignantForm = document.getElementById('enseignant-form');
         const enseignantModalTitle = document.getElementById('enseignant-modal-title');
+        const btnOpenAddEnseignantModal = document.getElementById('btn-open-add-enseignant-modal');
 
-        document.getElementById('btn-open-add-enseignant-modal').addEventListener('click', () => {
-            enseignantForm.reset();
-            enseignantModalTitle.textContent = 'Ajouter un nouvel enseignant';
-            enseignantForm.querySelector('#enseignant-mode').value = 'add';
-            openModal(enseignantModal);
-        });
+        if (btnOpenAddEnseignantModal) {
+            btnOpenAddEnseignantModal.addEventListener('click', () => {
+                enseignantForm.reset();
+                enseignantModalTitle.textContent = 'Ajouter un nouvel enseignant';
+                enseignantForm.querySelector('#enseignant-mode').value = 'add';
+                openModal(enseignantModal);
+            });
+        }
 
-        enseignantsAccordionContainer.addEventListener('click', async (e) => {
-            // Modifier un enseignant
-            if (e.target.classList.contains('btn-edit-enseignant')) {
-                const enseignantId = e.target.dataset.enseignantid;
-                const response = await fetch(`/admin/api/enseignants/${enseignantId}`);
-                const data = await response.json();
-
-                if (data.success) {
-                    const enseignant = data.enseignant;
-                    enseignantForm.reset();
-                    enseignantModalTitle.textContent = `Modifier: ${enseignant.nomcomplet}`;
-                    enseignantForm.querySelector('#enseignant-mode').value = 'edit';
-                    enseignantForm.querySelector('#enseignant-id').value = enseignant.enseignantid;
-                    enseignantForm.querySelector('#form-nom').value = enseignant.nom;
-                    enseignantForm.querySelector('#form-prenom').value = enseignant.prenom;
-                    enseignantForm.querySelector('#form-champno-enseignant').value = enseignant.champno;
-                    enseignantForm.querySelector('#form-esttempsplein').checked = enseignant.esttempsplein;
-                    openModal(enseignantModal);
-                } else {
-                    displayApiMessage(data.message, 'error');
-                }
-            }
-            // Supprimer un enseignant
-            if (e.target.classList.contains('btn-delete-enseignant')) {
-                const enseignantId = e.target.dataset.enseignantid;
-                if (confirm(`Êtes-vous sûr de vouloir supprimer cet enseignant ? Toutes ses attributions de cours seront également supprimées.`)) {
-                    const response = await fetch(`/admin/api/enseignants/${enseignantId}/supprimer`, { method: 'POST' });
+        if (enseignantsAccordionContainer) {
+            enseignantsAccordionContainer.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('btn-edit-enseignant')) {
+                    const enseignantId = e.target.dataset.enseignantid;
+                    const response = await fetch(`/admin/api/enseignants/${enseignantId}`);
                     const data = await response.json();
-                     if (data.success) {
-                        document.getElementById(`enseignant-row-${enseignantId}`).remove();
-                        displayApiMessage(data.message, 'success');
+
+                    if (data.success) {
+                        const enseignant = data.enseignant;
+                        enseignantForm.reset();
+                        enseignantModalTitle.textContent = `Modifier: ${enseignant.nomcomplet}`;
+                        enseignantForm.querySelector('#enseignant-mode').value = 'edit';
+                        enseignantForm.querySelector('#enseignant-id').value = enseignant.enseignantid;
+                        enseignantForm.querySelector('#form-nom').value = enseignant.nom;
+                        enseignantForm.querySelector('#form-prenom').value = enseignant.prenom;
+                        enseignantForm.querySelector('#form-champno-enseignant').value = enseignant.champno;
+                        enseignantForm.querySelector('#form-esttempsplein').checked = enseignant.esttempsplein;
+                        openModal(enseignantModal);
                     } else {
                         displayApiMessage(data.message, 'error');
                     }
                 }
-            }
-        });
-
-        enseignantForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(enseignantForm);
-            const data = Object.fromEntries(formData.entries());
-            data.esttempsplein = enseignantForm.querySelector('#form-esttempsplein').checked;
-
-            const mode = data['enseignant-mode'];
-            const enseignantId = data['enseignant-id'];
-            let url = (mode === 'add') ? '/admin/api/enseignants/creer' : `/admin/api/enseignants/${enseignantId}/modifier`;
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            const result = await response.json();
-
-            if (result.success) {
-                closeModal(enseignantModal);
-                displayApiMessage(result.message, 'success');
-                 // Recharger la page pour refléter le changement de champ potentiel
-                location.reload();
-            } else {
-                alert(`Erreur: ${result.message}`);
-            }
-        });
-
-        // --- Logique de réassignation de cours (adaptée) ---
-        coursAccordionContainer.addEventListener('click', function(e) {
-            if (!e.target.classList.contains('btn-reassigner')) return;
-
-            const button = e.target;
-            const codeCours = button.dataset.codecours;
-            const selectElement = document.getElementById(`select-champ-${codeCours}`);
-            const nouveauChampNo = selectElement.value;
-
-            if (!nouveauChampNo) {
-                displayApiMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
-                return;
-            }
-            if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${codeCours}" au champ ${nouveauChampNo} ?`)) return;
-
-            button.disabled = true;
-            fetch("{{ url_for('admin.api_reassigner_cours_champ') }}", {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code_cours: codeCours, nouveau_champ_no: nouveauChampNo })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    displayApiMessage(data.message, 'success');
-                    location.reload(); // La solution la plus simple pour mettre à jour l'état complet
-                } else {
-                    displayApiMessage(data.message || 'Une erreur est survenue.', 'error');
+                if (e.target.classList.contains('btn-delete-enseignant')) {
+                    const enseignantId = e.target.dataset.enseignantid;
+                    if (confirm(`Êtes-vous sûr de vouloir supprimer cet enseignant pour l'année active ? Toutes ses attributions seront également supprimées.`)) {
+                        const response = await fetch(`/admin/api/enseignants/${enseignantId}/supprimer`, { method: 'POST' });
+                        const data = await response.json();
+                         if (data.success) {
+                            document.getElementById(`enseignant-row-${enseignantId}`).remove();
+                            displayApiMessage(data.message, 'success');
+                        } else {
+                            displayApiMessage(data.message, 'error');
+                        }
+                    }
                 }
-            })
-            .catch(error => displayApiMessage('Erreur de communication avec le serveur.', 'error'))
-            .finally(() => { button.disabled = false; });
-        });
+            });
+        }
+
+        if (enseignantForm) {
+            enseignantForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(enseignantForm);
+                const data = Object.fromEntries(formData.entries());
+                data.esttempsplein = enseignantForm.querySelector('#form-esttempsplein').checked;
+
+                const mode = data['enseignant-mode'];
+                const enseignantId = data['enseignant-id'];
+                let url = (mode === 'add') ? '/admin/api/enseignants/creer' : `/admin/api/enseignants/${enseignantId}/modifier`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    closeModal(enseignantModal);
+                    displayApiMessage(result.message, 'success');
+                    location.reload();
+                } else {
+                    alert(`Erreur: ${result.message}`);
+                }
+            });
+        }
+
+        // --- Logique de réassignation de cours (inchangée) ---
+        if (coursAccordionContainer) {
+            coursAccordionContainer.addEventListener('click', function(e) {
+                if (!e.target.classList.contains('btn-reassigner')) return;
+
+                const button = e.target;
+                const codeCours = button.dataset.codecours;
+                const sanitizedId = codeCours.replace(/\./g, '-').replace(/\//g, '-');
+                const selectElement = document.getElementById(`select-champ-${sanitizedId}`);
+                const nouveauChampNo = selectElement.value;
+
+                if (!nouveauChampNo) {
+                    displayApiMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
+                    return;
+                }
+                if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${codeCours}" au champ ${nouveauChampNo} ?`)) return;
+
+                button.disabled = true;
+                fetch("{{ url_for('admin.api_reassigner_cours_champ') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code_cours: codeCours, nouveau_champ_no: nouveauChampNo })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayApiMessage(data.message, 'success');
+                        location.reload();
+                    } else {
+                        displayApiMessage(data.message || 'Une erreur est survenue.', 'error');
+                    }
+                })
+                .catch(error => displayApiMessage('Erreur de communication avec le serveur.', 'error'))
+                .finally(() => { button.disabled = false; });
+            });
+        }
 
         // --- Initialisation du thème ---
         const themeSwitcher = document.querySelector('.theme-switcher');

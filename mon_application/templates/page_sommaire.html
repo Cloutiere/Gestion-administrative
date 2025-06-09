@@ -9,45 +9,49 @@
     <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
     <script>
         (function() {
-            /**
-             * Applique le thème spécifié au corps du document.
-             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
-             */
-            function applyTheme(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                if (theme === 'dark') {
-                    document.body.classList.add('theme-dark');
-                } else if (theme === 'vintage') {
-                    document.body.classList.add('theme-vintage');
-                } else {
-                    document.body.classList.add('theme-light'); // Thème par défaut explicite
-                }
-            }
-            // Récupère le thème sauvegardé ou utilise 'light' par défaut.
             const savedTheme = localStorage.getItem('appTheme') || 'light';
-            applyTheme(savedTheme);
+            document.documentElement.className = `theme-${savedTheme}`;
         })();
     </script>
 </head>
 <body class="theme-light">
     <header>
-        <h1>Sommaire global des tâches des enseignants</h1>
+        <h1>
+            Sommaire global des tâches
+            {% if annee_active %}
+                <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
+            {% endif %}
+        </h1>
         <nav>
             <ul>
-                {# CORRECTION: 'views.index', 'admin.page_administration_donnees', etc. #}
                 <li><a href="{{ url_for('views.index') }}">« Retour à la navigation par champ</a></li>
-                {% if current_user.is_authenticated %}
+                {% if current_user.is_authenticated and current_user.is_admin %}
                     <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                     <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                {% endif %}
+                {% if current_user.is_authenticated %}
                     <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
                     <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
-                    <li><a href="{{ url_for('auth.register') }}">S'inscrire</a></li>
                 {% endif %}
             </ul>
         </nav>
 
-        <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
+        <!-- Sélecteur d'année pour l'administrateur -->
+        {% if current_user.is_admin and toutes_les_annees %}
+        <div class="year-switcher no-print">
+            <label for="annee-selector">Changer l'année de visualisation :</label>
+            <select id="annee-selector">
+                {% for annee in toutes_les_annees %}
+                    <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
+                        {{ annee.libelle_annee }} {% if annee.est_courante %}(Courante){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <!-- Sélecteur de thème -->
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
             <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
@@ -66,6 +70,7 @@
             {% endif %}
         {% endwith %}
 
+        {% if annee_active %}
         <div class="container-principal-sommaire">
             <div class="colonne-sommaire colonne-gauche">
                 <section class="section-sommaire section-moyenne-generale">
@@ -93,7 +98,7 @@
                     </table>
                     <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
                     {% else %}
-                    <p>Aucune donnée de moyenne par champ disponible initialement.</p>
+                    <p>Aucune donnée de moyenne par champ disponible pour cette année.</p>
                     {% endif %}
                 </section>
             </div>
@@ -107,13 +112,18 @@
                         </tbody>
                     </table>
                     <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
-                    {# Ce message est affiché si aucune donnée n'est disponible au chargement. JS le gérera ensuite. #}
-                    {% if not enseignants_par_champ or not enseignants_par_champ | selectattr('enseignants') | list | join %}
-                    <p>Aucun enseignant à afficher initialement.</p>
+                    {# Afficher ce message si la variable initiale est vide OU si elle ne contient aucun enseignant réel #}
+                    {% if not enseignants_par_champ or (enseignants_par_champ | map(attribute='enseignants') | sum(start=[]) | length == 0) %}
+                    <p>Aucun enseignant à afficher pour cette année.</p>
                     {% endif %}
                 </section>
             </div>
         </div>
+        {% else %}
+            <div class="flash-messages">
+                <li class="warning">Aucune année scolaire n'est active. Les données ne peuvent pas être affichées.</li>
+            </div>
+        {% endif %}
     </main>
 
     <footer>
@@ -125,203 +135,144 @@
         const INTERVAL_MISE_A_JOUR = 7000;
         const IS_ADMIN = {{ current_user.is_admin | tojson }};
 
-        /**
-         * Fonction utilitaire pour formater les nombres de périodes.
-         * Affiche les décimales uniquement si elles sont non nulles, et évite les zéros superflus.
-         * Exemples : 5.00 -> "5", 1.50 -> "1.5", 0.75 -> "0.75".
-         * Utilise Intl.NumberFormat pour gérer la localisation et les décimales significatives.
-         * @param {number|null|undefined} value Le nombre à formater.
-         * @returns {string} Le nombre formaté en tant que chaîne de caractères.
-         */
+        // --- Fonctions utilitaires et constantes SVG ---
         function formatPeriodes(value) {
-            if (value === null || value === undefined) {
-                return '';
-            }
-            const formatter = new Intl.NumberFormat('fr-CA', {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2,
-                useGrouping: false
-            });
+            if (value === null || value === undefined) return '';
+            const formatter = new Intl.NumberFormat('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: false });
             return formatter.format(value);
         }
-
-        // Définition des icônes SVG pour une utilisation dans le script
-        // Ces SVG sont en ligne pour éviter des requêtes supplémentaires et sont très légers.
-        const SVG_LOCKED = `
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
-            </svg>`;
-        const SVG_UNLOCKED = `
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
-            </svg>`;
-
+        const SVG_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
+        const SVG_UNLOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Mise à jour initiale des données du sommaire au chargement.
-            mettreAJourDonneesSommaire();
-            // Puis, met à jour les données à intervalles réguliers pour un affichage "en direct".
-            setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
+            // Ne démarrer la logique que si une année est active
+            {% if annee_active %}
+                mettreAJourDonneesSommaire();
+                setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
 
-            // Gestionnaire d'événements pour le tableau des moyennes de champ, en utilisant la délégation.
-            const tableMoyennes = document.getElementById('table-moyennes-par-champ');
-            if (tableMoyennes) {
-                tableMoyennes.addEventListener('click', function(event) {
-                    const iconElement = event.target.closest('.lock-icon');
-                    // Vérifier si l'icône a été cliquée et si l'utilisateur est administrateur.
-                    if (iconElement && IS_ADMIN) {
-                        const champNo = iconElement.dataset.champNo; // Récupérer le numéro du champ du data-attribute
-                        basculerVerrouChamp(champNo, iconElement); // Appeler la fonction pour basculer le verrou
-                    } else if (iconElement) {
-                        // Si l'utilisateur n'est pas admin mais clique, informer qu'il n'a pas la permission.
-                        alert("Vous n'avez pas les permissions pour modifier le statut de verrouillage.");
-                    }
+                const tableMoyennes = document.getElementById('table-moyennes-par-champ');
+                if (tableMoyennes) {
+                    tableMoyennes.addEventListener('click', function(event) {
+                        const iconElement = event.target.closest('.lock-icon');
+                        if (iconElement && IS_ADMIN) {
+                            basculerVerrouChamp(iconElement.dataset.champNo, iconElement);
+                        } else if (iconElement) {
+                            alert("Vous n'avez pas les permissions pour modifier le statut de verrouillage.");
+                        }
+                    });
+                }
+            {% endif %}
+
+            // Logique du sélecteur d'année
+            const anneeSelector = document.getElementById('annee-selector');
+            if (anneeSelector) {
+                anneeSelector.addEventListener('change', function() {
+                    const anneeId = this.value;
+                    fetch("{{ url_for('admin.api_changer_annee_active') }}", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ annee_id: parseInt(anneeId, 10) })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.reload();
+                        } else {
+                            alert("Erreur lors du changement d'année de visualisation.");
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Erreur de communication pour changer l'année:", error);
+                        alert("Erreur de communication avec le serveur.");
+                    });
                 });
             }
         });
 
-        /**
-         * Récupère les données de sommaire via l'API et met à jour les tableaux.
-         * Gère la redirection si la session expire ou si les permissions sont insuffisantes.
-         */
+        // --- Fonctions de mise à jour de l'interface ---
+
         async function mettreAJourDonneesSommaire() {
             try {
-                // CORRECTION: Utilise url_for pour l'URL de l'API
                 const response = await fetch("{{ url_for('admin.api_get_donnees_sommaire') }}");
                 if (!response.ok) {
-                    // Si l'API retourne une erreur (ex: 401 Unauthorized), recharger la page pour rediriger vers le login.
-                    if (response.status === 401 || response.status === 403) {
-                        window.location.reload();
-                        return;
-                    }
+                    if (response.status === 401 || response.status === 403) { window.location.reload(); return; }
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }
                 const data = await response.json();
-
-                // Met à jour le tableau des moyennes par champ.
                 mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
-
-                // Met à jour le tableau détaillé des enseignants.
                 mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ || []);
-
-                // Met à jour l'affichage de la moyenne générale de l'établissement.
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
-                if (elMoyenneGenerale && data.moyenne_generale !== undefined && data.moyenne_generale !== null) {
-                    elMoyenneGenerale.textContent = `${formatPeriodes(data.moyenne_generale)} périodes`;
-                } else if (elMoyenneGenerale) {
-                    elMoyenneGenerale.textContent = `N/A périodes`;
+                if (elMoyenneGenerale) {
+                    elMoyenneGenerale.textContent = (data.moyenne_generale !== undefined && data.moyenne_generale !== null)
+                        ? `${formatPeriodes(data.moyenne_generale)} périodes`
+                        : `N/A périodes`;
                 }
-
             } catch (error) {
                 console.error("Erreur lors de la mise à jour du sommaire:", error);
+                // Ne pas afficher d'alerte ici pour ne pas interrompre l'utilisateur à chaque échec de rafraichissement
             }
         }
 
-        /**
-         * Appelle l'API pour basculer le statut de verrouillage d'un champ et met à jour l'icône.
-         * @param {string} champNo - Le numéro du champ à modifier.
-         * @param {HTMLElement} iconElement - L'élément DOM de l'icône du verrou.
-         */
         async function basculerVerrouChamp(champNo, iconElement) {
-            iconElement.style.opacity = '0.5'; // Indication visuelle de l'action en cours
+            iconElement.style.opacity = '0.5';
             try {
-                // CORRECTION: Utilise l'URL relative car le blueprint a un préfixe
-                const response = await fetch(`/admin/api/champs/${champNo}/basculer_verrou`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                });
+                const response = await fetch(`/admin/api/champs/${champNo}/basculer_verrou`, { method: 'POST' });
                 const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
-                }
-                // Si l'opération réussit, met à jour l'icône pour refléter le nouveau statut.
+                if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
                 mettreAJourIconeVerrou(iconElement, data.est_verrouille);
             } catch (error) {
                 console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
-                alert(error.message); // Ou une notification plus discrète
+                alert(error.message);
             } finally {
-                iconElement.style.opacity = '1'; // Rétablir l'opacité
+                iconElement.style.opacity = '1';
             }
         }
 
-        /**
-         * Met à jour l'icône de verrouillage SVG en fonction de son état (verrouillé/déverrouillé).
-         * @param {HTMLElement} iconElement - L'élément conteneur de l'icône à mettre à jour.
-         * @param {boolean} estVerrouille - True si le champ est verrouillé, sinon false.
-         */
         function mettreAJourIconeVerrou(iconElement, estVerrouille) {
-            if (estVerrouille) {
-                iconElement.classList.remove('unlocked');
-                iconElement.classList.add('locked');
-                iconElement.innerHTML = SVG_LOCKED;
-                iconElement.title = 'Champ verrouillé. Cliquer pour déverrouiller.';
-            } else {
-                iconElement.classList.remove('locked');
-                iconElement.classList.add('unlocked');
-                iconElement.innerHTML = SVG_UNLOCKED;
-                iconElement.title = 'Champ déverrouillé. Cliquer pour verrouiller.';
-            }
+            iconElement.className = estVerrouille ? 'lock-icon locked' : 'lock-icon unlocked';
+            iconElement.innerHTML = estVerrouille ? SVG_LOCKED : SVG_UNLOCKED;
+            iconElement.title = estVerrouille ? 'Champ verrouillé. Cliquer pour déverrouiller.' : 'Champ déverrouillé. Cliquer pour verrouiller.';
         }
 
-        /**
-         * Met à jour le tableau détaillé des enseignants par champ.
-         * @param {Array<Object>} enseignantsParChampData - Les données des enseignants groupées par champ.
-         */
         function mettreAJourTableauEnseignantsGroupes(enseignantsParChampData) {
             const tbody = document.querySelector('#table-detail-enseignants tbody');
             const aucunEnseignantMsg = document.getElementById('aucun-enseignant-message');
-            const tableDetailEnseignants = document.getElementById('table-detail-enseignants');
+            const table = document.getElementById('table-detail-enseignants');
+            if (!tbody || !aucunEnseignantMsg || !table) return;
 
-            if (!tbody || !aucunEnseignantMsg || !tableDetailEnseignants) return; // S'assurer que les éléments existent
-
-            tbody.innerHTML = ''; // Vide le contenu précédent du tableau
-
-            // Vérifie s'il y a des enseignants à afficher dans l'ensemble des champs.
+            tbody.innerHTML = ''; // Vider le contenu précédent
             const aDesEnseignants = enseignantsParChampData.some(c => c.enseignants && c.enseignants.length > 0);
 
+            aucunEnseignantMsg.style.display = aDesEnseignants ? 'none' : 'block';
+            table.style.display = aDesEnseignants ? '' : 'none';
+
             if (aDesEnseignants) {
-                aucunEnseignantMsg.style.display = 'none'; // Cache le message "Aucun enseignant"
-                tableDetailEnseignants.style.display = ''; // Affiche le tableau
-
                 enseignantsParChampData.forEach(champData => {
-                    // Ne pas afficher un champ s'il n'a pas d'enseignants.
-                    if (!champData.enseignants || champData.enseignants.length === 0) {
-                        return;
-                    }
+                    if (!champData.enseignants || champData.enseignants.length === 0) return;
 
-                    // Ajoute une ligne d'en-tête pour le champ actuel.
                     const champHeaderRow = tbody.insertRow();
                     champHeaderRow.className = 'champ-header-row';
-                    const champTitleCell = document.createElement('th');
-                    champTitleCell.colSpan = 5; // Le colspan doit correspondre au nombre de colonnes dans la table.
+                    const champTitleCell = champHeaderRow.insertCell(); // Utiliser insertCell()
+                    champTitleCell.colSpan = 5;
                     champTitleCell.className = 'champ-title-cell';
                     champTitleCell.textContent = `Champ ${champData.champno} - ${champData.champnom}`;
-                    champHeaderRow.appendChild(champTitleCell);
+                    // champHeaderRow.appendChild(champTitleCell); // Plus nécessaire si on utilise insertCell()
 
-                    // Ajoute la ligne d'en-têtes de colonne pour chaque champ.
                     const columnHeaderRow = tbody.insertRow();
                     columnHeaderRow.className = 'column-header-row';
                     ['Nom', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte moyenne'].forEach(headerText => {
-                        const th = document.createElement('th');
+                        const th = document.createElement('th'); // Créer un th explicitement
                         th.textContent = headerText;
                         columnHeaderRow.appendChild(th);
                     });
 
-                    // Ajoute les lignes des enseignants pour le champ actuel.
                     champData.enseignants.forEach(ens => {
                         const row = tbody.insertRow();
-                        row.dataset.enseignantId = ens.enseignantid; // Ajoute l'ID de l'enseignant comme data-attribute
-
-                        // Détermine le nom à afficher (Nom, Prénom ou NomComplet pour les fictifs).
-                        const nomAAfficher = (ens.nom && ens.prenom) ? `${ens.nom}, ${ens.prenom}` : ens.nomcomplet;
-                        row.insertCell().textContent = nomAAfficher;
-
-                        // Applique le formatage des périodes.
+                        row.dataset.enseignantId = ens.enseignantid;
+                        row.insertCell().textContent = (ens.nom && ens.prenom) ? `${ens.nom}, ${ens.prenom}` : ens.nomcomplet;
                         row.insertCell().textContent = formatPeriodes(ens.periodes_cours);
                         row.insertCell().textContent = formatPeriodes(ens.periodes_autres);
                         row.insertCell().textContent = formatPeriodes(ens.total_periodes);
-
-                        // Gère la colonne "Compte moyenne".
                         const cellCompteMoyenne = row.insertCell();
                         if (ens.compte_pour_moyenne_champ) {
                             cellCompteMoyenne.textContent = 'Oui';
@@ -333,120 +284,79 @@
                         }
                     });
                 });
-            } else {
-                tableDetailEnseignants.style.display = 'none'; // Cache le tableau si aucun enseignant
-                aucunEnseignantMsg.style.display = 'block'; // Affiche le message
             }
         }
 
-        /**
-         * Fonction de comparaison pour trier les numéros de champ alphanumériquement.
-         * Gère les formats comme "01", "01A", "02".
-         * @param {string} a - Premier numéro de champ.
-         * @param {string} b - Deuxième numéro de champ.
-         * @returns {number} Résultat de la comparaison.
-         */
         function comparerNumerosChamp(a, b) {
-            const regex = /^(\d+)([a-zA-Z]*)$/;
+            const regex = /^(\d+)([a-zA-Z]*)$/; // Gère les numéros de champ avec des lettres (ex: 1A, 10B)
             const matchA = a.match(regex);
             const matchB = b.match(regex);
 
-            // Fallback si le format ne correspond pas, pour éviter des erreurs et trier alphabétiquement.
-            if (!matchA || !matchB) {
-                return a.localeCompare(b);
-            }
+            if (matchA && matchB) {
+                const numA = parseInt(matchA[1], 10);
+                const letterA = matchA[2] || '';
+                const numB = parseInt(matchB[1], 10);
+                const letterB = matchB[2] || '';
 
-            const numA = parseInt(matchA[1], 10);
-            const letterA = matchA[2];
-            const numB = parseInt(matchB[1], 10);
-            const letterB = matchB[2];
-
-            // Compare la partie numérique.
-            if (numA !== numB) {
-                return numA - numB;
+                if (numA !== numB) return numA - numB;
+                return letterA.localeCompare(letterB);
             }
-            // Si les parties numériques sont égales, compare la partie alphabétique.
-            return letterA.localeCompare(letterB);
+            return a.localeCompare(b); // Fallback pour les formats non reconnus
         }
 
-        /**
-         * Met à jour le tableau des moyennes par champ.
-         * @param {Object} moyennesChampData - Les données des moyennes par champ.
-         */
         function mettreAJourTableauMoyennesChamp(moyennesChampData) {
             const tbody = document.querySelector('#table-moyennes-par-champ tbody');
             const aucuneMoyenneMsg = document.getElementById('aucune-moyenne-champ-message');
-            const tableMoyennesChamp = document.getElementById('table-moyennes-par-champ');
+            const table = document.getElementById('table-moyennes-par-champ');
+            if (!tbody || !aucuneMoyenneMsg || !table) return;
 
-            if (!tbody || !aucuneMoyenneMsg || !tableMoyennesChamp) return;
+            tbody.innerHTML = ''; // Vider le contenu précédent
+            const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
 
-            tbody.innerHTML = ''; // Vide le contenu précédent.
-            const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp); // Trie les champs.
+            aucuneMoyenneMsg.style.display = champNosTries.length > 0 ? 'none' : 'block';
+            table.style.display = champNosTries.length > 0 ? '' : 'none';
 
             if (champNosTries.length > 0) {
-                 aucuneMoyenneMsg.style.display = 'none'; // Cache le message "Aucune moyenne"
-                 tableMoyennesChamp.style.display = ''; // Affiche le tableau
-
                 champNosTries.forEach(champ_no => {
                     const data = moyennesChampData[champ_no];
                     const row = tbody.insertRow();
-                    row.dataset.champNo = champ_no; // Ajoute le numéro de champ comme data-attribute.
-
-                    // Insère les cellules avec les données formatées.
+                    row.dataset.champNo = champ_no;
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
                     row.insertCell().textContent = formatPeriodes(data.moyenne);
-
-                    // Ajoute l'icône de verrouillage.
                     const cellStatut = row.insertCell();
+
+                    // Correction de l'assignation du dataset
                     const icon = document.createElement('span');
-                    icon.className = 'lock-icon'; // Applique la classe CSS pour le style de l'icône.
-                    icon.dataset.champNo = champ_no; // Stocke le numéro de champ pour le clic.
+                    icon.className = 'lock-icon';
+                    icon.dataset.champNo = champ_no; // Assignation correcte
 
-                    mettreAJourIconeVerrou(icon, data.est_verrouille); // Configure l'icône (verrouillé/déverrouillé).
-
+                    mettreAJourIconeVerrou(icon, data.est_verrouille);
                     cellStatut.appendChild(icon);
                 });
-            } else {
-                tableMoyennesChamp.style.display = 'none'; // Cache le tableau si aucune moyenne
-                aucuneMoyenneMsg.style.display = 'block'; // Affiche le message
             }
         }
     </script>
 
-    <!-- Script de gestion du thème : écoute les clics sur les boutons et met à jour le thème actif. -->
+    <!-- Script de gestion du thème -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const themeSwitcher = document.querySelector('.theme-switcher');
             if (themeSwitcher) {
                 const themeButtons = themeSwitcher.querySelectorAll('button');
-
-                /**
-                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
-                 * @param {string} theme - Le nom du thème à appliquer.
-                 */
                 function applyThemeUI(theme) {
-                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                    document.body.classList.add(`theme-${theme}`);
-
+                    document.documentElement.className = `theme-${theme}`;
                     themeButtons.forEach(btn => btn.classList.remove('active'));
                     const activeButton = document.getElementById(`theme-btn-${theme}`);
-                    if (activeButton) {
-                        activeButton.classList.add('active');
-                    }
+                    if (activeButton) activeButton.classList.add('active');
                 }
-
-                // Écoute les clics sur le conteneur du sélecteur de thème pour déléguer l'événement.
                 themeSwitcher.addEventListener('click', function(event) {
-                    // Vérifie si l'élément cliqué est un bouton
                     if (event.target.tagName === 'BUTTON') {
-                        const theme = event.target.dataset.theme; // Récupère le thème du data-attribute
-                        localStorage.setItem('appTheme', theme); // Sauvegarde le choix de l'utilisateur
-                        applyThemeUI(theme); // Applique le thème visuellement
+                        const theme = event.target.dataset.theme;
+                        localStorage.setItem('appTheme', theme);
+                        applyThemeUI(theme);
                     }
                 });
-
-                // Applique le thème sauvegardé au chargement DOM complet.
                 const savedTheme = localStorage.getItem('appTheme') || 'light';
                 applyThemeUI(savedTheme);
             }

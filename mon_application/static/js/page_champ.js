@@ -1,12 +1,7 @@
 // static/js/page_champ.js
 // Ce script gère toute l'interactivité de la page de gestion d'un champ spécifique.
 // Il s'appuie sur des variables globales initialisées dans le template HTML via Jinja2 :
-// - G_COURS_ENSEIGNEMENT_CHAMP: Liste des cours d'enseignement du champ.
-// - G_COURS_AUTRES_TACHES_CHAMP: Liste des autres tâches du champ.
-// - G_ENSEIGNANTS_INITIAL_DATA: Liste complète des enseignants du champ avec leurs données.
-// - G_CHAMP_NO_ACTUEL: Le numéro du champ actuellement affiché.
-// - G_CHAMP_EST_VERROUILLE: Un booléen indiquant si le champ est verrouillé.
-// - API_URLS: Un objet contenant les URLs pour les appels fetch.
+// - G_...: Données métiers et de contexte (cours, enseignants, champ, année).
 
 /**
  * Fonction utilitaire pour formater les nombres de périodes.
@@ -30,6 +25,12 @@ function formatPeriodes(value) {
  * Point d'entrée principal du script, exécuté une fois le DOM entièrement chargé.
  */
 document.addEventListener("DOMContentLoaded", function () {
+    // Si aucune année n'est active, on ne fait rien. Le template HTML affiche déjà un message.
+    if (G_ANNEE_ID_ACTIVE === null) {
+        console.warn("Aucune année scolaire active. Le script de page_champ.js ne s'exécutera pas.");
+        return;
+    }
+
     regenererTableauCoursRestants();
 
     if (typeof G_ENSEIGNANTS_INITIAL_DATA !== "undefined") {
@@ -146,11 +147,12 @@ function regenererTableauAttributionsEnseignant(enseignantId, attributionsArray)
     let totalPeriodesEnseignantCalcule = 0;
 
     const attributionsAgregees = attributionsArray.reduce((acc, attr) => {
-        if (!acc[attr.codecours]) {
-            acc[attr.codecours] = { ...attr, nbgroupespris: 0, attributionIds: [] };
+        const key = `${attr.codecours}-${attr.annee_id}`;
+        if (!acc[key]) {
+            acc[key] = { ...attr, nbgroupespris: 0, attributionIds: [] };
         }
-        acc[attr.codecours].nbgroupespris += attr.nbgroupespris;
-        acc[attr.codecours].attributionIds.push(attr.attributionid);
+        acc[key].nbgroupespris += attr.nbgroupespris;
+        acc[key].attributionIds.push(attr.attributionid);
         return acc;
     }, {});
 
@@ -222,14 +224,18 @@ async function attribuerCours(enseignantId, codeCours, boutonClique) {
         const response = await fetch(API_URLS.attribuerCours, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enseignant_id: parseInt(enseignantId), code_cours: codeCours }),
+            body: JSON.stringify({
+                enseignant_id: parseInt(enseignantId),
+                code_cours: codeCours,
+                annee_id: G_ANNEE_ID_ACTIVE
+            }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || "Erreur d'attribution.");
 
         mettreAJourLigneSommaire(enseignantId, data.periodes_enseignant);
         regenererTableauAttributionsEnseignant(enseignantId, data.attributions_enseignant || []);
-        mettreAJourDonneesGlobalesCours(codeCours, data.groupes_restants_cours);
+        mettreAJourDonneesGlobalesCours(codeCours, data.groupes_restants_cours, data.annee_id_cours);
         regenererTableauCoursRestants();
         regenererToutesLesListesDeCoursAChoisirGlobale();
         recalculerEtAfficherMoyenneChamp();
@@ -262,7 +268,7 @@ async function retirerCours(attributionId, _boutonClique) {
 
         mettreAJourLigneSommaire(data.enseignant_id, data.periodes_enseignant);
         regenererTableauAttributionsEnseignant(data.enseignant_id, data.attributions_enseignant || []);
-        mettreAJourDonneesGlobalesCours(data.code_cours, data.groupes_restants_cours);
+        mettreAJourDonneesGlobalesCours(data.code_cours, data.groupes_restants_cours, data.annee_id_cours);
         regenererTableauCoursRestants();
         regenererToutesLesListesDeCoursAChoisirGlobale();
         recalculerEtAfficherMoyenneChamp();
@@ -319,7 +325,7 @@ async function supprimerEnseignantFictif(enseignantId, boutonClique) {
 
         if (data.cours_liberes_details?.length > 0) {
             data.cours_liberes_details.forEach((cours) => {
-                mettreAJourDonneesGlobalesCours(cours.code_cours, cours.nouveaux_groupes_restants);
+                mettreAJourDonneesGlobalesCours(cours.code_cours, cours.nouveaux_groupes_restants, cours.annee_id_cours);
             });
         }
 
@@ -341,17 +347,19 @@ async function supprimerEnseignantFictif(enseignantId, boutonClique) {
  * Met à jour les données globales d'un cours.
  * @param {string} codeCours Le code du cours.
  * @param {number} nouveauxGrpRestants Le nouveau nombre de groupes.
+ * @param {number} anneeId L'ID de l'année du cours.
  */
-function mettreAJourDonneesGlobalesCours(codeCours, nouveauxGrpRestants) {
-    const coursE = G_COURS_ENSEIGNEMENT_CHAMP.find((c) => c.codecours === codeCours);
-    if (coursE) coursE.grprestant = nouveauxGrpRestants;
-    const coursA = G_COURS_AUTRES_TACHES_CHAMP.find((c) => c.codecours === codeCours);
-    if (coursA) coursA.grprestant = nouveauxGrpRestants;
+function mettreAJourDonneesGlobalesCours(codeCours, nouveauxGrpRestants, anneeId) {
+    const findAndUpd = (list) => {
+        const cours = list.find((c) => c.codecours === codeCours && c.annee_id === anneeId);
+        if (cours) cours.grprestant = nouveauxGrpRestants;
+    };
+    findAndUpd(G_COURS_ENSEIGNEMENT_CHAMP);
+    findAndUpd(G_COURS_AUTRES_TACHES_CHAMP);
 }
 
 /**
  * Régénère le tableau des cours restants DANS L'INTERFACE.
- * Utilise la fonction `genererHtmlLignesCoursRestants` qui se base sur les données globales.
  */
 function regenererTableauCoursRestants() {
     const tbody = document.querySelector("#tableau-cours-restants tbody");
@@ -362,9 +370,6 @@ function regenererTableauCoursRestants() {
 
 /**
  * Génère le HTML pour les lignes du tableau des cours restants pour L'INTERFACE.
- * Se base sur la valeur `grprestant` des objets cours globaux, qui est toujours à jour
- * pour l'état actuel de l'application (attributions réelles et fictives).
- * @returns {string} Le code HTML des lignes.
  */
 function genererHtmlLignesCoursRestants() {
     const coursEnseignement = G_COURS_ENSEIGNEMENT_CHAMP.filter((c) => c.grprestant > 0);
@@ -433,11 +438,6 @@ function mettreAJourLigneSommaire(enseignantId, periodes) {
     const enseignantData = G_ENSEIGNANTS_INITIAL_DATA.find((e) => e.enseignantid === parseInt(enseignantId));
     if (enseignantData) {
         enseignantData.periodes_actuelles = periodes;
-        // Met à jour aussi les attributions sur l'objet enseignant pour les futurs calculs d'impression
-        const attributionsLigne = document.querySelectorAll(`#tbody-attributions-${enseignantId} tr:not(.sous-titre-attributions-row):not(.total-attributions-row)`);
-        if(attributionsLigne.length > 0 && enseignantData.attributions){
-            // Ceci est une simplification. Une synchronisation plus robuste serait nécessaire si les attributions changeaient de structure.
-        }
     }
 }
 
@@ -517,12 +517,12 @@ function genererHtmlTableauSommaireChamp() {
     });
 
     const moyenneChamp = document.getElementById("moyenne-champ-val")?.textContent || "0";
-    return `<h2 class="section-title">Tâches du champ : ${G_CHAMP_NO_ACTUEL}</h2><table id="tableau-sommaire-champ-print"><thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead><tbody>${tbodyHtml}</tbody><tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td>${moyenneChamp}</td><td></td></tr></tfoot></table>`;
+    return `<h2 class="section-title">Tâches du champ : ${G_CHAMP_NO_ACTUEL} (Année: ${document.querySelector('.annee-active-header')?.textContent || ''})</h2><table id="tableau-sommaire-champ-print"><thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead><tbody>${tbodyHtml}</tbody><tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td>${moyenneChamp}</td><td></td></tr></tfoot></table>`;
 }
 
 /**
- * NOUVELLE FONCTION (HELPER): Calcule les attributions par cours pour les enseignants réels.
- * @returns {Map<string, number>} Une map associant le code du cours au nombre de groupes pris par des enseignants non fictifs.
+ * Calcule les attributions par cours pour les enseignants réels.
+ * @returns {Map<string, number>} Une map associant `codecours-anneeid` au nombre de groupes.
  */
 function getAttributionsReellesParCours() {
     const attributionsReelles = new Map();
@@ -531,9 +531,8 @@ function getAttributionsReellesParCours() {
     enseignantsReels.forEach((enseignant) => {
         if (enseignant.attributions && Array.isArray(enseignant.attributions)) {
             enseignant.attributions.forEach((attr) => {
-                const codeCours = attr.codecours;
-                const nbGroupes = attr.nbgroupespris;
-                attributionsReelles.set(codeCours, (attributionsReelles.get(codeCours) || 0) + nbGroupes);
+                const key = `${attr.codecours}-${attr.annee_id}`;
+                attributionsReelles.set(key, (attributionsReelles.get(key) || 0) + attr.nbgroupespris);
             });
         }
     });
@@ -541,9 +540,7 @@ function getAttributionsReellesParCours() {
 }
 
 /**
- * MODIFIÉ: Génère le HTML du tableau des cours restants SPÉCIFIQUEMENT pour l'impression.
- * Cette fonction recalcule les groupes restants en ignorant les attributions aux enseignants fictifs
- * pour refléter ce qui est réellement "restant" pour les attributions aux enseignants.
+ * Génère le HTML du tableau des cours restants pour l'impression.
  * @returns {string} Le code HTML du tableau pour l'impression.
  */
 function genererHtmlTableauCoursRestantsPourImpression() {
@@ -555,14 +552,12 @@ function genererHtmlTableauCoursRestantsPourImpression() {
         const coursFiltres = [];
 
         listeCours.forEach((c) => {
-            const groupesPrisReels = attributionsReellesParCours.get(c.codecours) || 0;
+            const key = `${c.codecours}-${c.annee_id}`;
+            const groupesPrisReels = attributionsReellesParCours.get(key) || 0;
             const grpRestantPourImpression = c.nbgroupeinitial - groupesPrisReels;
 
             if (grpRestantPourImpression > 0) {
-                coursFiltres.push({
-                    ...c,
-                    grprestant_print: grpRestantPourImpression,
-                });
+                coursFiltres.push({ ...c, grprestant_print: grpRestantPourImpression });
             }
         });
 

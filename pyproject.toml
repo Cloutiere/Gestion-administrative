@@ -58,16 +58,7 @@ target-version = "py311" # Doit correspondre à `requires-python`.
 # --- Configuration du Linter de Ruff ([tool.ruff.lint]) ---
 [tool.ruff.lint]
 # Sélection des catégories de règles à activer.
-# E: Erreurs (Pyflakes)
-# F: Flakes (logique erronée, variables inutilisées)
-# W: Warnings de style (Pycodestyle)
-# I: Organisation des imports (isort)
-# UP: Suggestions de modernisation de la syntaxe (pyupgrade)
 select = ["E", "F", "W", "I", "UP"]
-
-# Règles spécifiques à ignorer si nécessaire.
-# Par exemple, "E501" (ligne trop longue) est géré par le formateur.
-# ignore = ["E501"]
 
 
 # --- Configuration du Formateur de Ruff ([tool.ruff.format]) ---
@@ -78,6 +69,10 @@ quote-style = "double"
 # Style d'indentation à utiliser ("space" ou "tab").
 indent-style = "space"
 
-# `skip-magic-trailing-comma`: La valeur par défaut `false` est généralement
-# recommandée pour la cohérence du formatage, notamment avec les virgules de fin.
-# skip-magic-trailing-comma = false
+
+# --- Configuration de Setuptools pour la découverte de packages ---
+# Cette section résout l'erreur en spécifiant où trouver les packages
+# et quels répertoires exclure.
+[tool.setuptools.packages.find]
+where = ["."]  # Cherche les packages à la racine du projet.
+exclude = ["uploads*"]  # Exclut le dossier 'uploads' de la découverte.
