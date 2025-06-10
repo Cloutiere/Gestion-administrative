@@ -397,7 +397,8 @@ def api_importer_cours_excel() -> Any:
                 desc = str(desc_raw).strip()
                 nb_grp = int(float(str(nb_grp_raw).replace(",", ".")))
                 nb_per = float(str(nb_per_raw).replace(",", "."))
-                est_autre = str(est_autre_raw).strip().upper() == "VRAI" if est_autre_raw is not None else False
+                # --- CORRECTION APPLIQUÉE ICI ---
+                est_autre = str(est_autre_raw).strip().upper() in ("VRAI", "TRUE") if est_autre_raw is not None else False
             except ValueError as ve:
                 flash(f"Ligne {row_idx}: Erreur de type de données ({ve}). Vérifiez les nombres et le format 'VRAI/FAUX'.", "warning")
                 continue
@@ -524,7 +525,8 @@ def api_importer_enseignants_excel() -> Any:
                 champ_no = str(champ_no_raw).strip()
                 nom_clean = str(nom_raw).strip()
                 prenom_clean = str(prenom_raw).strip()
-                est_temps_plein = str(temps_plein_raw).strip().upper() == "VRAI"
+                # --- CORRECTION APPLIQUÉE ICI ---
+                est_temps_plein = str(temps_plein_raw).strip().upper() in ("VRAI", "TRUE")
             except ValueError as ve_ens:  # Peu probable ici, mais par sécurité
                 flash(f"Ligne enseignant {row_idx}: Erreur de conversion de données ({ve_ens}).", "warning")
                 continue
