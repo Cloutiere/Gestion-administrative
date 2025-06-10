@@ -254,8 +254,8 @@
             </div>
             <form id="cours-form">
                 <div class="modal-body">
-                    <input type="hidden" id="cours-mode" value="add">
-                    <input type="hidden" id="original-codecours" value="">
+                    <input type="hidden" id="cours-mode" value="add"> <!-- Pas d'attribut name ici, lu par JS via ID -->
+                    <input type="hidden" id="original-codecours" value=""> <!-- Pas d'attribut name ici, lu par JS via ID -->
                     <div class="form-group">
                         <label for="form-codecours">Code du Cours</label>
                         <input type="text" id="form-codecours" name="codecours" required>
@@ -306,8 +306,8 @@
             </div>
             <form id="enseignant-form">
                 <div class="modal-body">
-                    <input type="hidden" id="enseignant-mode" value="add">
-                    <input type="hidden" id="enseignant-id" value="">
+                    <input type="hidden" id="enseignant-mode" value="add"> <!-- Pas d'attribut name ici, lu par JS via ID -->
+                    <input type="hidden" id="enseignant-id" value=""> <!-- Pas d'attribut name ici, lu par JS via ID -->
                     <div class="form-group">
                         <label for="form-prenom">Prénom</label>
                         <input type="text" id="form-prenom" name="prenom" required>
@@ -438,6 +438,7 @@
                 coursForm.reset();
                 coursModalTitle.textContent = 'Ajouter un nouveau cours';
                 coursForm.querySelector('#cours-mode').value = 'add';
+                coursForm.querySelector('#original-codecours').value = ''; // Important pour le mode ajout
                 coursForm.querySelector('#form-codecours').readOnly = false;
                 openModal(coursModal);
             });
@@ -455,9 +456,9 @@
                         coursForm.reset();
                         coursModalTitle.textContent = `Modifier le cours : ${cours.codecours}`;
                         coursForm.querySelector('#cours-mode').value = 'edit';
-                        coursForm.querySelector('#original-codecours').value = cours.codecours;
-                        coursForm.querySelector('#form-codecours').value = cours.codecours;
-                        coursForm.querySelector('#form-codecours').readOnly = true;
+                        coursForm.querySelector('#original-codecours').value = cours.codecours; // Champ hidden pour l'identifiant original
+                        coursForm.querySelector('#form-codecours').value = cours.codecours; // Champ visible
+                        coursForm.querySelector('#form-codecours').readOnly = true; // Empêcher la modification de la PK
                         coursForm.querySelector('#form-coursdescriptif').value = cours.coursdescriptif;
                         coursForm.querySelector('#form-champno-cours').value = cours.champno;
                         coursForm.querySelector('#form-nbperiodes').value = cours.nbperiodes;
@@ -475,7 +476,8 @@
                         const data = await response.json();
                         if (data.success) {
                             const sanitizedId = codeCours.replace(/\./g, '-').replace(/\//g, '-');
-                            document.getElementById(`cours-row-${sanitizedId}`).remove();
+                            const rowToRemove = document.getElementById(`cours-row-${sanitizedId}`);
+                            if (rowToRemove) rowToRemove.remove();
                             displayApiMessage(data.message, 'success');
                         } else {
                             displayApiMessage(data.message, 'error');
@@ -489,34 +491,39 @@
             coursForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const formData = new FormData(coursForm);
-                const data = Object.fromEntries(formData.entries());
+                const data = Object.fromEntries(formData.entries()); // Contient les champs avec 'name'
+
+                // Conversion des types et lecture des champs sans 'name'
                 data.nbperiodes = parseFloat(data.nbperiodes);
                 data.nbgroupeinitial = parseInt(data.nbgroupeinitial, 10);
                 data.estcoursautre = coursForm.querySelector('#form-estcoursautre').checked;
 
-                const mode = data['cours-mode'];
-                const originalCodeCours = data['original-codecours'];
+                // CORRECTION: Lire 'mode' et 'originalCodeCours' directement depuis les éléments du formulaire
+                const mode = coursForm.querySelector('#cours-mode').value;
+                const originalCodeCours = coursForm.querySelector('#original-codecours').value;
+
                 let url = (mode === 'add') ? '/admin/api/cours/creer' : `/admin/api/cours/${encodeURIComponent(originalCodeCours)}/modifier`;
 
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
+                    body: JSON.stringify(data), // 'data' contient les valeurs à mettre à jour/créer
                 });
                 const result = await response.json();
 
                 if (result.success) {
                     closeModal(coursModal);
                     displayApiMessage(result.message, 'success');
-                    location.reload();
+                    location.reload(); // Recharger pour voir les modifications
                 } else {
-                    alert(`Erreur: ${result.message}`);
+                    // Afficher l'erreur dans la modale ou via displayApiMessage
+                    alert(`Erreur: ${result.message}`); // Ou une meilleure gestion de l'erreur dans la modale
                 }
             });
         }
 
 
-        // --- Logique CRUD pour les ENSEIGNANTS (inchangée dans sa structure) ---
+        // --- Logique CRUD pour les ENSEIGNANTS ---
         const enseignantsAccordionContainer = document.getElementById('enseignants-accordion-container');
         const enseignantModal = document.getElementById('enseignant-modal-backdrop');
         const enseignantForm = document.getElementById('enseignant-form');
@@ -528,6 +535,7 @@
                 enseignantForm.reset();
                 enseignantModalTitle.textContent = 'Ajouter un nouvel enseignant';
                 enseignantForm.querySelector('#enseignant-mode').value = 'add';
+                enseignantForm.querySelector('#enseignant-id').value = ''; // Important pour le mode ajout
                 openModal(enseignantModal);
             });
         }
@@ -535,8 +543,8 @@
         if (enseignantsAccordionContainer) {
             enseignantsAccordionContainer.addEventListener('click', async (e) => {
                 if (e.target.classList.contains('btn-edit-enseignant')) {
-                    const enseignantId = e.target.dataset.enseignantid;
-                    const response = await fetch(`/admin/api/enseignants/${enseignantId}`);
+                    const enseignantIdVal = e.target.dataset.enseignantid;
+                    const response = await fetch(`/admin/api/enseignants/${enseignantIdVal}`);
                     const data = await response.json();
 
                     if (data.success) {
@@ -544,7 +552,7 @@
                         enseignantForm.reset();
                         enseignantModalTitle.textContent = `Modifier: ${enseignant.nomcomplet}`;
                         enseignantForm.querySelector('#enseignant-mode').value = 'edit';
-                        enseignantForm.querySelector('#enseignant-id').value = enseignant.enseignantid;
+                        enseignantForm.querySelector('#enseignant-id').value = enseignant.enseignantid; // Champ hidden pour l'ID
                         enseignantForm.querySelector('#form-nom').value = enseignant.nom;
                         enseignantForm.querySelector('#form-prenom').value = enseignant.prenom;
                         enseignantForm.querySelector('#form-champno-enseignant').value = enseignant.champno;
@@ -555,12 +563,13 @@
                     }
                 }
                 if (e.target.classList.contains('btn-delete-enseignant')) {
-                    const enseignantId = e.target.dataset.enseignantid;
+                    const enseignantIdVal = e.target.dataset.enseignantid;
                     if (confirm(`Êtes-vous sûr de vouloir supprimer cet enseignant pour l'année active ? Toutes ses attributions seront également supprimées.`)) {
-                        const response = await fetch(`/admin/api/enseignants/${enseignantId}/supprimer`, { method: 'POST' });
+                        const response = await fetch(`/admin/api/enseignants/${enseignantIdVal}/supprimer`, { method: 'POST' });
                         const data = await response.json();
                          if (data.success) {
-                            document.getElementById(`enseignant-row-${enseignantId}`).remove();
+                            const rowToRemove = document.getElementById(`enseignant-row-${enseignantIdVal}`);
+                            if (rowToRemove) rowToRemove.remove();
                             displayApiMessage(data.message, 'success');
                         } else {
                             displayApiMessage(data.message, 'error');
@@ -574,31 +583,33 @@
             enseignantForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const formData = new FormData(enseignantForm);
-                const data = Object.fromEntries(formData.entries());
+                const data = Object.fromEntries(formData.entries()); // Contient les champs avec 'name'
                 data.esttempsplein = enseignantForm.querySelector('#form-esttempsplein').checked;
 
-                const mode = data['enseignant-mode'];
-                const enseignantId = data['enseignant-id'];
+                // CORRECTION: Lire 'mode' et 'enseignantId' directement depuis les éléments du formulaire
+                const mode = enseignantForm.querySelector('#enseignant-mode').value;
+                const enseignantId = enseignantForm.querySelector('#enseignant-id').value;
+
                 let url = (mode === 'add') ? '/admin/api/enseignants/creer' : `/admin/api/enseignants/${enseignantId}/modifier`;
 
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
+                    body: JSON.stringify(data), // 'data' contient les valeurs à mettre à jour/créer
                 });
                 const result = await response.json();
 
                 if (result.success) {
                     closeModal(enseignantModal);
                     displayApiMessage(result.message, 'success');
-                    location.reload();
+                    location.reload(); // Recharger pour voir les modifications
                 } else {
-                    alert(`Erreur: ${result.message}`);
+                    alert(`Erreur: ${result.message}`); // Ou une meilleure gestion de l'erreur dans la modale
                 }
             });
         }
 
-        // --- Logique de réassignation de cours (inchangée) ---
+        // --- Logique de réassignation de cours ---
         if (coursAccordionContainer) {
             coursAccordionContainer.addEventListener('click', function(e) {
                 if (!e.target.classList.contains('btn-reassigner')) return;
@@ -625,12 +636,15 @@
                 .then(data => {
                     if (data.success) {
                         displayApiMessage(data.message, 'success');
-                        location.reload();
+                        location.reload(); // Recharger pour voir le cours dans le nouveau champ
                     } else {
                         displayApiMessage(data.message || 'Une erreur est survenue.', 'error');
                     }
                 })
-                .catch(error => displayApiMessage('Erreur de communication avec le serveur.', 'error'))
+                .catch(error => {
+                    console.error('Erreur de réassignation:', error);
+                    displayApiMessage('Erreur de communication avec le serveur.', 'error');
+                })
                 .finally(() => { button.disabled = false; });
             });
         }
