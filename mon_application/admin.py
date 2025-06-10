@@ -14,7 +14,7 @@ import psycopg2
 import psycopg2.extras
 from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
-from openpyxl.utils.exceptions import InvalidFileException  # Conservé car potentiellement utile
+from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 from psycopg2.extensions import connection
 from werkzeug.security import generate_password_hash
@@ -27,13 +27,27 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 # --- Fonctions utilitaires pour le sommaire (maintenant dépendantes de l'année) ---
-def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], float]:
-    """Calcule les données agrégées pour la page sommaire globale pour une année donnée."""
+def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], float, float]:
+    """
+    Calcule les données agrégées pour la page sommaire globale pour une année donnée.
+
+    Retourne:
+        Un tuple contenant :
+        - La liste des enseignants groupés par champ.
+        - Un dictionnaire des moyennes et totaux par champ.
+        - La moyenne générale des périodes pour les enseignants à temps plein.
+        - La moyenne "Préliminaire confirmée" (enseignants TP des champs verrouillés).
+    """
     tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
+    periodes_disponibles_par_champ = db.get_total_periodes_disponibles_par_champ(annee_id)
+
     enseignants_par_champ_temp: dict[str, Any] = {}
     moyennes_par_champ_calculees: dict[str, Any] = {}
     total_periodes_global_tp = 0.0
     nb_enseignants_tp_global = 0
+    # Nouveaux accumulateurs pour la moyenne "Préliminaire confirmée"
+    total_periodes_verrouille_tp = 0.0
+    nb_enseignants_verrouille_tp = 0
 
     for ens in tous_enseignants_details:
         champ_no = ens["champno"]
@@ -44,22 +58,46 @@ def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict
     for champ_no, data in enseignants_par_champ_temp.items():
         _enseignants = data.get("enseignants", [])
         if _enseignants:
-            total_periodes_champ = sum(e["total_periodes"] for e in _enseignants if e["compte_pour_moyenne_champ"])
+            # Périodes pour le calcul de la moyenne (uniquement enseignants TP non fictifs)
+            total_periodes_pour_moyenne = sum(e["total_periodes"] for e in _enseignants if e["compte_pour_moyenne_champ"])
+            # Total des périodes réellement choisies dans le champ (exclut les enseignants fictifs / tâches restantes)
+            total_periodes_choisies_champ = sum(e["total_periodes"] for e in _enseignants if not e["estfictif"])
             nb_enseignants_champ = sum(1 for e in _enseignants if e["compte_pour_moyenne_champ"])
+            est_verrouille_champ = _enseignants[0]["estverrouille"]
 
             if nb_enseignants_champ > 0:
+                moyenne_champ = total_periodes_pour_moyenne / nb_enseignants_champ
                 moyennes_par_champ_calculees[champ_no] = {
                     "champ_nom": data["champnom"],
-                    "moyenne": total_periodes_champ / nb_enseignants_champ,
-                    "est_verrouille": _enseignants[0][
-                        "estverrouille"
-                    ],  # Tous les enseignants d'un champ partagent le statut de verrouillage du champ
+                    "moyenne": moyenne_champ,
+                    "est_verrouille": est_verrouille_champ,
+                    "nb_enseignants_tp": nb_enseignants_champ,
+                    "periodes_disponibles": periodes_disponibles_par_champ.get(champ_no, 0.0),
+                    "periodes_choisies": total_periodes_choisies_champ,
                 }
-                total_periodes_global_tp += total_periodes_champ
+                total_periodes_global_tp += total_periodes_pour_moyenne
                 nb_enseignants_tp_global += nb_enseignants_champ
 
+                # Agrégation pour la nouvelle moyenne si le champ est verrouillé
+                if est_verrouille_champ:
+                    total_periodes_verrouille_tp += total_periodes_pour_moyenne
+                    nb_enseignants_verrouille_tp += nb_enseignants_champ
+
+            # Gérer le cas où un champ n'a que des enseignants non TP (ex: temps partiels, tâches restantes)
+            elif _enseignants:
+                moyennes_par_champ_calculees[champ_no] = {
+                    "champ_nom": data["champnom"],
+                    "moyenne": 0.0,
+                    "est_verrouille": est_verrouille_champ,
+                    "nb_enseignants_tp": 0,
+                    "periodes_disponibles": periodes_disponibles_par_champ.get(champ_no, 0.0),
+                    "periodes_choisies": total_periodes_choisies_champ,
+                }
+
     moyenne_generale_calculee = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
-    return list(enseignants_par_champ_temp.values()), moyennes_par_champ_calculees, moyenne_generale_calculee
+    moyenne_prelim_conf = (total_periodes_verrouille_tp / nb_enseignants_verrouille_tp) if nb_enseignants_verrouille_tp > 0 else 0.0
+
+    return list(enseignants_par_champ_temp.values()), moyennes_par_champ_calculees, moyenne_generale_calculee, moyenne_prelim_conf
 
 
 # --- ROUTES DES PAGES D'ADMINISTRATION (HTML) ---
@@ -71,16 +109,23 @@ def page_sommaire() -> str:
     """Affiche la page du sommaire global pour l'année active."""
     if not g.annee_active:
         flash("Aucune année scolaire n'est disponible. Veuillez en créer une dans la section 'Données'.", "warning")
-        return render_template("page_sommaire.html", enseignants_par_champ=[], moyennes_par_champ={}, moyenne_generale=0.0)
+        return render_template(
+            "page_sommaire.html",
+            enseignants_par_champ=[],
+            moyennes_par_champ={},
+            moyenne_generale=0.0,
+            moyenne_preliminaire_confirmee=0.0,
+        )
 
     annee_id = g.annee_active["annee_id"]
-    enseignants_par_champ_data, moyennes_champs, moyenne_gen = calculer_donnees_sommaire(annee_id)
+    enseignants_par_champ_data, moyennes_champs, moyenne_gen, moyenne_prelim_conf = calculer_donnees_sommaire(annee_id)
 
     return render_template(
         "page_sommaire.html",
         enseignants_par_champ=enseignants_par_champ_data,
         moyennes_par_champ=moyennes_champs,
         moyenne_generale=moyenne_gen,
+        moyenne_preliminaire_confirmee=moyenne_prelim_conf,
     )
 
 
@@ -132,12 +177,7 @@ def api_creer_annee() -> Any:
 
     new_annee = db.create_annee_scolaire(libelle)
     if new_annee:
-        # Si c'est la toute première année créée, la définir comme courante
-        # g.toutes_les_annees est mis à jour par le décorateur @app.before_request dans __init__.py
-        # après la création, donc on vérifie si la nouvelle année est la seule *activement* connue.
-        # Idéalement, get_all_annees() devrait être appelé à nouveau ici pour une logique plus stricte,
-        # mais pour simplifier, on se base sur le fait que si aucune n'était courante avant, celle-ci le devient.
-        if not g.annee_courante:  # Ou si len(db.get_all_annees()) == 1 après création
+        if not g.annee_courante:
             db.set_annee_courante(new_annee["annee_id"])
             new_annee["est_courante"] = True
         current_app.logger.info(f"Année scolaire '{libelle}' créée avec ID {new_annee['annee_id']}.")
@@ -155,7 +195,6 @@ def api_changer_annee_active() -> Any:
         return jsonify({"success": False, "message": "ID de l'année manquant."}), 400
 
     session["annee_scolaire_id"] = annee_id
-    # Log pour suivi
     annee_selectionnee = next((annee for annee in g.toutes_les_annees if annee["annee_id"] == annee_id), None)
     if annee_selectionnee:
         current_app.logger.info(f"Année de travail changée pour l'admin '{current_user.username}' : '{annee_selectionnee['libelle_annee']}'.")
@@ -171,7 +210,6 @@ def api_set_annee_courante() -> Any:
         return jsonify({"success": False, "message": "ID de l'année manquant."}), 400
 
     if db.set_annee_courante(annee_id):
-        # Log pour suivi
         annee_maj = next((annee for annee in g.toutes_les_annees if annee["annee_id"] == annee_id), None)
         if annee_maj:
             current_app.logger.info(f"Année courante de l'application définie sur : '{annee_maj['libelle_annee']}'.")
@@ -189,11 +227,21 @@ def api_get_donnees_sommaire() -> Any:
     """API pour récupérer les données du sommaire pour l'année active."""
     if not g.annee_active:
         current_app.logger.warning("API sommaire: Aucune année active, retour de données vides.")
-        return jsonify(enseignants_par_champ=[], moyennes_par_champ={}, moyenne_generale=0.0)
+        return jsonify(
+            enseignants_par_champ=[],
+            moyennes_par_champ={},
+            moyenne_generale=0.0,
+            moyenne_preliminaire_confirmee=0.0,
+        )
 
     annee_id = g.annee_active["annee_id"]
-    enseignants_groupes, moyennes_champs, moyenne_gen = calculer_donnees_sommaire(annee_id)
-    return jsonify(enseignants_par_champ=enseignants_groupes, moyennes_par_champ=moyennes_champs, moyenne_generale=moyenne_gen)
+    enseignants_groupes, moyennes_champs, moyenne_gen, moyenne_prelim_conf = calculer_donnees_sommaire(annee_id)
+    return jsonify(
+        enseignants_par_champ=enseignants_groupes,
+        moyennes_par_champ=moyennes_champs,
+        moyenne_generale=moyenne_gen,
+        moyenne_preliminaire_confirmee=moyenne_prelim_conf,
+    )
 
 
 @bp.route("/api/cours/creer", methods=["POST"])
@@ -300,16 +348,12 @@ def api_update_enseignant(enseignant_id: int) -> Any:
     if not data or not all(k in data for k in ["nom", "prenom", "champno", "esttempsplein"]):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
     try:
-        # L'année d'un enseignant n'est pas modifiable directement.
-        # Pour changer un enseignant d'année, il faudrait le supprimer et le recréer dans la nouvelle année.
         updated_enseignant = db.update_enseignant(enseignant_id, data)
         if not updated_enseignant:
             return jsonify({"success": False, "message": "Enseignant non trouvé ou non modifiable (ex: fictif)."}), 404
         current_app.logger.info(f"Enseignant ID {enseignant_id} modifié.")
         return jsonify({"success": True, "message": "Enseignant mis à jour.", "enseignant": updated_enseignant})
     except psycopg2.errors.UniqueViolation:
-        # Cette erreur peut survenir si la combinaison nom/prénom/année existe déjà
-        # suite à une tentative de modification qui recréerait un doublon.
         return jsonify({"success": False, "message": "Un enseignant avec ce nom/prénom existe déjà pour l'année de cet enseignant."}), 409
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DB modification enseignant {enseignant_id}: {e}")
@@ -324,7 +368,6 @@ def api_delete_enseignant(enseignant_id: int) -> Any:
     if not enseignant:
         return jsonify({"success": False, "message": "Enseignant non trouvé."}), 404
     if enseignant["estfictif"]:
-        # La suppression des fictifs devrait se faire via la page de champ si nécessaire (non implémenté ici)
         return jsonify({"success": False, "message": "Impossible de supprimer un enseignant fictif via cette interface."}), 403
 
     if db.delete_enseignant(enseignant_id):
@@ -365,28 +408,20 @@ def api_importer_cours_excel() -> Any:
             raise ValueError("Fichier Excel vide ou ne contient que l'en-tête.")
 
         _header = [cell.value for cell in sheet[1]]
-        # Valider l'en-tête si nécessaire, ex:
-        # attendu = ["ChampNo", "CodeCours", "TypeCours", "CoursDescriptif", ...]
-        # if header[:len(attendu)] != attendu:
-        #     raise ValueError("En-tête du fichier Excel incorrect.")
 
-        for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):  # Commence à la ligne 2
+        for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
-            if not any(v is not None and str(v).strip() != "" for v in values[:6]):  # Vérifie les 6 premières colonnes pertinentes
+            if not any(v is not None and str(v).strip() != "" for v in values[:6]):
                 current_app.logger.debug(f"Ligne {row_idx} ignorée (vide ou non pertinente).")
-                continue  # Ignore les lignes vides
+                continue
 
-            # Extrait les valeurs en s'assurant qu'elles ne sont pas None avant de stripper
             champ_no_raw = values[0]
             code_cours_raw = values[1]
-            # type_cours_raw = values[2] # Ignoré pour l'instant
             desc_raw = values[3]
             nb_grp_raw = values[4]
             nb_per_raw = values[5]
-            # champ_affectation_raw = values[6] # Ignoré pour l'instant
             est_autre_raw = values[7]
 
-            # Validation de base et conversion
             if not all([champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw is not None, nb_per_raw is not None]):
                 flash(f"Ligne {row_idx}: Données manquantes. Vérifiez ChampNo, CodeCours, Descriptif, NbGroupes, NbPériodes.", "warning")
                 continue
@@ -397,7 +432,6 @@ def api_importer_cours_excel() -> Any:
                 desc = str(desc_raw).strip()
                 nb_grp = int(float(str(nb_grp_raw).replace(",", ".")))
                 nb_per = float(str(nb_per_raw).replace(",", "."))
-                # --- CORRECTION APPLIQUÉE ICI ---
                 est_autre = str(est_autre_raw).strip().upper() in ("VRAI", "TRUE") if est_autre_raw is not None else False
             except ValueError as ve:
                 flash(f"Ligne {row_idx}: Erreur de type de données ({ve}). Vérifiez les nombres et le format 'VRAI/FAUX'.", "warning")
@@ -417,7 +451,7 @@ def api_importer_cours_excel() -> Any:
     except InvalidFileException:
         flash("Fichier Excel corrompu ou invalide.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
-    except ValueError as e_val:  # Capturer les ValueErrors spécifiques de la logique de parsing
+    except ValueError as e_val:
         flash(str(e_val), "error")
         return redirect(url_for("admin.page_administration_donnees"))
     except Exception as e_gen:
@@ -436,12 +470,10 @@ def api_importer_cours_excel() -> Any:
 
     try:
         with conn.cursor() as cur:
-            # Opérations transactionnelles
-            current_app.logger.info(f"Suppression des anciennes attributions pour l'année ID {annee_id}...")
+            current_app.logger.info(f"Début transaction importation cours pour l'année ID {annee_id}.")
             nb_attr_supp = db.delete_all_attributions_for_year(annee_id)
             current_app.logger.info(f"{nb_attr_supp} attributions supprimées.")
 
-            current_app.logger.info(f"Suppression des anciens cours pour l'année ID {annee_id}...")
             nb_cours_supp = db.delete_all_cours_for_year(annee_id)
             current_app.logger.info(f"{nb_cours_supp} cours supprimés.")
 
@@ -449,7 +481,7 @@ def api_importer_cours_excel() -> Any:
             for cours in nouveaux_cours:
                 cur.execute(
                     """INSERT INTO Cours (annee_id, CodeCours, ChampNo, CoursDescriptif, NbPeriodes, NbGroupeInitial, EstCoursAutre)
-                       VALUES (%(annee_id)s, %(codecours)s, %(champno)s, %(coursdescriptif)s, %(nbperiodes)s, %(nbgroupeinitial)s, \
+                       VALUES (%(annee_id)s, %(codecours)s, %(champno)s, %(coursdescriptif)s, %(nbperiodes)s, %(nbgroupeinitial)s,
                        %(estcoursautre)s);""",
                     {**cours, "annee_id": annee_id},
                 )
@@ -463,7 +495,7 @@ def api_importer_cours_excel() -> Any:
         conn.rollback()
         current_app.logger.error(f"Erreur DB importation cours: {e_db}", exc_info=True)
         flash(f"Erreur base de données: {e_db}. L'importation a été annulée.", "error")
-    except Exception as e_final:  # Pour toute autre exception durant la transaction
+    except Exception as e_final:
         conn.rollback()
         current_app.logger.error(f"Erreur inconnue durant transaction d'importation cours: {e_final}", exc_info=True)
         flash(f"Erreur inconnue: {e_final}. L'importation a été annulée.", "error")
@@ -502,15 +534,8 @@ def api_importer_enseignants_excel() -> Any:
         if not isinstance(sheet, Worksheet) or sheet.max_row <= 1:
             raise ValueError("Fichier Excel vide ou ne contient que l'en-tête.")
 
-        # Optionnel: valider l'en-tête
-        # header = [cell.value for cell in sheet[1]]
-        # attendu_ens = ["ChampNo", "Nom", "Prenom", "EstTempsPlein"]
-        # if header[:len(attendu_ens)] != attendu_ens:
-        #     raise ValueError("En-tête du fichier Excel des enseignants incorrect.")
-
-        for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):  # Commence à la ligne 2
+        for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
-            # Ignorer les lignes manifestement vides (basé sur les 4 premières colonnes)
             if not any(v is not None and str(v).strip() != "" for v in values[:4]):
                 current_app.logger.debug(f"Ligne enseignant {row_idx} ignorée (vide).")
                 continue
@@ -525,13 +550,12 @@ def api_importer_enseignants_excel() -> Any:
                 champ_no = str(champ_no_raw).strip()
                 nom_clean = str(nom_raw).strip()
                 prenom_clean = str(prenom_raw).strip()
-                # --- CORRECTION APPLIQUÉE ICI ---
                 est_temps_plein = str(temps_plein_raw).strip().upper() in ("VRAI", "TRUE")
-            except ValueError as ve_ens:  # Peu probable ici, mais par sécurité
+            except ValueError as ve_ens:
                 flash(f"Ligne enseignant {row_idx}: Erreur de conversion de données ({ve_ens}).", "warning")
                 continue
 
-            if not nom_clean or not prenom_clean:  # S'assurer que nom et prénom ne sont pas vides après strip
+            if not nom_clean or not prenom_clean:
                 flash(f"Ligne enseignant {row_idx}: Nom ou Prénom vide après nettoyage.", "warning")
                 continue
 
@@ -548,7 +572,7 @@ def api_importer_enseignants_excel() -> Any:
     except InvalidFileException:
         flash("Fichier Excel des enseignants corrompu ou invalide.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
-    except ValueError as e_val_ens:  # Capturer les ValueErrors spécifiques de la logique de parsing
+    except ValueError as e_val_ens:
         flash(str(e_val_ens), "error")
         return redirect(url_for("admin.page_administration_donnees"))
     except Exception as e_gen_ens:
@@ -567,11 +591,10 @@ def api_importer_enseignants_excel() -> Any:
 
     try:
         with conn.cursor() as cur:
-            current_app.logger.info(f"Suppression des anciennes attributions pour l'année ID {annee_id} (avant import enseignants)...")
+            current_app.logger.info(f"Début transaction importation enseignants pour l'année ID {annee_id}.")
             nb_attr_supp_ens = db.delete_all_attributions_for_year(annee_id)
             current_app.logger.info(f"{nb_attr_supp_ens} attributions supprimées.")
 
-            current_app.logger.info(f"Suppression des anciens enseignants pour l'année ID {annee_id}...")
             nb_ens_supp = db.delete_all_enseignants_for_year(annee_id)
             current_app.logger.info(f"{nb_ens_supp} enseignants supprimés.")
 
@@ -592,7 +615,7 @@ def api_importer_enseignants_excel() -> Any:
         conn.rollback()
         current_app.logger.error(f"Erreur DB importation enseignants: {e_db_ens}", exc_info=True)
         flash(f"Erreur base de données: {e_db_ens}. L'importation a été annulée.", "error")
-    except Exception as e_final_ens:  # Pour toute autre exception durant la transaction
+    except Exception as e_final_ens:
         conn.rollback()
         current_app.logger.error(f"Erreur inconnue durant transaction d'importation enseignants: {e_final_ens}", exc_info=True)
         flash(f"Erreur inconnue: {e_final_ens}. L'importation a été annulée.", "error")
@@ -627,23 +650,20 @@ def api_create_user() -> Any:
     data = request.get_json()
     if not data or not (username := data.get("username", "").strip()) or not (password := data.get("password", "").strip()):
         return jsonify({"success": False, "message": "Nom d'utilisateur et mot de passe requis."}), 400
-    if len(password) < 6:  # Exemple de règle de validation simple pour le mot de passe
+    if len(password) < 6:
         return jsonify({"success": False, "message": "Le mot de passe doit faire au moins 6 caractères."}), 400
 
     is_admin = data.get("is_admin", False)
-    allowed_champs = data.get("allowed_champs", [])  # Doit être une liste de champ_no (strings)
+    allowed_champs = data.get("allowed_champs", [])
     hashed_pwd = generate_password_hash(password)
     user = db.create_user(username, hashed_pwd, is_admin)
 
-    if not user:  # psycopg2.errors.UniqueViolation gérée dans db.create_user
+    if not user:
         return jsonify({"success": False, "message": "Ce nom d'utilisateur est déjà pris."}), 409
 
-    # Si ce n'est pas un admin et que des droits spécifiques aux champs sont donnés
     if not is_admin and allowed_champs:
         if not db.update_user_champ_access(user["id"], allowed_champs):
-            # En cas d'échec de l'attribution des droits, on annule la création de l'utilisateur
-            # pour éviter un état incohérent.
-            db.delete_user_data(user["id"])  # Assurez-vous que cette fonction ne logue pas d'erreur si l'utilisateur n'existe plus.
+            db.delete_user_data(user["id"])
             current_app.logger.error(f"Échec de l'attribution des droits pour le nouvel utilisateur {username}, création annulée.")
             return jsonify({"success": False, "message": "Erreur lors de l'attribution des accès aux champs."}), 500
 
@@ -676,14 +696,13 @@ def api_update_user_access(user_id: int) -> Any:
 @admin_api_required
 def api_delete_user(user_id: int) -> Any:
     """Supprime un utilisateur."""
-    if user_id == current_user.id:  # L'utilisateur ne peut pas se supprimer lui-même
+    if user_id == current_user.id:
         return jsonify({"success": False, "message": "Vous ne pouvez pas supprimer votre propre compte."}), 403
 
     target_user = db.get_user_by_id(user_id)
     if not target_user:
         return jsonify({"success": False, "message": "Utilisateur non trouvé."}), 404
 
-    # Empêcher la suppression du dernier administrateur
     if target_user["is_admin"] and db.get_admin_count() <= 1:
         return jsonify({"success": False, "message": "Impossible de supprimer le dernier administrateur."}), 403
 
@@ -711,14 +730,15 @@ def api_reassigner_cours_champ() -> Any:
         current_app.logger.info(f"Cours '{code_cours}' réassigné au champ '{nouveau_champ_no}' pour l'année ID {g.annee_active['annee_id']}.")
         return jsonify(success=True, message=f"Cours '{code_cours}' réassigné au champ '{nouveau_champ_no}'.", **result)
 
-    # Le message d'erreur de db.reassign_cours_to_champ est déjà assez générique
-    # On pourrait ajouter plus de détails si la fonction retournait des codes d'erreur spécifiques.
     current_app.logger.warning(
         f"Échec de la réassignation du cours '{code_cours}' au champ '{nouveau_champ_no}' pour l'année ID {g.annee_active['annee_id']}."
     )
-    return jsonify(
-        {
-            "success": False,
-            "message": "Impossible de réassigner le cours. Vérifiez que le cours et le nouveau champ existent pour cette année scolaire.",
-        }
-    ), 500
+    return (
+        jsonify(
+            {
+                "success": False,
+                "message": "Impossible de réassigner le cours. Vérifiez que le cours et le nouveau champ existent pour cette année scolaire.",
+            }
+        ),
+        500,
+    )

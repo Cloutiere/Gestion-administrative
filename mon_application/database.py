@@ -50,7 +50,7 @@ def close_db(_exception: BaseException | None = None) -> None:
 
 def init_app(app: Flask) -> None:
     """Initialise la gestion de la base de données pour l'application Flask."""
-    app.teardown_appcontext(close_db)  # Cette ligne enregistre close_db pour qu'elle soit appelée à la fin de chaque requête.
+    app.teardown_appcontext(close_db)  # Enregistre close_db pour qu'elle soit appelée à la fin de chaque requête.
 
 
 # --- Fonctions d'accès aux données (DAO) - Années Scolaires ---
@@ -334,6 +334,39 @@ def toggle_champ_lock_status(champ_no: str) -> bool | None:
 
 
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---
+
+
+def get_total_periodes_disponibles_par_champ(annee_id: int) -> dict[str, float]:
+    """
+    Calcule le total des périodes disponibles pour chaque champ pour une année donnée.
+
+    Le calcul est SUM(NbPeriodes * NbGroupeInitial) pour tous les cours d'un champ.
+
+    Args:
+        annee_id: L'ID de l'année scolaire.
+
+    Returns:
+        Un dictionnaire mappant le ChampNo au total des périodes disponibles.
+    """
+    db = get_db()
+    if not db:
+        return {}
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT ChampNo, SUM(NbPeriodes * NbGroupeInitial) as total_disponible
+                FROM Cours
+                WHERE annee_id = %s
+                GROUP BY ChampNo;
+                """,
+                (annee_id,),
+            )
+            # COALESCE est utilisé pour s'assurer que si la somme est NULL (aucun cours), on retourne 0.
+            return {row["champno"]: float(row["total_disponible"] or 0.0) for row in cur.fetchall()}
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_total_periodes_disponibles_par_champ pour annee {annee_id}: {e}")
+        return {}
 
 
 def get_enseignants_par_champ(champ_no: str, annee_id: int) -> list[dict[str, Any]]:
@@ -902,7 +935,7 @@ def delete_all_attributions_for_year(annee_id: int) -> int:
                 (annee_id,),
             )
             deleted_count = cur.rowcount
-            db.commit()
+            # Pas de commit ici si la fonction est utilisée dans une transaction plus large
             return deleted_count
     except psycopg2.Error as e:
         db.rollback()
@@ -919,7 +952,7 @@ def delete_all_cours_for_year(annee_id: int) -> int:
         with db.cursor() as cur:
             cur.execute("DELETE FROM Cours WHERE annee_id = %s;", (annee_id,))
             deleted_count = cur.rowcount
-            db.commit()
+            # Pas de commit ici si la fonction est utilisée dans une transaction plus large
             return deleted_count
     except psycopg2.Error as e:
         db.rollback()
@@ -936,7 +969,7 @@ def delete_all_enseignants_for_year(annee_id: int) -> int:
         with db.cursor() as cur:
             cur.execute("DELETE FROM Enseignants WHERE annee_id = %s;", (annee_id,))
             deleted_count = cur.rowcount
-            db.commit()
+            # Pas de commit ici si la fonction est utilisée dans une transaction plus large
             return deleted_count
     except psycopg2.Error as e:
         db.rollback()

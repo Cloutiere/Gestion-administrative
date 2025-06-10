@@ -71,16 +71,23 @@
         {% endwith %}
 
         {% if annee_active %}
+        <!-- Conteneur principal utilisant flexbox pour les colonnes -->
         <div class="container-principal-sommaire">
-            <div class="colonne-sommaire colonne-gauche">
-                <section class="section-sommaire section-moyenne-generale">
-                    <div class="moyenne-generale-contenu">
-                        <span>Moyenne générale (temps plein) :</span>
-                        <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
-                    </div>
-                </section>
 
-                <section class="section-sommaire">
+            <!-- Colonne de gauche : Moyennes -->
+            <div class="colonne-sommaire colonne-gauche">
+                <div class="moyenne-generale-contenu">
+                    <span>Moyenne générale (temps plein) :</span>
+                    <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
+                </div>
+                <!-- NOUVEL ÉLÉMENT : Affichage de la moyenne préliminaire confirmée -->
+                <div class="moyenne-generale-contenu">
+                    <span>Préliminaire confirmée :</span>
+                    <span id="moyenne-preliminaire-confirmee">{{ moyenne_preliminaire_confirmee | format_periodes }} périodes</span>
+                </div>
+
+
+                <div>
                     <h2>Moyennes par champ (temps plein)</h2>
                     {% if moyennes_par_champ %}
                     <table id="table-moyennes-par-champ">
@@ -88,8 +95,11 @@
                             <tr>
                                 <th>N° champ</th>
                                 <th>Nom du champ</th>
-                                <th>Moyenne</th>
                                 <th>Statut</th>
+                                <th>Pér. Dispo.</th>
+                                <th>Pér. Choisies</th>
+                                <th>Nb. Ens. TP</th>
+                                <th>Moyenne</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -100,23 +110,22 @@
                     {% else %}
                     <p>Aucune donnée de moyenne par champ disponible pour cette année.</p>
                     {% endif %}
-                </section>
+                </div>
             </div>
 
+            <!-- Colonne de droite : Détail des tâches -->
             <div class="colonne-sommaire colonne-droite">
-                <section class="section-sommaire">
-                    <h2>Détail des tâches par champ</h2>
-                    <table id="table-detail-enseignants">
-                        <tbody>
-                            {# Le contenu sera généré dynamiquement par JavaScript. #}
-                        </tbody>
-                    </table>
-                    <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
-                    {# Afficher ce message si la variable initiale est vide OU si elle ne contient aucun enseignant réel #}
-                    {% if not enseignants_par_champ or (enseignants_par_champ | map(attribute='enseignants') | sum(start=[]) | length == 0) %}
-                    <p>Aucun enseignant à afficher pour cette année.</p>
-                    {% endif %}
-                </section>
+                <h2>Détail des tâches par champ</h2>
+                <table id="table-detail-enseignants">
+                    <tbody>
+                        {# Le contenu sera généré dynamiquement par JavaScript. #}
+                    </tbody>
+                </table>
+                <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
+                {# Afficher ce message si la variable initiale est vide OU si elle ne contient aucun enseignant réel #}
+                {% if not enseignants_par_champ or (enseignants_par_champ | map(attribute='enseignants') | sum(start=[]) | length == 0) %}
+                <p>Aucun enseignant à afficher pour cette année.</p>
+                {% endif %}
             </div>
         </div>
         {% else %}
@@ -143,6 +152,7 @@
         }
         const SVG_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
         const SVG_UNLOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
+        const SVG_CALCULATOR_SLASH = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2.35 1.95L1 3.3l4.35 4.35H5c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h10c.45 0 .85-.15 1.2-.4L19.7 22.3l1.4-1.4L2.35 1.95zM8 18H6v-2h2v2zm0-4H6v-2h2v2zm4 4H10v-2h2v2zm0-4H10v-2h2v2zm4 4h-2v-2h2v2zM19 3H9v.35L11.65 6H19v12.35l2 2V5c0-1.1-.9-2-2-2zm-4 8h-2v-2h2v2zm-4-4H9v-2h2v2z"/></svg>`;
 
         document.addEventListener('DOMContentLoaded', function() {
             // Ne démarrer la logique que si une année est active
@@ -201,15 +211,22 @@
                 const data = await response.json();
                 mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
                 mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ || []);
+
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale) {
                     elMoyenneGenerale.textContent = (data.moyenne_generale !== undefined && data.moyenne_generale !== null)
                         ? `${formatPeriodes(data.moyenne_generale)} périodes`
                         : `N/A périodes`;
                 }
+                // MISE À JOUR : Mettre à jour la nouvelle moyenne
+                const elMoyennePrelim = document.getElementById('moyenne-preliminaire-confirmee');
+                if (elMoyennePrelim) {
+                    elMoyennePrelim.textContent = (data.moyenne_preliminaire_confirmee !== undefined && data.moyenne_preliminaire_confirmee !== null)
+                        ? `${formatPeriodes(data.moyenne_preliminaire_confirmee)} périodes`
+                        : `N/A périodes`;
+                }
             } catch (error) {
                 console.error("Erreur lors de la mise à jour du sommaire:", error);
-                // Ne pas afficher d'alerte ici pour ne pas interrompre l'utilisateur à chaque échec de rafraichissement
             }
         }
 
@@ -219,7 +236,7 @@
                 const response = await fetch(`/admin/api/champs/${champNo}/basculer_verrou`, { method: 'POST' });
                 const data = await response.json();
                 if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
-                mettreAJourIconeVerrou(iconElement, data.est_verrouille);
+                await mettreAJourDonneesSommaire();
             } catch (error) {
                 console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
                 alert(error.message);
@@ -240,7 +257,7 @@
             const table = document.getElementById('table-detail-enseignants');
             if (!tbody || !aucunEnseignantMsg || !table) return;
 
-            tbody.innerHTML = ''; // Vider le contenu précédent
+            tbody.innerHTML = '';
             const aDesEnseignants = enseignantsParChampData.some(c => c.enseignants && c.enseignants.length > 0);
 
             aucunEnseignantMsg.style.display = aDesEnseignants ? 'none' : 'block';
@@ -252,16 +269,15 @@
 
                     const champHeaderRow = tbody.insertRow();
                     champHeaderRow.className = 'champ-header-row';
-                    const champTitleCell = champHeaderRow.insertCell(); // Utiliser insertCell()
+                    const champTitleCell = champHeaderRow.insertCell();
                     champTitleCell.colSpan = 5;
                     champTitleCell.className = 'champ-title-cell';
                     champTitleCell.textContent = `Champ ${champData.champno} - ${champData.champnom}`;
-                    // champHeaderRow.appendChild(champTitleCell); // Plus nécessaire si on utilise insertCell()
 
                     const columnHeaderRow = tbody.insertRow();
                     columnHeaderRow.className = 'column-header-row';
                     ['Nom', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte moyenne'].forEach(headerText => {
-                        const th = document.createElement('th'); // Créer un th explicitement
+                        const th = document.createElement('th');
                         th.textContent = headerText;
                         columnHeaderRow.appendChild(th);
                     });
@@ -288,7 +304,7 @@
         }
 
         function comparerNumerosChamp(a, b) {
-            const regex = /^(\d+)([a-zA-Z]*)$/; // Gère les numéros de champ avec des lettres (ex: 1A, 10B)
+            const regex = /^(\d+)([a-zA-Z]*)$/;
             const matchA = a.match(regex);
             const matchB = b.match(regex);
 
@@ -301,7 +317,7 @@
                 if (numA !== numB) return numA - numB;
                 return letterA.localeCompare(letterB);
             }
-            return a.localeCompare(b); // Fallback pour les formats non reconnus
+            return a.localeCompare(b);
         }
 
         function mettreAJourTableauMoyennesChamp(moyennesChampData) {
@@ -310,7 +326,7 @@
             const table = document.getElementById('table-moyennes-par-champ');
             if (!tbody || !aucuneMoyenneMsg || !table) return;
 
-            tbody.innerHTML = ''; // Vider le contenu précédent
+            tbody.innerHTML = '';
             const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
 
             aucuneMoyenneMsg.style.display = champNosTries.length > 0 ? 'none' : 'block';
@@ -321,18 +337,35 @@
                     const data = moyennesChampData[champ_no];
                     const row = tbody.insertRow();
                     row.dataset.champNo = champ_no;
+
+                    // Création des cellules dans le nouvel ordre
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
-                    row.insertCell().textContent = formatPeriodes(data.moyenne);
-                    const cellStatut = row.insertCell();
 
-                    // Correction de l'assignation du dataset
+                    const cellStatut = row.insertCell();
                     const icon = document.createElement('span');
                     icon.className = 'lock-icon';
-                    icon.dataset.champNo = champ_no; // Assignation correcte
-
+                    icon.dataset.champNo = champ_no;
                     mettreAJourIconeVerrou(icon, data.est_verrouille);
                     cellStatut.appendChild(icon);
+
+                    row.insertCell().textContent = formatPeriodes(data.periodes_disponibles);
+
+                    const cellPeriodesChoisies = row.insertCell();
+                    if (data.est_verrouille) {
+                        cellPeriodesChoisies.textContent = formatPeriodes(data.periodes_choisies);
+                    } else {
+                        cellPeriodesChoisies.innerHTML = `<span class="icon-cell" title="Total visible uniquement quand le champ est verrouillé">${SVG_CALCULATOR_SLASH}</span>`;
+                    }
+
+                    row.insertCell().textContent = data.nb_enseignants_tp;
+
+                    const cellMoyenne = row.insertCell();
+                    if (data.est_verrouille) {
+                        cellMoyenne.textContent = formatPeriodes(data.moyenne);
+                    } else {
+                        cellMoyenne.innerHTML = `<span class="icon-cell" title="Moyenne visible uniquement quand le champ est verrouillé">${SVG_CALCULATOR_SLASH}</span>`;
+                    }
                 });
             }
         }
