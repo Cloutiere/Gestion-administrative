@@ -10,3 +10,7 @@ Champ14	Champ149
 Champ17	Champ1710
 Champ19	Champ1912
 Champ19b	Champ19b13
+Couet Couette
+Demers Demerse
+Dubois Dubeau
+Fafard Faitfort

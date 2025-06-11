@@ -27,7 +27,7 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 # --- Fonctions utilitaires pour le sommaire (maintenant dépendantes de l'année) ---
-def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], float, float]:
+def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], float, float, dict[str, float]]:
     """
     Calcule les données agrégées pour la page sommaire globale pour une année donnée.
 
@@ -37,15 +37,21 @@ def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict
         - Un dictionnaire des moyennes et totaux par champ.
         - La moyenne générale des périodes pour les enseignants à temps plein.
         - La moyenne "Préliminaire confirmée" (enseignants TP des champs verrouillés).
+        - Un dictionnaire contenant les totaux globaux pour le pied de tableau.
     """
     tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
-    periodes_disponibles_par_champ = db.get_total_periodes_disponibles_par_champ(annee_id)
 
     enseignants_par_champ_temp: dict[str, Any] = {}
     moyennes_par_champ_calculees: dict[str, Any] = {}
+
+    # --- NOUVEAUX ACCUMULATEURS GLOBAUX POUR LES TOTAUX ---
+    total_enseignants_tp_etablissement = 0
+    total_periodes_choisies_tp_etablissement = 0.0
+    total_periodes_magiques_etablissement = 0.0
+
+    # Anciens accumulateurs pour les moyennes
     total_periodes_global_tp = 0.0
     nb_enseignants_tp_global = 0
-    # Nouveaux accumulateurs pour la moyenne "Préliminaire confirmée"
     total_periodes_verrouille_tp = 0.0
     nb_enseignants_verrouille_tp = 0
 
@@ -58,46 +64,53 @@ def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict
     for champ_no, data in enseignants_par_champ_temp.items():
         _enseignants = data.get("enseignants", [])
         if _enseignants:
-            # Périodes pour le calcul de la moyenne (uniquement enseignants TP non fictifs)
-            total_periodes_pour_moyenne = sum(e["total_periodes"] for e in _enseignants if e["compte_pour_moyenne_champ"])
-            # Total des périodes réellement choisies dans le champ (exclut les enseignants fictifs / tâches restantes)
-            total_periodes_choisies_champ = sum(e["total_periodes"] for e in _enseignants if not e["estfictif"])
-            nb_enseignants_champ = sum(1 for e in _enseignants if e["compte_pour_moyenne_champ"])
+            # --- LOGIQUE DE CALCUL MISE À JOUR ---
+            enseignants_temps_plein = [e for e in _enseignants if e["compte_pour_moyenne_champ"]]
+            nb_enseignants_champ_tp = len(enseignants_temps_plein)
+
+            # Périodes choisies par les enseignants à temps plein uniquement
+            total_periodes_choisies_tp_champ = sum(e["total_periodes"] for e in enseignants_temps_plein)
+
+            # Calcul des "périodes magiques"
+            base_magique = nb_enseignants_champ_tp * 24
+            periodes_magiques_champ = total_periodes_choisies_tp_champ - base_magique
+
+            moyenne_champ = (total_periodes_choisies_tp_champ / nb_enseignants_champ_tp) if nb_enseignants_champ_tp > 0 else 0.0
             est_verrouille_champ = _enseignants[0]["estverrouille"]
 
-            if nb_enseignants_champ > 0:
-                moyenne_champ = total_periodes_pour_moyenne / nb_enseignants_champ
-                moyennes_par_champ_calculees[champ_no] = {
-                    "champ_nom": data["champnom"],
-                    "moyenne": moyenne_champ,
-                    "est_verrouille": est_verrouille_champ,
-                    "nb_enseignants_tp": nb_enseignants_champ,
-                    "periodes_disponibles": periodes_disponibles_par_champ.get(champ_no, 0.0),
-                    "periodes_choisies": total_periodes_choisies_champ,
-                }
-                total_periodes_global_tp += total_periodes_pour_moyenne
-                nb_enseignants_tp_global += nb_enseignants_champ
+            moyennes_par_champ_calculees[champ_no] = {
+                "champ_nom": data["champnom"],
+                "moyenne": moyenne_champ,
+                "est_verrouille": est_verrouille_champ,
+                "nb_enseignants_tp": nb_enseignants_champ_tp,
+                "periodes_choisies_tp": total_periodes_choisies_tp_champ,
+                "periodes_magiques": periodes_magiques_champ,
+            }
 
-                # Agrégation pour la nouvelle moyenne si le champ est verrouillé
+            # --- MISE À JOUR DES TOTAUX GLOBAUX ---
+            total_enseignants_tp_etablissement += nb_enseignants_champ_tp
+            total_periodes_choisies_tp_etablissement += total_periodes_choisies_tp_champ
+            total_periodes_magiques_etablissement += periodes_magiques_champ
+
+            # Agrégation pour les moyennes globales (logique existante conservée)
+            if nb_enseignants_champ_tp > 0:
+                total_periodes_global_tp += total_periodes_choisies_tp_champ
+                nb_enseignants_tp_global += nb_enseignants_champ_tp
                 if est_verrouille_champ:
-                    total_periodes_verrouille_tp += total_periodes_pour_moyenne
-                    nb_enseignants_verrouille_tp += nb_enseignants_champ
-
-            # Gérer le cas où un champ n'a que des enseignants non TP (ex: temps partiels, tâches restantes)
-            elif _enseignants:
-                moyennes_par_champ_calculees[champ_no] = {
-                    "champ_nom": data["champnom"],
-                    "moyenne": 0.0,
-                    "est_verrouille": est_verrouille_champ,
-                    "nb_enseignants_tp": 0,
-                    "periodes_disponibles": periodes_disponibles_par_champ.get(champ_no, 0.0),
-                    "periodes_choisies": total_periodes_choisies_champ,
-                }
+                    total_periodes_verrouille_tp += total_periodes_choisies_tp_champ
+                    nb_enseignants_verrouille_tp += nb_enseignants_champ_tp
 
     moyenne_generale_calculee = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
     moyenne_prelim_conf = (total_periodes_verrouille_tp / nb_enseignants_verrouille_tp) if nb_enseignants_verrouille_tp > 0 else 0.0
 
-    return list(enseignants_par_champ_temp.values()), moyennes_par_champ_calculees, moyenne_generale_calculee, moyenne_prelim_conf
+    # Dictionnaire pour les totaux du pied de tableau
+    grand_totals = {
+        "total_enseignants_tp": total_enseignants_tp_etablissement,
+        "total_periodes_choisies_tp": total_periodes_choisies_tp_etablissement,
+        "total_periodes_magiques": total_periodes_magiques_etablissement,
+    }
+
+    return list(enseignants_par_champ_temp.values()), moyennes_par_champ_calculees, moyenne_generale_calculee, moyenne_prelim_conf, grand_totals
 
 
 # --- ROUTES DES PAGES D'ADMINISTRATION (HTML) ---
@@ -115,10 +128,12 @@ def page_sommaire() -> str:
             moyennes_par_champ={},
             moyenne_generale=0.0,
             moyenne_preliminaire_confirmee=0.0,
+            grand_totals={"total_enseignants_tp": 0, "total_periodes_choisies_tp": 0.0, "total_periodes_magiques": 0.0},
         )
 
     annee_id = g.annee_active["annee_id"]
-    enseignants_par_champ_data, moyennes_champs, moyenne_gen, moyenne_prelim_conf = calculer_donnees_sommaire(annee_id)
+    # MISE À JOUR : Récupération du nouveau tuple avec les totaux
+    enseignants_par_champ_data, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = calculer_donnees_sommaire(annee_id)
 
     return render_template(
         "page_sommaire.html",
@@ -126,9 +141,11 @@ def page_sommaire() -> str:
         moyennes_par_champ=moyennes_champs,
         moyenne_generale=moyenne_gen,
         moyenne_preliminaire_confirmee=moyenne_prelim_conf,
+        grand_totals=grand_totals_data,  # Passer les totaux au template
     )
 
 
+# ... (le reste de la page `page_administration_donnees` ne change pas)
 @bp.route("/donnees")
 @admin_required
 def page_administration_donnees() -> str:
@@ -151,6 +168,7 @@ def page_administration_donnees() -> str:
     )
 
 
+# ... (le reste de la page `page_administration_utilisateurs` ne change pas)
 @bp.route("/utilisateurs")
 @admin_required
 def page_administration_utilisateurs() -> str:
@@ -164,6 +182,7 @@ def page_administration_utilisateurs() -> str:
 
 # --- API ENDPOINTS (JSON) ---
 
+# ... (les APIs de gestion des années ne changent pas)
 # --- API pour la gestion des années scolaires ---
 
 
@@ -232,18 +251,22 @@ def api_get_donnees_sommaire() -> Any:
             moyennes_par_champ={},
             moyenne_generale=0.0,
             moyenne_preliminaire_confirmee=0.0,
+            grand_totals={"total_enseignants_tp": 0, "total_periodes_choisies_tp": 0.0, "total_periodes_magiques": 0.0},
         )
 
     annee_id = g.annee_active["annee_id"]
-    enseignants_groupes, moyennes_champs, moyenne_gen, moyenne_prelim_conf = calculer_donnees_sommaire(annee_id)
+    # MISE À JOUR : Récupération du nouveau tuple avec les totaux
+    enseignants_groupes, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = calculer_donnees_sommaire(annee_id)
     return jsonify(
         enseignants_par_champ=enseignants_groupes,
         moyennes_par_champ=moyennes_champs,
         moyenne_generale=moyenne_gen,
         moyenne_preliminaire_confirmee=moyenne_prelim_conf,
+        grand_totals=grand_totals_data,  # Renvoyer les totaux dans la réponse JSON
     )
 
 
+# ... (le reste du fichier admin.py ne change pas)
 @bp.route("/api/cours/creer", methods=["POST"])
 @admin_api_required
 def api_create_cours() -> Any:

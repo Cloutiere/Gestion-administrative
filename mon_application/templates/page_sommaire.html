@@ -91,20 +91,31 @@
                     <h2>Moyennes par champ (temps plein)</h2>
                     {% if moyennes_par_champ %}
                     <table id="table-moyennes-par-champ">
+                        <!-- EN-TÊTE DU TABLEAU MIS À JOUR -->
                         <thead>
                             <tr>
                                 <th>N° champ</th>
                                 <th>Nom du champ</th>
                                 <th>Statut</th>
-                                <th>Pér. Dispo.</th>
-                                <th>Pér. Choisies</th>
                                 <th>Nb. Ens. TP</th>
+                                <th>Périodes Choisies (TP)</th>
                                 <th>Moyenne</th>
+                                <th>Périodes Magiques</th>
                             </tr>
                         </thead>
                         <tbody>
                             {# Le contenu de ce tbody sera trié et inséré par JavaScript. #}
                         </tbody>
+                        <!-- PIED DE TABLEAU AJOUTÉ POUR LES TOTAUX -->
+                        <tfoot>
+                            <tr>
+                                <td colspan="3" style="text-align: right; font-weight: bold;">TOTAL</td>
+                                <td id="total-enseignants-tp" style="font-weight: bold;"></td>
+                                <td id="total-periodes-choisies-tp" style="font-weight: bold;"></td>
+                                <td></td> <!-- Cellule vide pour la colonne moyenne -->
+                                <td id="total-periodes-magiques" style="font-weight: bold;"></td>
+                            </tr>
+                        </tfoot>
                     </table>
                     <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
                     {% else %}
@@ -147,7 +158,8 @@
         // --- Fonctions utilitaires et constantes SVG ---
         function formatPeriodes(value) {
             if (value === null || value === undefined) return '';
-            const formatter = new Intl.NumberFormat('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: false });
+            // Utilisation de signDisplay pour afficher le signe + ou -
+            const formatter = new Intl.NumberFormat('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: false, signDisplay: 'auto' });
             return formatter.format(value);
         }
         const SVG_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
@@ -156,6 +168,9 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Ne démarrer la logique que si une année est active
             {% if annee_active %}
+                // Initialisation des totaux au chargement de la page avec les données de Jinja2
+                mettreAJourTotaux({{ grand_totals|tojson }});
+
                 mettreAJourDonneesSommaire();
                 setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
 
@@ -211,13 +226,17 @@
                 mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
                 mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ || []);
 
+                // MISE À JOUR : Mise à jour des totaux depuis l'API
+                if (data.grand_totals) {
+                    mettreAJourTotaux(data.grand_totals);
+                }
+
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale) {
                     elMoyenneGenerale.textContent = (data.moyenne_generale !== undefined && data.moyenne_generale !== null)
                         ? `${formatPeriodes(data.moyenne_generale)} périodes`
                         : `N/A périodes`;
                 }
-                // MISE À JOUR : Mettre à jour la nouvelle moyenne
                 const elMoyennePrelim = document.getElementById('moyenne-preliminaire-confirmee');
                 if (elMoyennePrelim) {
                     elMoyennePrelim.textContent = (data.moyenne_preliminaire_confirmee !== undefined && data.moyenne_preliminaire_confirmee !== null)
@@ -227,6 +246,17 @@
             } catch (error) {
                 console.error("Erreur lors de la mise à jour du sommaire:", error);
             }
+        }
+
+        // --- NOUVELLE FONCTION POUR METTRE À JOUR LE PIED DE TABLEAU ---
+        function mettreAJourTotaux(totals) {
+            const elTotalEns = document.getElementById('total-enseignants-tp');
+            const elTotalPer = document.getElementById('total-periodes-choisies-tp');
+            const elTotalMag = document.getElementById('total-periodes-magiques');
+
+            if (elTotalEns) elTotalEns.textContent = totals.total_enseignants_tp;
+            if (elTotalPer) elTotalPer.textContent = formatPeriodes(totals.total_periodes_choisies_tp);
+            if (elTotalMag) elTotalMag.textContent = formatPeriodes(totals.total_periodes_magiques);
         }
 
         async function basculerVerrouChamp(champNo, iconElement) {
@@ -337,12 +367,11 @@
                     const row = tbody.insertRow();
                     row.dataset.champNo = champ_no;
 
-                    // NOUVELLE LOGIQUE : Ajouter la classe pour le style gras si le champ est verrouillé.
                     if (data.est_verrouille) {
                         row.classList.add('champ-verrouille-row');
                     }
 
-                    // Création des cellules
+                    // MISE À JOUR : Ordre des cellules et données affichées
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
 
@@ -353,12 +382,10 @@
                     mettreAJourIconeVerrou(icon, data.est_verrouille);
                     cellStatut.appendChild(icon);
 
-                    row.insertCell().textContent = formatPeriodes(data.periodes_disponibles);
-
-                    // MODIFICATION : Toujours afficher la valeur numérique.
-                    row.insertCell().textContent = formatPeriodes(data.periodes_choisies);
                     row.insertCell().textContent = data.nb_enseignants_tp;
+                    row.insertCell().textContent = formatPeriodes(data.periodes_choisies_tp);
                     row.insertCell().textContent = formatPeriodes(data.moyenne);
+                    row.insertCell().textContent = formatPeriodes(data.periodes_magiques);
                 });
             }
         }
