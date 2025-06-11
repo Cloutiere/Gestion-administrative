@@ -2,10 +2,11 @@
 """
 Ce module gère toutes les interactions avec la base de données PostgreSQL.
 
-Il inclut la configuration de la connexion, les fonctions pour ouvrir et fermer
-la connexion dans le contexte de l'application Flask, ainsi que toutes les
-fonctions DAO (Data Access Object) pour manipuler les données des utilisateurs,
-champs, enseignants, cours et attributions, en tenant compte de l'année scolaire.
+Il inclut la configuration de la connexion, qui s'adapte à l'environnement
+(production ou développement) via la variable d'environnement APP_ENV.
+Il contient aussi les fonctions pour gérer le cycle de vie de la connexion
+dans le contexte de l'application Flask, ainsi que toutes les fonctions DAO
+(Data Access Object) pour manipuler les données.
 """
 
 import os
@@ -16,17 +17,58 @@ import psycopg2.extras
 from flask import Flask, current_app, g
 
 # --- Gestion de la connexion à la base de données ---
-
-DB_HOST = os.environ.get("PGHOST")
-DB_NAME = os.environ.get("PGDATABASE")
-DB_USER = os.environ.get("PGUSER")
-DB_PASS = os.environ.get("PGPASSWORD")
-DB_PORT = os.environ.get("PGPORT", "5432")
+# La logique de connexion est désormais encapsulée dans get_db_connection_string
+# pour gérer dynamiquement les environnements de production et de développement.
 
 
 def get_db_connection_string() -> str:
-    """Construit la chaîne de connexion à la base de données à partir des variables d'environnement."""
-    return f"dbname='{DB_NAME}' user='{DB_USER}' host='{DB_HOST}' password='{DB_PASS}' port='{DB_PORT}'"
+    """
+    Construit la chaîne de connexion à la base de données en fonction de l'environnement.
+
+    Utilise la variable d'environnement 'APP_ENV'. Si 'APP_ENV' est 'production',
+    il utilise les variables préfixées par 'PROD_'. Sinon, il utilise par défaut
+    les variables préfixées par 'DEV_' pour l'environnement de développement.
+
+    Returns:
+        La chaîne de connexion pour psycopg2, ou une chaîne vide si les
+        informations de connexion requises sont manquantes.
+    """
+    app_env = os.environ.get("APP_ENV", "development")
+
+    if app_env == "production":
+        prefix = "PROD_"
+    else:
+        prefix = "DEV_"
+
+    if current_app:
+        # Log l'environnement utilisé pour la clarté lors du débogage
+        current_app.logger.info(f"Configuration de la base de données pour l'environnement : {app_env.upper()}")
+
+    db_host = os.environ.get(f"{prefix}PGHOST")
+    db_name = os.environ.get(f"{prefix}PGDATABASE")
+    db_user = os.environ.get(f"{prefix}PGUSER")
+    db_pass = os.environ.get(f"{prefix}PGPASSWORD")
+    db_port = os.environ.get(f"{prefix}PGPORT", "5432")
+
+    # Vérification critique que les variables nécessaires sont définies
+    if not all([db_host, db_name, db_user, db_pass]):
+        missing_vars = [
+            var
+            for var, val in {
+                f"{prefix}PGHOST": db_host,
+                f"{prefix}PGDATABASE": db_name,
+                f"{prefix}PGUSER": db_user,
+                f"{prefix}PGPASSWORD": db_pass,
+            }.items()
+            if not val
+        ]
+        log_message = f"Variables de connexion à la base de données manquantes pour " f"l'environnement '{app_env}': {', '.join(missing_vars)}"
+        if current_app:
+            current_app.logger.critical(log_message)
+        # Retourner une chaîne vide provoquera une erreur contrôlée dans get_db
+        return ""
+
+    return f"dbname='{db_name}' user='{db_user}' host='{db_host}' password='{db_pass}' port='{db_port}'"
 
 
 def get_db():
@@ -34,6 +76,11 @@ def get_db():
     if "db" not in g:
         try:
             conn_string = get_db_connection_string()
+            if not conn_string:
+                # Si la chaîne de connexion est vide, les logs critiques ont déjà été émis.
+                # On empêche la tentative de connexion.
+                g.db = None
+                return None
             g.db = psycopg2.connect(conn_string)
         except psycopg2.OperationalError as e:
             current_app.logger.error(f"Erreur de connexion à la base de données: {e}")
@@ -50,7 +97,8 @@ def close_db(_exception: BaseException | None = None) -> None:
 
 def init_app(app: Flask) -> None:
     """Initialise la gestion de la base de données pour l'application Flask."""
-    app.teardown_appcontext(close_db)  # Enregistre close_db pour qu'elle soit appelée à la fin de chaque requête.
+    # Enregistre close_db pour qu'elle soit appelée à la fin de chaque requête.
+    app.teardown_appcontext(close_db)
 
 
 # --- Fonctions d'accès aux données (DAO) - Années Scolaires ---
@@ -91,7 +139,10 @@ def create_annee_scolaire(libelle: str) -> dict[str, Any] | None:
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("INSERT INTO anneesscolaires (libelle_annee) VALUES (%s) RETURNING annee_id, libelle_annee, est_courante;", (libelle,))
+            cur.execute(
+                "INSERT INTO anneesscolaires (libelle_annee) VALUES (%s) RETURNING annee_id, libelle_annee, est_courante;",
+                (libelle,),
+            )
             new_annee = cur.fetchone()
             db.commit()
             return dict(new_annee) if new_annee else None
@@ -123,7 +174,7 @@ def set_annee_courante(annee_id: int) -> bool:
         return False
 
 
-# --- Fonctions d'accès aux données (DAO) - Utilisateurs (inchangées car non liées à une année) ---
+# --- Fonctions d'accès aux données (DAO) - Utilisateurs ---
 
 
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
@@ -285,7 +336,7 @@ def delete_user_data(user_id: int) -> bool:
         return False
 
 
-# --- Fonctions d'accès aux données (DAO) - Champs (inchangées) ---
+# --- Fonctions d'accès aux données (DAO) - Champs ---
 
 
 def get_all_champs() -> list[dict[str, Any]]:
@@ -724,7 +775,10 @@ def reassign_cours_to_champ(code_cours: str, annee_id: int, nouveau_champ_no: st
             if not (new_champ := cur.fetchone()):
                 return None  # Champ de destination n'existe pas
 
-            cur.execute("UPDATE Cours SET ChampNo = %s WHERE CodeCours = %s AND annee_id = %s;", (nouveau_champ_no, code_cours, annee_id))
+            cur.execute(
+                "UPDATE Cours SET ChampNo = %s WHERE CodeCours = %s AND annee_id = %s;",
+                (nouveau_champ_no, code_cours, annee_id),
+            )
             if cur.rowcount == 0:
                 db.rollback()
                 return None  # Cours non trouvé pour cette année

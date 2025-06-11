@@ -9,23 +9,8 @@
     <!-- Script pour appliquer le thème instantanément et éviter le FOUC -->
     <script>
         (function() {
-            /**
-             * Applique le thème spécifié au corps du document.
-             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
-             */
-            function applyTheme(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                if (theme === 'dark') {
-                    document.body.classList.add('theme-dark');
-                } else if (theme === 'vintage') {
-                    document.body.classList.add('theme-vintage');
-                } else {
-                    document.body.classList.add('theme-light'); // Thème par défaut explicite
-                }
-            }
-            // Récupère le thème sauvegardé ou utilise 'light' par défaut.
             const savedTheme = localStorage.getItem('appTheme') || 'light';
-            applyTheme(savedTheme);
+            document.documentElement.className = `theme-${savedTheme}`;
         })();
     </script>
 </head>
@@ -104,7 +89,7 @@
     </main>
 
     <footer>
-        <p>© {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier ⓚ</p>
+        <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
     </footer>
 
     <!-- Script pour gérer les clics et mettre à jour le thème actif -->
@@ -115,12 +100,11 @@
                 const themeButtons = themeSwitcher.querySelectorAll('button');
 
                 /**
-                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
+                 * Applique la classe de thème à l'élément racine et met à jour l'état actif des boutons.
                  * @param {string} theme - Le nom du thème à appliquer.
                  */
                 function applyThemeUI(theme) {
-                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                    document.body.classList.add(`theme-${theme}`);
+                    document.documentElement.className = `theme-${theme}`;
 
                     themeButtons.forEach(btn => btn.classList.remove('active'));
                     const activeButton = document.getElementById(`theme-btn-${theme}`);

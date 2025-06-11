@@ -77,12 +77,12 @@
             <!-- Colonne de gauche : Moyennes -->
             <div class="colonne-sommaire colonne-gauche">
                 <div class="moyenne-generale-contenu">
-                    <span>Moyenne générale (temps plein) :</span>
+                    <span>Moyenne générale incluant tous les champs :</span>
                     <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
                 </div>
                 <!-- NOUVEL ÉLÉMENT : Affichage de la moyenne préliminaire confirmée -->
                 <div class="moyenne-generale-contenu">
-                    <span>Préliminaire confirmée :</span>
+                    <span>Moyenne générale avec les champs confirmes :</span>
                     <span id="moyenne-preliminaire-confirmee">{{ moyenne_preliminaire_confirmee | format_periodes }} périodes</span>
                 </div>
 
@@ -136,7 +136,7 @@
     </main>
 
     <footer>
-        <p>© {{ SCRIPT_YEAR }} Votre École</p>
+        <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
     </footer>
 
     <!-- Script JS spécifique à la page sommaire -->
@@ -152,7 +152,6 @@
         }
         const SVG_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
         const SVG_UNLOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
-        const SVG_CALCULATOR_SLASH = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2.35 1.95L1 3.3l4.35 4.35H5c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h10c.45 0 .85-.15 1.2-.4L19.7 22.3l1.4-1.4L2.35 1.95zM8 18H6v-2h2v2zm0-4H6v-2h2v2zm4 4H10v-2h2v2zm0-4H10v-2h2v2zm4 4h-2v-2h2v2zM19 3H9v.35L11.65 6H19v12.35l2 2V5c0-1.1-.9-2-2-2zm-4 8h-2v-2h2v2zm-4-4H9v-2h2v2z"/></svg>`;
 
         document.addEventListener('DOMContentLoaded', function() {
             // Ne démarrer la logique que si une année est active
@@ -338,7 +337,12 @@
                     const row = tbody.insertRow();
                     row.dataset.champNo = champ_no;
 
-                    // Création des cellules dans le nouvel ordre
+                    // NOUVELLE LOGIQUE : Ajouter la classe pour le style gras si le champ est verrouillé.
+                    if (data.est_verrouille) {
+                        row.classList.add('champ-verrouille-row');
+                    }
+
+                    // Création des cellules
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
 
@@ -351,21 +355,10 @@
 
                     row.insertCell().textContent = formatPeriodes(data.periodes_disponibles);
 
-                    const cellPeriodesChoisies = row.insertCell();
-                    if (data.est_verrouille) {
-                        cellPeriodesChoisies.textContent = formatPeriodes(data.periodes_choisies);
-                    } else {
-                        cellPeriodesChoisies.innerHTML = `<span class="icon-cell" title="Total visible uniquement quand le champ est verrouillé">${SVG_CALCULATOR_SLASH}</span>`;
-                    }
-
+                    // MODIFICATION : Toujours afficher la valeur numérique.
+                    row.insertCell().textContent = formatPeriodes(data.periodes_choisies);
                     row.insertCell().textContent = data.nb_enseignants_tp;
-
-                    const cellMoyenne = row.insertCell();
-                    if (data.est_verrouille) {
-                        cellMoyenne.textContent = formatPeriodes(data.moyenne);
-                    } else {
-                        cellMoyenne.innerHTML = `<span class="icon-cell" title="Moyenne visible uniquement quand le champ est verrouillé">${SVG_CALCULATOR_SLASH}</span>`;
-                    }
+                    row.insertCell().textContent = formatPeriodes(data.moyenne);
                 });
             }
         }

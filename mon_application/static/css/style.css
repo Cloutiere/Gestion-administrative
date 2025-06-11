@@ -902,6 +902,10 @@ html.theme-vintage .enseignant-card.detail-visible {
     color: var(--color-text-secondary);
     font-style: italic;
 }
+/* NOUVELLE RÈGLE : Applique un style gras à toute la ligne pour un champ verrouillé */
+.champ-verrouille-row {
+    font-weight: bold;
+}
 html.theme-light .enseignant-fictif-sommaire {
     background-color: #f0f8ff;
 }
