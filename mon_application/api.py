@@ -38,11 +38,13 @@ def api_ajouter_attribution() -> Any:
         verrou_info = db.get_verrou_info_enseignant(enseignant_id)
         if not verrou_info:
             return jsonify({"success": False, "message": "Enseignant non trouvé."}), 404
-        # Assurez-vous que verrou_info contient 'champno'. Nous allons le vérifier dans database.py.
+        # La permission est vérifiée sur le champ de l'enseignant.
         if "champno" not in verrou_info or not current_user.can_access_champ(verrou_info["champno"]):
             return jsonify({"success": False, "message": "Accès non autorisé à ce champ."}), 403
 
-        # Étape 2: Vérifier les règles métier (champ verrouillé, groupes restants pour l'année)
+        # Étape 2: Vérifier les règles métier (champ verrouillé pour l'année, groupes restants)
+        # verrou_info["estverrouille"] provient maintenant de la table champ_annee_statuts
+        # et est donc spécifique à l'année de l'enseignant.
         if verrou_info["estverrouille"] and not verrou_info["estfictif"]:
             return jsonify({"success": False, "message": "Les modifications sont désactivées car le champ est verrouillé."}), 403
         if db.get_groupes_restants_pour_cours(code_cours, annee_id) < 1:
@@ -93,7 +95,8 @@ def api_supprimer_attribution() -> Any:
         if not current_user.can_access_champ(attr_info["champno"]):
             return jsonify({"success": False, "message": "Accès non autorisé à ce champ."}), 403
 
-        # Étape 2: Vérifier les règles métier (champ verrouillé)
+        # Étape 2: Vérifier les règles métier (champ verrouillé pour l'année de l'attribution)
+        # attr_info["estverrouille"] est spécifique à l'année de l'attribution.
         if attr_info["estverrouille"] and not attr_info["estfictif"]:
             return jsonify({"success": False, "message": "Les modifications sont désactivées car le champ est verrouillé."}), 403
 
@@ -165,28 +168,25 @@ def api_creer_tache_restante(champ_no: str) -> Any:
 def api_supprimer_enseignant(enseignant_id: int) -> Any:
     """
     API pour supprimer un enseignant (principalement pour les tâches fictives).
-    L'année de l'enseignant est intrinsèque à son `enseignant_id` car `EnseignantID` est unique à travers les années
-    s'il est généré par une séquence globale, ou unique pour une année s'il est combiné avec `annee_id`.
-    Ici, `get_enseignant_details` récupère l'enseignant par son ID, qui devrait être unique.
+    L'année de l'enseignant est intrinsèque à son `enseignant_id`.
     """
     try:
         # Étape 1: Récupérer les informations et vérifier les permissions
-        enseignant_info = db.get_enseignant_details(enseignant_id)  # Cette fonction récupère déjà l'enseignant
+        enseignant_info = db.get_enseignant_details(enseignant_id)
         if not enseignant_info:
             return jsonify({"success": False, "message": "Enseignant non trouvé."}), 404
         if not current_user.can_access_champ(enseignant_info["champno"]):
             return jsonify({"success": False, "message": "Accès non autorisé à ce champ."}), 403
 
         # Étape 2: Exécuter l'action
-        # Note: `get_affected_cours_for_enseignant` utilise enseignant_id qui est déjà spécifique à l'enseignant (et donc à son année)
         cours_affectes = db.get_affected_cours_for_enseignant(enseignant_id)
-        if not db.delete_enseignant(enseignant_id):  # La suppression se base sur enseignant_id
+        if not db.delete_enseignant(enseignant_id):
             return jsonify({"success": False, "message": "Échec de la suppression de l'enseignant."}), 500
 
         cours_liberes_details = [
             {
                 "code_cours": c["codecours"],
-                "annee_id_cours": c["annee_id_cours"],  # L'année est celle du cours, récupérée avec le cours
+                "annee_id_cours": c["annee_id_cours"],
                 "nouveaux_groupes_restants": db.get_groupes_restants_pour_cours(c["codecours"], c["annee_id_cours"]),
             }
             for c in cours_affectes
@@ -200,7 +200,7 @@ def api_supprimer_enseignant(enseignant_id: int) -> Any:
                     "cours_liberes_details": cours_liberes_details,
                 }
             ),
-            200,  # OK pour une suppression réussie
+            200,
         )
     except Exception as e:
         current_app.logger.error(f"Erreur inattendue dans api_supprimer_enseignant pour ID {enseignant_id}: {str(e)}", exc_info=True)

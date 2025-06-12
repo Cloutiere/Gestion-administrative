@@ -14,6 +14,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.sql
 from flask import Flask, current_app, g
 
 # --- Gestion de la connexion à la base de données ---
@@ -346,42 +347,90 @@ def get_all_champs() -> list[dict[str, Any]]:
         return []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT ChampNo, ChampNom, EstVerrouille FROM Champs ORDER BY ChampNo;")
+            # Les statuts (verrouillé/confirmé) sont maintenant dans champ_annee_statuts
+            cur.execute("SELECT ChampNo, ChampNom FROM Champs ORDER BY ChampNo;")
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_all_champs: {e}")
         return []
 
 
-def get_champ_details(champ_no: str) -> dict[str, Any] | None:
-    """Récupère les détails d'un champ spécifique."""
+def get_champ_details(champ_no: str, annee_id: int) -> dict[str, Any] | None:
+    """Récupère les détails d'un champ et ses statuts pour une année donnée."""
     db = get_db()
     if not db:
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT ChampNo, ChampNom, EstVerrouille FROM Champs WHERE ChampNo = %s;", (champ_no,))
+            cur.execute(
+                """
+                SELECT
+                    ch.ChampNo,
+                    ch.ChampNom,
+                    COALESCE(cas.est_verrouille, FALSE) AS est_verrouille,
+                    COALESCE(cas.est_confirme, FALSE) AS est_confirme
+                FROM Champs ch
+                LEFT JOIN champ_annee_statuts cas ON ch.ChampNo = cas.champ_no AND cas.annee_id = %s
+                WHERE ch.ChampNo = %s;
+                """,
+                (annee_id, champ_no),
+            )
             return dict(row) if (row := cur.fetchone()) else None
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_champ_details pour {champ_no}: {e}")
+        current_app.logger.error(f"Erreur DAO get_champ_details pour {champ_no}, annee {annee_id}: {e}")
         return None
 
 
-def toggle_champ_lock_status(champ_no: str) -> bool | None:
-    """Bascule le statut de verrouillage d'un champ."""
+def _toggle_champ_annee_status(champ_no: str, annee_id: int, status_column: str) -> bool | None:
+    """
+    Fonction utilitaire pour basculer un statut booléen pour un champ/année.
+    Crée l'entrée dans champ_annee_statuts si elle n'existe pas (UPSERT).
+
+    Args:
+        champ_no: Le numéro du champ.
+        annee_id: L'ID de l'année scolaire.
+        status_column: Le nom de la colonne à basculer ('est_verrouille' ou 'est_confirme').
+
+    Returns:
+        Le nouvel état du statut (bool) ou None en cas d'erreur.
+    """
     db = get_db()
     if not db:
         return None
+    if status_column not in ("est_verrouille", "est_confirme"):
+        current_app.logger.error(f"Tentative de basculer une colonne de statut invalide: {status_column}")
+        return None
+
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("UPDATE Champs SET EstVerrouille = NOT EstVerrouille WHERE ChampNo = %s RETURNING EstVerrouille;", (champ_no,))
+            query = psycopg2.sql.SQL(
+                """
+                INSERT INTO champ_annee_statuts (champ_no, annee_id, {col})
+                VALUES (%s, %s, TRUE)
+                ON CONFLICT (champ_no, annee_id)
+                DO UPDATE SET {col} = NOT champ_annee_statuts.{col}
+                RETURNING {col};
+                """
+            ).format(col=psycopg2.sql.Identifier(status_column))
+
+            cur.execute(query, (champ_no, annee_id))
             result = cur.fetchone()
             db.commit()
-            return result["estverrouille"] if result else None
+            return result[status_column] if result else None
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO toggle_champ_lock_status pour {champ_no}: {e}")
+        current_app.logger.error(f"Erreur DAO _toggle_champ_annee_status pour {champ_no}, annee {annee_id}: {e}")
         return None
+
+
+def toggle_champ_annee_lock_status(champ_no: str, annee_id: int) -> bool | None:
+    """Bascule le statut de verrouillage d'un champ pour une année donnée."""
+    return _toggle_champ_annee_status(champ_no, annee_id, "est_verrouille")
+
+
+def toggle_champ_annee_confirm_status(champ_no: str, annee_id: int) -> bool | None:
+    """Bascule le statut de confirmation d'un champ pour une année donnée."""
+    return _toggle_champ_annee_status(champ_no, annee_id, "est_confirme")
 
 
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---
@@ -441,7 +490,7 @@ def get_enseignants_par_champ(champ_no: str, annee_id: int) -> list[dict[str, An
 
 
 def get_all_enseignants_avec_details(annee_id: int) -> list[dict[str, Any]]:
-    """Récupère tous les enseignants d'une année avec des détails enrichis."""
+    """Récupère tous les enseignants d'une année avec des détails enrichis, y compris les statuts du champ."""
     db = get_db()
     if not db:
         return []
@@ -449,9 +498,14 @@ def get_all_enseignants_avec_details(annee_id: int) -> list[dict[str, Any]]:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
-                SELECT e.EnseignantID, e.NomComplet, e.Nom, e.Prenom, e.EstTempsPlein, e.EstFictif,
-                       e.ChampNo, ch.ChampNom, e.PeutChoisirHorsChampPrincipal, ch.EstVerrouille
-                FROM Enseignants e JOIN Champs ch ON e.ChampNo = ch.ChampNo
+                SELECT
+                    e.EnseignantID, e.NomComplet, e.Nom, e.Prenom, e.EstTempsPlein, e.EstFictif,
+                    e.ChampNo, ch.ChampNom, e.PeutChoisirHorsChampPrincipal,
+                    COALESCE(cas.est_verrouille, FALSE) AS est_verrouille,
+                    COALESCE(cas.est_confirme, FALSE) AS est_confirme
+                FROM Enseignants e
+                JOIN Champs ch ON e.ChampNo = ch.ChampNo
+                LEFT JOIN champ_annee_statuts cas ON e.ChampNo = cas.champ_no AND e.annee_id = cas.annee_id
                 WHERE e.annee_id = %s
                 ORDER BY e.ChampNo, e.EstFictif, e.Nom, e.Prenom;
                 """,
@@ -622,7 +676,7 @@ def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
 
 
 def get_verrou_info_enseignant(enseignant_id: int) -> dict[str, Any] | None:
-    """Récupère le statut de verrouillage, fictif et le champno pour un enseignant."""
+    """Récupère le statut de verrouillage (spécifique à l'année), fictif et le champno pour un enseignant."""
     db = get_db()
     if not db:
         return None
@@ -630,9 +684,13 @@ def get_verrou_info_enseignant(enseignant_id: int) -> dict[str, Any] | None:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
-                SELECT e.EstFictif, ch.EstVerrouille, e.ChampNo
+                SELECT
+                    e.EstFictif,
+                    e.ChampNo,
+                    e.annee_id,
+                    COALESCE(cas.est_verrouille, FALSE) AS est_verrouille
                 FROM Enseignants e
-                JOIN Champs ch ON e.ChampNo = ch.ChampNo
+                LEFT JOIN champ_annee_statuts cas ON e.ChampNo = cas.champ_no AND e.annee_id = cas.annee_id
                 WHERE e.EnseignantID = %s;
                 """,
                 (enseignant_id,),
@@ -665,7 +723,7 @@ def add_attribution(enseignant_id: int, code_cours: str, annee_id_cours: int) ->
 
 
 def get_attribution_info(attribution_id: int) -> dict[str, Any] | None:
-    """Récupère les informations détaillées d'une attribution."""
+    """Récupère les informations détaillées d'une attribution, y compris le statut de verrouillage du champ pour l'année concernée."""
     db = get_db()
     if not db:
         return None
@@ -673,10 +731,12 @@ def get_attribution_info(attribution_id: int) -> dict[str, Any] | None:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
-                SELECT ac.EnseignantID, ac.CodeCours, ac.annee_id_cours, e.EstFictif, ch.EstVerrouille, e.ChampNo
+                SELECT
+                    ac.EnseignantID, ac.CodeCours, ac.annee_id_cours, e.EstFictif, e.ChampNo,
+                    COALESCE(cas.est_verrouille, FALSE) AS est_verrouille
                 FROM AttributionsCours ac
                 JOIN Enseignants e ON ac.EnseignantID = e.EnseignantID
-                JOIN Champs ch ON e.ChampNo = ch.ChampNo
+                LEFT JOIN champ_annee_statuts cas ON e.ChampNo = cas.champ_no AND e.annee_id = cas.annee_id
                 WHERE ac.AttributionID = %s;
                 """,
                 (attribution_id,),

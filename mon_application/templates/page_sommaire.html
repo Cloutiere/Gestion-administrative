@@ -6,7 +6,27 @@
     <title>Sommaire global des tâches</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <!-- Style pour la ligne confirmée -->
+    <style>
+        .champ-confirme {
+            font-weight: bold;
+        }
+        .confirm-icon {
+            cursor: pointer;
+            display: inline-block;
+            vertical-align: middle;
+            width: 24px;
+            height: 24px;
+        }
+        .confirm-icon.confirmed path {
+            fill: green;
+        }
+        .confirm-icon.unconfirmed path {
+            fill: #ccc;
+        }
+    </style>
+
+    <!-- Script pour appliquer le thème instantanément -->
     <script>
         (function() {
             const savedTheme = localStorage.getItem('appTheme') || 'light';
@@ -25,6 +45,8 @@
         <nav>
             <ul>
                 <li><a href="{{ url_for('views.index') }}">« Retour à la navigation par champ</a></li>
+                <!-- NOUVEAU LIEN vers la page de détail -->
+                <li><a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches par enseignant »</a></li>
                 {% if current_user.is_authenticated and current_user.is_admin %}
                     <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                     <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
@@ -71,42 +93,38 @@
         {% endwith %}
 
         {% if annee_active %}
-        <!-- Conteneur principal utilisant flexbox pour les colonnes -->
+        <!-- Conteneur principal simplifié -->
         <div class="container-principal-sommaire">
-
-            <!-- Colonne de gauche : Moyennes -->
-            <div class="colonne-sommaire colonne-gauche">
+            <!-- Colonne unique pour les moyennes -->
+            <div class="colonne-sommaire colonne-gauche" style="width: 100%; margin: auto; max-width: 1200px;">
                 <div class="moyenne-generale-contenu">
                     <span>Moyenne générale incluant tous les champs :</span>
                     <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
                 </div>
-                <!-- NOUVEL ÉLÉMENT : Affichage de la moyenne préliminaire confirmée -->
                 <div class="moyenne-generale-contenu">
-                    <span>Moyenne générale avec les champs confirmes :</span>
+                    <span>Moyenne générale avec les champs confirmés :</span>
                     <span id="moyenne-preliminaire-confirmee">{{ moyenne_preliminaire_confirmee | format_periodes }} périodes</span>
                 </div>
-
 
                 <div>
                     <h2>Moyennes par champ (temps plein)</h2>
                     {% if moyennes_par_champ %}
                     <table id="table-moyennes-par-champ">
-                        <!-- EN-TÊTE DU TABLEAU MIS À JOUR -->
                         <thead>
                             <tr>
                                 <th>N° champ</th>
                                 <th>Nom du champ</th>
-                                <th>Statut</th>
+                                <th>Verrou</th>
                                 <th>Nb. Ens. TP</th>
                                 <th>Périodes Choisies (TP)</th>
                                 <th>Moyenne</th>
-                                <th>Périodes Magiques</th>
+                                <th>Diff. / 24p</th>
+                                <th>Confirmé</th>
                             </tr>
                         </thead>
                         <tbody>
                             {# Le contenu de ce tbody sera trié et inséré par JavaScript. #}
                         </tbody>
-                        <!-- PIED DE TABLEAU AJOUTÉ POUR LES TOTAUX -->
                         <tfoot>
                             <tr>
                                 <td colspan="3" style="text-align: right; font-weight: bold;">TOTAL</td>
@@ -114,6 +132,7 @@
                                 <td id="total-periodes-choisies-tp" style="font-weight: bold;"></td>
                                 <td></td> <!-- Cellule vide pour la colonne moyenne -->
                                 <td id="total-periodes-magiques" style="font-weight: bold;"></td>
+                                <td></td> <!-- Cellule vide pour la colonne Confirmé -->
                             </tr>
                         </tfoot>
                     </table>
@@ -122,21 +141,6 @@
                     <p>Aucune donnée de moyenne par champ disponible pour cette année.</p>
                     {% endif %}
                 </div>
-            </div>
-
-            <!-- Colonne de droite : Détail des tâches -->
-            <div class="colonne-sommaire colonne-droite">
-                <h2>Détail des tâches par champ</h2>
-                <table id="table-detail-enseignants">
-                    <tbody>
-                        {# Le contenu sera généré dynamiquement par JavaScript. #}
-                    </tbody>
-                </table>
-                <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
-                {# Afficher ce message si la variable initiale est vide OU si elle ne contient aucun enseignant réel #}
-                {% if not enseignants_par_champ or (enseignants_par_champ | map(attribute='enseignants') | sum(start=[]) | length == 0) %}
-                <p>Aucun enseignant à afficher pour cette année.</p>
-                {% endif %}
             </div>
         </div>
         {% else %}
@@ -158,36 +162,37 @@
         // --- Fonctions utilitaires et constantes SVG ---
         function formatPeriodes(value) {
             if (value === null || value === undefined) return '';
-            // Utilisation de signDisplay pour afficher le signe + ou -
             const formatter = new Intl.NumberFormat('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: false, signDisplay: 'auto' });
             return formatter.format(value);
         }
         const SVG_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
         const SVG_UNLOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
+        const SVG_CONFIRMED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>`;
+        const SVG_UNCONFIRMED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" opacity="0.3"/></svg>`;
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Ne démarrer la logique que si une année est active
             {% if annee_active %}
-                // Initialisation des totaux au chargement de la page avec les données de Jinja2
                 mettreAJourTotaux({{ grand_totals|tojson }});
-
                 mettreAJourDonneesSommaire();
                 setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
 
                 const tableMoyennes = document.getElementById('table-moyennes-par-champ');
                 if (tableMoyennes) {
                     tableMoyennes.addEventListener('click', function(event) {
-                        const iconElement = event.target.closest('.lock-icon');
-                        if (iconElement && IS_ADMIN) {
-                            basculerVerrouChamp(iconElement.dataset.champNo, iconElement);
-                        } else if (iconElement) {
-                            alert("Vous n'avez pas les permissions pour modifier le statut de verrouillage.");
+                        const lockIcon = event.target.closest('.lock-icon');
+                        const confirmIcon = event.target.closest('.confirm-icon');
+
+                        if (lockIcon && IS_ADMIN) {
+                            basculerVerrouChamp(lockIcon.dataset.champNo, lockIcon);
+                        } else if (confirmIcon && IS_ADMIN) {
+                            basculerConfirmationChamp(confirmIcon.dataset.champNo, confirmIcon);
+                        } else if ((lockIcon || confirmIcon) && !IS_ADMIN) {
+                            alert("Vous n'avez pas les permissions pour modifier ce statut.");
                         }
                     });
                 }
             {% endif %}
 
-            // Logique du sélecteur d'année
             const anneeSelector = document.getElementById('annee-selector');
             if (anneeSelector) {
                 anneeSelector.addEventListener('change', function() {
@@ -204,16 +209,10 @@
                         } else {
                             alert("Erreur lors du changement d'année de visualisation.");
                         }
-                    })
-                    .catch(error => {
-                        console.error("Erreur de communication pour changer l'année:", error);
-                        alert("Erreur de communication avec le serveur.");
                     });
                 });
             }
         });
-
-        // --- Fonctions de mise à jour de l'interface ---
 
         async function mettreAJourDonneesSommaire() {
             try {
@@ -224,9 +223,7 @@
                 }
                 const data = await response.json();
                 mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
-                mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ || []);
 
-                // MISE À JOUR : Mise à jour des totaux depuis l'API
                 if (data.grand_totals) {
                     mettreAJourTotaux(data.grand_totals);
                 }
@@ -248,15 +245,10 @@
             }
         }
 
-        // --- NOUVELLE FONCTION POUR METTRE À JOUR LE PIED DE TABLEAU ---
         function mettreAJourTotaux(totals) {
-            const elTotalEns = document.getElementById('total-enseignants-tp');
-            const elTotalPer = document.getElementById('total-periodes-choisies-tp');
-            const elTotalMag = document.getElementById('total-periodes-magiques');
-
-            if (elTotalEns) elTotalEns.textContent = totals.total_enseignants_tp;
-            if (elTotalPer) elTotalPer.textContent = formatPeriodes(totals.total_periodes_choisies_tp);
-            if (elTotalMag) elTotalMag.textContent = formatPeriodes(totals.total_periodes_magiques);
+            document.getElementById('total-enseignants-tp').textContent = totals.total_enseignants_tp;
+            document.getElementById('total-periodes-choisies-tp').textContent = formatPeriodes(totals.total_periodes_choisies_tp);
+            document.getElementById('total-periodes-magiques').textContent = formatPeriodes(totals.total_periodes_magiques);
         }
 
         async function basculerVerrouChamp(champNo, iconElement) {
@@ -274,75 +266,42 @@
             }
         }
 
+        async function basculerConfirmationChamp(champNo, iconElement) {
+            iconElement.style.opacity = '0.5';
+            try {
+                const response = await fetch(`/admin/api/champs/${champNo}/basculer_confirmation`, { method: 'POST' });
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors du changement de statut de confirmation.');
+                await mettreAJourDonneesSommaire();
+            } catch (error) {
+                console.error(`Erreur bascule confirmation pour champ ${champNo}:`, error);
+                alert(error.message);
+            } finally {
+                iconElement.style.opacity = '1';
+            }
+        }
+
         function mettreAJourIconeVerrou(iconElement, estVerrouille) {
             iconElement.className = estVerrouille ? 'lock-icon locked' : 'lock-icon unlocked';
             iconElement.innerHTML = estVerrouille ? SVG_LOCKED : SVG_UNLOCKED;
             iconElement.title = estVerrouille ? 'Champ verrouillé. Cliquer pour déverrouiller.' : 'Champ déverrouillé. Cliquer pour verrouiller.';
         }
 
-        function mettreAJourTableauEnseignantsGroupes(enseignantsParChampData) {
-            const tbody = document.querySelector('#table-detail-enseignants tbody');
-            const aucunEnseignantMsg = document.getElementById('aucun-enseignant-message');
-            const table = document.getElementById('table-detail-enseignants');
-            if (!tbody || !aucunEnseignantMsg || !table) return;
-
-            tbody.innerHTML = '';
-            const aDesEnseignants = enseignantsParChampData.some(c => c.enseignants && c.enseignants.length > 0);
-
-            aucunEnseignantMsg.style.display = aDesEnseignants ? 'none' : 'block';
-            table.style.display = aDesEnseignants ? '' : 'none';
-
-            if (aDesEnseignants) {
-                enseignantsParChampData.forEach(champData => {
-                    if (!champData.enseignants || champData.enseignants.length === 0) return;
-
-                    const champHeaderRow = tbody.insertRow();
-                    champHeaderRow.className = 'champ-header-row';
-                    const champTitleCell = champHeaderRow.insertCell();
-                    champTitleCell.colSpan = 5;
-                    champTitleCell.className = 'champ-title-cell';
-                    champTitleCell.textContent = `Champ ${champData.champno} - ${champData.champnom}`;
-
-                    const columnHeaderRow = tbody.insertRow();
-                    columnHeaderRow.className = 'column-header-row';
-                    ['Nom', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte moyenne'].forEach(headerText => {
-                        const th = document.createElement('th');
-                        th.textContent = headerText;
-                        columnHeaderRow.appendChild(th);
-                    });
-
-                    champData.enseignants.forEach(ens => {
-                        const row = tbody.insertRow();
-                        row.dataset.enseignantId = ens.enseignantid;
-                        row.insertCell().textContent = (ens.nom && ens.prenom) ? `${ens.nom}, ${ens.prenom}` : ens.nomcomplet;
-                        row.insertCell().textContent = formatPeriodes(ens.periodes_cours);
-                        row.insertCell().textContent = formatPeriodes(ens.periodes_autres);
-                        row.insertCell().textContent = formatPeriodes(ens.total_periodes);
-                        const cellCompteMoyenne = row.insertCell();
-                        if (ens.compte_pour_moyenne_champ) {
-                            cellCompteMoyenne.textContent = 'Oui';
-                        } else {
-                            let nonCompteText = 'Non';
-                            if (ens.estfictif) nonCompteText += ' (Tâche restante)';
-                            else if (!ens.esttempsplein) nonCompteText += ' (T. Partiel)';
-                            cellCompteMoyenne.innerHTML = `<span class="statut-non-compte">${nonCompteText}</span>`;
-                        }
-                    });
-                });
-            }
+        function mettreAJourIconeConfirmation(iconElement, estConfirme) {
+            iconElement.className = estConfirme ? 'confirm-icon confirmed' : 'confirm-icon unconfirmed';
+            iconElement.innerHTML = estConfirme ? SVG_CONFIRMED : SVG_UNCONFIRMED;
+            iconElement.title = estConfirme ? 'Champ confirmé. Cliquer pour annuler.' : 'Champ non confirmé. Cliquer pour confirmer.';
         }
 
         function comparerNumerosChamp(a, b) {
             const regex = /^(\d+)([a-zA-Z]*)$/;
             const matchA = a.match(regex);
             const matchB = b.match(regex);
-
             if (matchA && matchB) {
                 const numA = parseInt(matchA[1], 10);
                 const letterA = matchA[2] || '';
                 const numB = parseInt(matchB[1], 10);
                 const letterB = matchB[2] || '';
-
                 if (numA !== numB) return numA - numB;
                 return letterA.localeCompare(letterB);
             }
@@ -367,25 +326,30 @@
                     const row = tbody.insertRow();
                     row.dataset.champNo = champ_no;
 
-                    if (data.est_verrouille) {
-                        row.classList.add('champ-verrouille-row');
-                    }
+                    if (data.est_verrouille) row.classList.add('champ-verrouille-row');
+                    if (data.est_confirme) row.classList.add('champ-confirme');
 
-                    // MISE À JOUR : Ordre des cellules et données affichées
                     row.insertCell().textContent = champ_no;
                     row.insertCell().textContent = data.champ_nom;
 
                     const cellStatut = row.insertCell();
-                    const icon = document.createElement('span');
-                    icon.className = 'lock-icon';
-                    icon.dataset.champNo = champ_no;
-                    mettreAJourIconeVerrou(icon, data.est_verrouille);
-                    cellStatut.appendChild(icon);
+                    const lockIcon = document.createElement('span');
+                    lockIcon.className = 'lock-icon';
+                    lockIcon.dataset.champNo = champ_no;
+                    mettreAJourIconeVerrou(lockIcon, data.est_verrouille);
+                    cellStatut.appendChild(lockIcon);
 
                     row.insertCell().textContent = data.nb_enseignants_tp;
                     row.insertCell().textContent = formatPeriodes(data.periodes_choisies_tp);
                     row.insertCell().textContent = formatPeriodes(data.moyenne);
                     row.insertCell().textContent = formatPeriodes(data.periodes_magiques);
+
+                    const cellConfirme = row.insertCell();
+                    const confirmIcon = document.createElement('span');
+                    confirmIcon.className = 'confirm-icon';
+                    confirmIcon.dataset.champNo = champ_no;
+                    mettreAJourIconeConfirmation(confirmIcon, data.est_confirme);
+                    cellConfirme.appendChild(confirmIcon);
                 });
             }
         }

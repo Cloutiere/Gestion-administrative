@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Détail des tâches par champ</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            document.documentElement.className = `theme-${savedTheme}`;
+        })();
+    </script>
+</head>
+<body class="theme-light">
+    <header>
+        <h1>
+            Détail des tâches par champ
+            {% if annee_active %}
+                <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
+            {% endif %}
+        </h1>
+        <nav>
+            <ul>
+                <!-- Mise à jour du lien de retour -->
+                <li><a href="{{ url_for('admin.page_sommaire') }}">« Retour au sommaire des moyennes</a></li>
+                {% if current_user.is_authenticated and current_user.is_admin %}
+                    <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
+                    <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                {% endif %}
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+
+        <!-- Sélecteur d'année pour l'administrateur -->
+        {% if current_user.is_admin and toutes_les_annees %}
+        <div class="year-switcher no-print">
+            <label for="annee-selector">Changer l'année de visualisation :</label>
+            <select id="annee-selector">
+                {% for annee in toutes_les_annees %}
+                    <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
+                        {{ annee.libelle_annee }} {% if annee.est_courante %}(Courante){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <!-- Sélecteur de thème -->
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
+        </div>
+    </header>
+
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        {% if annee_active %}
+        <div class="container-principal-sommaire">
+            <!-- Colonne unique pour le détail des tâches -->
+            <div class="colonne-sommaire colonne-droite" style="width: 100%; margin: auto;">
+                <h2>Détail des tâches par champ</h2>
+                <table id="table-detail-enseignants">
+                    <tbody>
+                        {# Le contenu sera généré dynamiquement par JavaScript. #}
+                    </tbody>
+                </table>
+                <p id="aucun-enseignant-message" style="display: none;">Aucun enseignant à afficher.</p>
+                {# Afficher ce message si la variable initiale est vide OU si elle ne contient aucun enseignant réel #}
+                {% if not enseignants_par_champ or (enseignants_par_champ | map(attribute='enseignants') | sum(start=[]) | length == 0) %}
+                <p>Aucun enseignant à afficher pour cette année.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+            <div class="flash-messages">
+                <li class="warning">Aucune année scolaire n'est active. Les données ne peuvent pas être affichées.</li>
+            </div>
+        {% endif %}
+    </main>
+
+    <footer>
+        <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
+    </footer>
+
+    <!-- Script JS spécifique à la page de détail -->
+    <script>
+        const INTERVAL_MISE_A_JOUR = 7000;
+
+        // --- Fonctions utilitaires ---
+        function formatPeriodes(value) {
+            if (value === null || value === undefined) return '';
+            const formatter = new Intl.NumberFormat('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: false, signDisplay: 'auto' });
+            return formatter.format(value);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if annee_active %}
+                mettreAJourDonneesDetail();
+                setInterval(mettreAJourDonneesDetail, INTERVAL_MISE_A_JOUR);
+            {% endif %}
+
+            const anneeSelector = document.getElementById('annee-selector');
+            if (anneeSelector) {
+                anneeSelector.addEventListener('change', function() {
+                    const anneeId = this.value;
+                    fetch("{{ url_for('admin.api_changer_annee_active') }}", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ annee_id: parseInt(anneeId, 10) })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.reload();
+                        } else {
+                            alert("Erreur lors du changement d'année de visualisation.");
+                        }
+                    });
+                });
+            }
+        });
+
+        // --- Fonctions de mise à jour de l'interface ---
+        async function mettreAJourDonneesDetail() {
+            try {
+                // On utilise la même API que le sommaire pour récupérer les données.
+                const response = await fetch("{{ url_for('admin.api_get_donnees_sommaire') }}");
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) { window.location.reload(); return; }
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+                const data = await response.json();
+                mettreAJourTableauEnseignantsGroupes(data.enseignants_par_champ || []);
+            } catch (error) {
+                console.error("Erreur lors de la mise à jour des détails:", error);
+            }
+        }
+
+        function mettreAJourTableauEnseignantsGroupes(enseignantsParChampData) {
+            const tbody = document.querySelector('#table-detail-enseignants tbody');
+            const aucunEnseignantMsg = document.getElementById('aucun-enseignant-message');
+            const table = document.getElementById('table-detail-enseignants');
+            if (!tbody || !aucunEnseignantMsg || !table) return;
+
+            tbody.innerHTML = '';
+            const aDesEnseignants = enseignantsParChampData.some(c => c.enseignants && c.enseignants.length > 0);
+
+            aucunEnseignantMsg.style.display = aDesEnseignants ? 'none' : 'block';
+            table.style.display = aDesEnseignants ? '' : 'none';
+
+            if (aDesEnseignants) {
+                enseignantsParChampData.forEach(champData => {
+                    if (!champData.enseignants || champData.enseignants.length === 0) return;
+
+                    const champHeaderRow = tbody.insertRow();
+                    champHeaderRow.className = 'champ-header-row';
+                    const champTitleCell = champHeaderRow.insertCell();
+                    champTitleCell.colSpan = 5;
+                    champTitleCell.className = 'champ-title-cell';
+                    champTitleCell.textContent = `Champ ${champData.champno} - ${champData.champnom}`;
+
+                    const columnHeaderRow = tbody.insertRow();
+                    columnHeaderRow.className = 'column-header-row';
+                    ['Nom', 'Pér. cours', 'Pér. autres', 'Total pér.', 'Compte moyenne'].forEach(headerText => {
+                        const th = document.createElement('th');
+                        th.textContent = headerText;
+                        columnHeaderRow.appendChild(th);
+                    });
+
+                    champData.enseignants.forEach(ens => {
+                        const row = tbody.insertRow();
+                        row.dataset.enseignantId = ens.enseignantid;
+                        row.insertCell().textContent = (ens.nom && ens.prenom) ? `${ens.nom}, ${ens.prenom}` : ens.nomcomplet;
+                        row.insertCell().textContent = formatPeriodes(ens.periodes_cours);
+                        row.insertCell().textContent = formatPeriodes(ens.periodes_autres);
+                        row.insertCell().textContent = formatPeriodes(ens.total_periodes);
+                        const cellCompteMoyenne = row.insertCell();
+                        if (ens.compte_pour_moyenne_champ) {
+                            cellCompteMoyenne.textContent = 'Oui';
+                        } else {
+                            let nonCompteText = 'Non';
+                            if (ens.estfictif) nonCompteText += ' (Tâche restante)';
+                            else if (!ens.esttempsplein) nonCompteText += ' (T. Partiel)';
+                            cellCompteMoyenne.innerHTML = `<span class="statut-non-compte">${nonCompteText}</span>`;
+                        }
+                    });
+                });
+            }
+        }
+    </script>
+
+    <!-- Script de gestion du thème -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
+                function applyThemeUI(theme) {
+                    document.documentElement.className = `theme-${theme}`;
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) activeButton.classList.add('active');
+                }
+                themeSwitcher.addEventListener('click', function(event) {
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme;
+                        localStorage.setItem('appTheme', theme);
+                        applyThemeUI(theme);
+                    }
+                });
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme);
+            }
+        });
+    </script>
+</body>
+</html>

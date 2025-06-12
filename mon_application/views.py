@@ -66,7 +66,8 @@ def page_champ(champ_no: str) -> Any:
         flash("Vous n'avez pas la permission d'accéder à ce champ.", "error")
         return redirect(url_for("views.index"))
 
-    champ_details = db.get_champ_details(champ_no)
+    # Récupère les détails du champ, y compris son statut de verrouillage pour l'année active.
+    champ_details = db.get_champ_details(champ_no, annee_id)
     if not champ_details:
         flash(f"Le champ {champ_no} n'a pas été trouvé.", "error")
         return redirect(url_for("views.index"))

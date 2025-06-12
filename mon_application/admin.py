@@ -34,9 +34,9 @@ def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict
     Retourne:
         Un tuple contenant :
         - La liste des enseignants groupés par champ.
-        - Un dictionnaire des moyennes et totaux par champ.
+        - Un dictionnaire des moyennes et totaux par champ, incluant les statuts.
         - La moyenne générale des périodes pour les enseignants à temps plein.
-        - La moyenne "Préliminaire confirmée" (enseignants TP des champs verrouillés).
+        - La moyenne "Préliminaire confirmée" (enseignants TP des champs confirmés).
         - Un dictionnaire contenant les totaux globaux pour le pied de tableau.
     """
     tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
@@ -44,66 +44,65 @@ def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict
     enseignants_par_champ_temp: dict[str, Any] = {}
     moyennes_par_champ_calculees: dict[str, Any] = {}
 
-    # --- NOUVEAUX ACCUMULATEURS GLOBAUX POUR LES TOTAUX ---
     total_enseignants_tp_etablissement = 0
     total_periodes_choisies_tp_etablissement = 0.0
     total_periodes_magiques_etablissement = 0.0
 
-    # Anciens accumulateurs pour les moyennes
     total_periodes_global_tp = 0.0
     nb_enseignants_tp_global = 0
-    total_periodes_verrouille_tp = 0.0
-    nb_enseignants_verrouille_tp = 0
+    total_periodes_confirme_tp = 0.0
+    nb_enseignants_confirme_tp = 0
 
     for ens in tous_enseignants_details:
         champ_no = ens["champno"]
         if champ_no not in enseignants_par_champ_temp:
-            enseignants_par_champ_temp[champ_no] = {"champno": champ_no, "champnom": ens["champnom"], "enseignants": []}
+            enseignants_par_champ_temp[champ_no] = {
+                "champno": champ_no,
+                "champnom": ens["champnom"],
+                "enseignants": [],
+                "est_verrouille": ens["est_verrouille"],
+                "est_confirme": ens["est_confirme"],
+            }
         enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
 
     for champ_no, data in enseignants_par_champ_temp.items():
         _enseignants = data.get("enseignants", [])
         if _enseignants:
-            # --- LOGIQUE DE CALCUL MISE À JOUR ---
             enseignants_temps_plein = [e for e in _enseignants if e["compte_pour_moyenne_champ"]]
             nb_enseignants_champ_tp = len(enseignants_temps_plein)
 
-            # Périodes choisies par les enseignants à temps plein uniquement
             total_periodes_choisies_tp_champ = sum(e["total_periodes"] for e in enseignants_temps_plein)
 
-            # Calcul des "périodes magiques"
             base_magique = nb_enseignants_champ_tp * 24
             periodes_magiques_champ = total_periodes_choisies_tp_champ - base_magique
 
             moyenne_champ = (total_periodes_choisies_tp_champ / nb_enseignants_champ_tp) if nb_enseignants_champ_tp > 0 else 0.0
-            est_verrouille_champ = _enseignants[0]["estverrouille"]
+            est_confirme_champ = data["est_confirme"]
 
             moyennes_par_champ_calculees[champ_no] = {
                 "champ_nom": data["champnom"],
                 "moyenne": moyenne_champ,
-                "est_verrouille": est_verrouille_champ,
+                "est_verrouille": data["est_verrouille"],
+                "est_confirme": est_confirme_champ,
                 "nb_enseignants_tp": nb_enseignants_champ_tp,
                 "periodes_choisies_tp": total_periodes_choisies_tp_champ,
                 "periodes_magiques": periodes_magiques_champ,
             }
 
-            # --- MISE À JOUR DES TOTAUX GLOBAUX ---
             total_enseignants_tp_etablissement += nb_enseignants_champ_tp
             total_periodes_choisies_tp_etablissement += total_periodes_choisies_tp_champ
             total_periodes_magiques_etablissement += periodes_magiques_champ
 
-            # Agrégation pour les moyennes globales (logique existante conservée)
             if nb_enseignants_champ_tp > 0:
                 total_periodes_global_tp += total_periodes_choisies_tp_champ
                 nb_enseignants_tp_global += nb_enseignants_champ_tp
-                if est_verrouille_champ:
-                    total_periodes_verrouille_tp += total_periodes_choisies_tp_champ
-                    nb_enseignants_verrouille_tp += nb_enseignants_champ_tp
+                if est_confirme_champ:
+                    total_periodes_confirme_tp += total_periodes_choisies_tp_champ
+                    nb_enseignants_confirme_tp += nb_enseignants_champ_tp
 
     moyenne_generale_calculee = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
-    moyenne_prelim_conf = (total_periodes_verrouille_tp / nb_enseignants_verrouille_tp) if nb_enseignants_verrouille_tp > 0 else 0.0
+    moyenne_prelim_conf = (total_periodes_confirme_tp / nb_enseignants_confirme_tp) if nb_enseignants_confirme_tp > 0 else 0.0
 
-    # Dictionnaire pour les totaux du pied de tableau
     grand_totals = {
         "total_enseignants_tp": total_enseignants_tp_etablissement,
         "total_periodes_choisies_tp": total_periodes_choisies_tp_etablissement,
@@ -119,12 +118,11 @@ def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict
 @bp.route("/sommaire")
 @admin_required
 def page_sommaire() -> str:
-    """Affiche la page du sommaire global pour l'année active."""
+    """Affiche la page du sommaire global des moyennes pour l'année active."""
     if not g.annee_active:
         flash("Aucune année scolaire n'est disponible. Veuillez en créer une dans la section 'Données'.", "warning")
         return render_template(
             "page_sommaire.html",
-            enseignants_par_champ=[],
             moyennes_par_champ={},
             moyenne_generale=0.0,
             moyenne_preliminaire_confirmee=0.0,
@@ -132,20 +130,32 @@ def page_sommaire() -> str:
         )
 
     annee_id = g.annee_active["annee_id"]
-    # MISE À JOUR : Récupération du nouveau tuple avec les totaux
-    enseignants_par_champ_data, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = calculer_donnees_sommaire(annee_id)
+    # La liste des enseignants n'est plus nécessaire pour ce template
+    _, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = calculer_donnees_sommaire(annee_id)
 
     return render_template(
         "page_sommaire.html",
-        enseignants_par_champ=enseignants_par_champ_data,
         moyennes_par_champ=moyennes_champs,
         moyenne_generale=moyenne_gen,
         moyenne_preliminaire_confirmee=moyenne_prelim_conf,
-        grand_totals=grand_totals_data,  # Passer les totaux au template
+        grand_totals=grand_totals_data,
     )
 
 
-# ... (le reste de la page `page_administration_donnees` ne change pas)
+@bp.route("/detail_taches")
+@admin_required
+def page_detail_taches() -> str:
+    """Affiche la page de détail des tâches par enseignant pour l'année active."""
+    if not g.annee_active:
+        flash("Aucune année scolaire n'est disponible. Les détails ne peuvent être affichés.", "warning")
+        return render_template("detail_taches.html", enseignants_par_champ=[])
+
+    annee_id = g.annee_active["annee_id"]
+    enseignants_par_champ_data, _, _, _, _ = calculer_donnees_sommaire(annee_id)
+
+    return render_template("detail_taches.html", enseignants_par_champ=enseignants_par_champ_data)
+
+
 @bp.route("/donnees")
 @admin_required
 def page_administration_donnees() -> str:
@@ -168,7 +178,6 @@ def page_administration_donnees() -> str:
     )
 
 
-# ... (le reste de la page `page_administration_utilisateurs` ne change pas)
 @bp.route("/utilisateurs")
 @admin_required
 def page_administration_utilisateurs() -> str:
@@ -182,7 +191,6 @@ def page_administration_utilisateurs() -> str:
 
 # --- API ENDPOINTS (JSON) ---
 
-# ... (les APIs de gestion des années ne changent pas)
 # --- API pour la gestion des années scolaires ---
 
 
@@ -255,18 +263,52 @@ def api_get_donnees_sommaire() -> Any:
         )
 
     annee_id = g.annee_active["annee_id"]
-    # MISE À JOUR : Récupération du nouveau tuple avec les totaux
     enseignants_groupes, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = calculer_donnees_sommaire(annee_id)
     return jsonify(
         enseignants_par_champ=enseignants_groupes,
         moyennes_par_champ=moyennes_champs,
         moyenne_generale=moyenne_gen,
         moyenne_preliminaire_confirmee=moyenne_prelim_conf,
-        grand_totals=grand_totals_data,  # Renvoyer les totaux dans la réponse JSON
+        grand_totals=grand_totals_data,
     )
 
 
-# ... (le reste du fichier admin.py ne change pas)
+@bp.route("/api/champs/<string:champ_no>/basculer_verrou", methods=["POST"])
+@admin_api_required
+def api_basculer_verrou_champ(champ_no: str) -> Any:
+    """Bascule le statut de verrouillage d'un champ pour l'année active."""
+    if not g.annee_active:
+        return jsonify({"success": False, "message": "Aucune année scolaire active pour effectuer cette action."}), 400
+
+    annee_id = g.annee_active["annee_id"]
+    nouveau_statut = db.toggle_champ_annee_lock_status(champ_no, annee_id)
+
+    if nouveau_statut is None:
+        return jsonify({"success": False, "message": f"Impossible de modifier le verrou du champ {champ_no}."}), 500
+
+    message = f"Le champ {champ_no} a été {'verrouillé' if nouveau_statut else 'déverrouillé'} pour l'année en cours."
+    current_app.logger.info(message)
+    return jsonify({"success": True, "message": message, "est_verrouille": nouveau_statut})
+
+
+@bp.route("/api/champs/<string:champ_no>/basculer_confirmation", methods=["POST"])
+@admin_api_required
+def api_basculer_confirmation_champ(champ_no: str) -> Any:
+    """Bascule le statut de confirmation d'un champ pour l'année active."""
+    if not g.annee_active:
+        return jsonify({"success": False, "message": "Aucune année scolaire active pour effectuer cette action."}), 400
+
+    annee_id = g.annee_active["annee_id"]
+    nouveau_statut = db.toggle_champ_annee_confirm_status(champ_no, annee_id)
+
+    if nouveau_statut is None:
+        return jsonify({"success": False, "message": f"Impossible de modifier la confirmation du champ {champ_no}."}), 500
+
+    message = f"Le champ {champ_no} a été marqué comme {'confirmé' if nouveau_statut else 'non confirmé'} pour l'année en cours."
+    current_app.logger.info(message)
+    return jsonify({"success": True, "message": message, "est_confirme": nouveau_statut})
+
+
 @bp.route("/api/cours/creer", methods=["POST"])
 @admin_api_required
 def api_create_cours() -> Any:
@@ -647,18 +689,6 @@ def api_importer_enseignants_excel() -> Any:
 
 
 # --- API non modifiées car indépendantes de l'année ---
-@bp.route("/api/champs/<string:champ_no>/basculer_verrou", methods=["POST"])
-@admin_api_required
-def api_basculer_verrou_champ(champ_no: str) -> Any:
-    """Bascule le statut de verrouillage d'un champ (indépendant de l'année)."""
-    nouveau_statut = db.toggle_champ_lock_status(champ_no)
-    if nouveau_statut is None:
-        return jsonify({"success": False, "message": f"Impossible de modifier le verrou du champ {champ_no}."}), 500
-    message = f"Le champ {champ_no} a été {'verrouillé' if nouveau_statut else 'déverrouillé'}."
-    current_app.logger.info(message)
-    return jsonify({"success": True, "message": message, "est_verrouille": nouveau_statut})
-
-
 @bp.route("/api/utilisateurs", methods=["GET"])
 @admin_api_required
 def api_get_all_users() -> Any:
