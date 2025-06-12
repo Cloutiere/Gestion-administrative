@@ -6,26 +6,13 @@
     <title>Administration - Gestion des utilisateurs</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    <!-- Script pour appliquer le thème instantanément et éviter le FOUC (Flash of Unstyled Content) -->
+    <!-- Script pour appliquer le thème instantanément -->
     <script>
         (function() {
-            /**
-             * Applique le thème spécifié au corps du document.
-             * @param {string} theme - Le nom du thème ('light', 'dark', 'vintage').
-             */
-            function applyTheme(theme) {
-                document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                if (theme === 'dark') {
-                    document.body.classList.add('theme-dark');
-                } else if (theme === 'vintage') {
-                    document.body.classList.add('theme-vintage');
-                } else {
-                    document.body.classList.add('theme-light'); // Thème par défaut explicite
-                }
-            }
             // Récupère le thème sauvegardé ou utilise 'light' par défaut.
             const savedTheme = localStorage.getItem('appTheme') || 'light';
-            applyTheme(savedTheme);
+            // Applique la classe de thème à l'élément <html> pour éviter le FOUC.
+            document.documentElement.className = `theme-${savedTheme}`;
         })();
     </script>
 </head>
@@ -34,23 +21,23 @@
         <h1>Administration - Gestion des utilisateurs</h1>
         <nav>
             <ul>
-                {# CORRECTION: 'views.index', 'admin.page_administration_donnees', etc. #}
-                <li><a href="{{ url_for('views.index') }}">Accueil</a></li>
-                <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
+                {% if current_user.is_authenticated and current_user.is_admin %}
+                    <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+                    <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
+                    <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                {% endif %}
                 {% if current_user.is_authenticated %}
                     <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
                     <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
-                    <li><a href="{{ url_for('auth.register') }}">S'inscrire</a></li>
                 {% endif %}
             </ul>
         </nav>
 
-        <!-- Sélecteur de thème : boutons permettant à l'utilisateur de choisir son thème préféré. -->
+        <!-- Sélecteur de thème -->
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
             <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
-            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
         </div>
     </header>
 
@@ -250,7 +237,6 @@
 
             try {
                 // Envoie la requête à l'API pour créer l'utilisateur.
-                // CORRECTION: Utilise url_for pour l'URL de l'API
                 const response = await fetch("{{ url_for('admin.api_create_user') }}", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -280,7 +266,6 @@
          */
         async function refreshUsersTable() {
             try {
-                // CORRECTION: Utilise url_for pour l'URL de l'API
                 const response = await fetch("{{ url_for('admin.api_get_all_users') }}");
                 if (!response.ok) {
                     throw new Error(`Erreur HTTP! Statut: ${response.status}`);
@@ -394,7 +379,6 @@
             const selectedChampNos = Array.from(document.querySelectorAll(`#user-row-${userId} .btn-toggle-access.active`)).map(btn => btn.dataset.champNo);
 
             try {
-                // CORRECTION: Utilise url_for pour l'URL de l'API
                 const response = await fetch(`/admin/api/utilisateurs/${userId}/update_access`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -449,7 +433,7 @@
             deleteButton.textContent = 'Suppression...';
 
             try {
-                // CORRECTION: Utilise l'URL relative car le blueprint a un préfixe
+                // Utilise une URL relative car le blueprint a un préfixe.
                 const response = await fetch(`/admin/api/utilisateurs/${userId}/delete`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
@@ -498,7 +482,7 @@
         }
     </script>
 
-    <!-- Script de gestion du thème : écoute les clics sur les boutons et met à jour le thème actif. -->
+    <!-- Script de gestion du thème -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const themeSwitcher = document.querySelector('.theme-switcher');
@@ -506,12 +490,11 @@
                 const themeButtons = themeSwitcher.querySelectorAll('button');
 
                 /**
-                 * Applique la classe de thème au corps et met à jour l'état actif des boutons.
+                 * Applique la classe de thème à l'élément racine et met à jour l'état actif des boutons.
                  * @param {string} theme - Le nom du thème à appliquer.
                  */
                 function applyThemeUI(theme) {
-                    document.body.classList.remove('theme-dark', 'theme-vintage', 'theme-light');
-                    document.body.classList.add(`theme-${theme}`);
+                    document.documentElement.className = `theme-${theme}`;
 
                     themeButtons.forEach(btn => btn.classList.remove('active'));
                     const activeButton = document.getElementById(`theme-btn-${theme}`);
@@ -520,17 +503,16 @@
                     }
                 }
 
-                // Écoute les clics sur le conteneur du sélecteur de thème pour déléguer l'événement.
+                // Écoute les clics sur le conteneur du sélecteur de thème.
                 themeSwitcher.addEventListener('click', function(event) {
-                    // Vérifie si l'élément cliqué est un bouton
                     if (event.target.tagName === 'BUTTON') {
-                        const theme = event.target.dataset.theme; // Récupère le thème du data-attribute
-                        localStorage.setItem('appTheme', theme); // Sauvegarde le choix de l'utilisateur
-                        applyThemeUI(theme); // Applique le thème visuellement
+                        const theme = event.target.dataset.theme;
+                        localStorage.setItem('appTheme', theme);
+                        applyThemeUI(theme);
                     }
                 });
 
-                // Applique le thème sauvegardé au chargement DOM complet.
+                // Applique le thème sauvegardé au chargement.
                 const savedTheme = localStorage.getItem('appTheme') || 'light';
                 applyThemeUI(savedTheme);
             }

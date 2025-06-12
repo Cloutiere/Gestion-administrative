@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sommaire global des tâches</title>
+    <title>Tableau de Bord Global</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    <!-- Style pour la ligne confirmée -->
+    <!-- Style pour les éléments de la page -->
     <style>
         .champ-confirme {
             font-weight: bold;
@@ -24,6 +24,21 @@
         .confirm-icon.unconfirmed path {
             fill: #ccc;
         }
+        .details-link-container {
+            text-align: right;
+            margin-bottom: 1rem;
+        }
+        .details-link-container a {
+            padding: 0.5rem 1rem;
+            background-color: var(--color-primary);
+            color: var(--color-background);
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .details-link-container a:hover {
+            background-color: var(--color-primary-dark);
+        }
     </style>
 
     <!-- Script pour appliquer le thème instantanément -->
@@ -37,17 +52,16 @@
 <body class="theme-light">
     <header>
         <h1>
-            Sommaire global des tâches
+            Tableau de Bord Global
             {% if annee_active %}
                 <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
             {% endif %}
         </h1>
         <nav>
             <ul>
-                <li><a href="{{ url_for('views.index') }}">« Retour à la navigation par champ</a></li>
-                <!-- NOUVEAU LIEN vers la page de détail -->
-                <li><a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches par enseignant »</a></li>
                 {% if current_user.is_authenticated and current_user.is_admin %}
+                    <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+                    <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
                     <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                     <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
                 {% endif %}
@@ -77,7 +91,6 @@
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
             <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
-            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
         </div>
     </header>
 
@@ -108,6 +121,12 @@
 
                 <div>
                     <h2>Moyennes par champ (temps plein)</h2>
+                    
+                    <!-- Lien vers le détail des tâches -->
+                    <div class="details-link-container no-print">
+                        <a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches par enseignant</a>
+                    </div>
+                    
                     {% if moyennes_par_champ %}
                     <table id="table-moyennes-par-champ">
                         <thead>
@@ -172,8 +191,8 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             {% if annee_active %}
-                mettreAJourTotaux({{ grand_totals|tojson }});
-                mettreAJourDonneesSommaire();
+                // La mise à jour initiale des données se fait dans mettreAJourDonneesSommaire()
+                mettreAJourDonneesSommaire(); 
                 setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
 
                 const tableMoyennes = document.getElementById('table-moyennes-par-champ');
@@ -222,12 +241,14 @@
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }
                 const data = await response.json();
+                
+                // Mettre à jour les données du tableau et les totaux
                 mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
-
                 if (data.grand_totals) {
                     mettreAJourTotaux(data.grand_totals);
                 }
 
+                // Mettre à jour les moyennes globales
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale) {
                     elMoyenneGenerale.textContent = (data.moyenne_generale !== undefined && data.moyenne_generale !== null)
@@ -317,10 +338,11 @@
             tbody.innerHTML = '';
             const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
 
-            aucuneMoyenneMsg.style.display = champNosTries.length > 0 ? 'none' : 'block';
-            table.style.display = champNosTries.length > 0 ? '' : 'none';
+            const hasData = champNosTries.length > 0;
+            aucuneMoyenneMsg.style.display = hasData ? 'none' : 'block';
+            table.style.display = hasData ? '' : 'none';
 
-            if (champNosTries.length > 0) {
+            if (hasData) {
                 champNosTries.forEach(champ_no => {
                     const data = moyennesChampData[champ_no];
                     const row = tbody.insertRow();
@@ -330,7 +352,13 @@
                     if (data.est_confirme) row.classList.add('champ-confirme');
 
                     row.insertCell().textContent = champ_no;
-                    row.insertCell().textContent = data.champ_nom;
+                    
+                    // Rendre le nom du champ cliquable
+                    const cellNomChamp = row.insertCell();
+                    const link = document.createElement('a');
+                    link.href = `/champ/${encodeURIComponent(champ_no)}`;
+                    link.textContent = data.champ_nom;
+                    cellNomChamp.appendChild(link);
 
                     const cellStatut = row.insertCell();
                     const lockIcon = document.createElement('span');

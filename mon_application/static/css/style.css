@@ -42,7 +42,7 @@ html.theme-dark {
 
     --color-text-primary: #e9ecef;
     --color-text-secondary: #adb5bd;
-    --color-text-on-primary: #000000;
+    --color-text-on-primary: #ffffff; /* Corrigé pour une meilleure lisibilité */
     --color-background: #1a1b1e;
     --color-surface: #2c2e33;
     --color-border: #495057;
@@ -51,109 +51,6 @@ html.theme-dark {
     --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-/* --- Thème Artistique --- */
-html.theme-artistic {
-    --color-primary: #9c27b0;
-    --color-primary-hover: #7b1fa2;
-    --color-secondary: #ff9800;
-    --color-success: #4caf50;
-    --color-danger: #f44336;
-    --color-info: #00bcd4;
-
-    --color-text-primary: #311b92;
-    --color-text-secondary: #5e35b1;
-    --color-text-on-primary: #ffffff;
-    --color-background: linear-gradient(135deg, #e1f5fe 0%, #f3e5f5 100%);
-    --color-surface: rgba(255, 255, 255, 0.9);
-    --color-border: #d1c4e9;
-    --color-header-bg: rgba(156, 39, 176, 0.1);
-    --color-table-hover: rgba(156, 39, 176, 0.05);
-
-    --font-family-body: "Comic Sans MS", "Marker Felt", "Segoe Print", cursive;
-    --font-family-heading: "Brush Script MT", "Lucida Handwriting", cursive;
-    --border-radius: 1rem;
-    --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    --transition-speed: 0.3s;
-}
-
-/* Styles généraux pour le thème artistique */
-html.theme-artistic body {
-    background: var(--color-background);
-    background-attachment: fixed;
-    background-size: cover;
-}
-
-html.theme-artistic header {
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    border-bottom: 2px dashed var(--color-primary);
-}
-
-html.theme-artistic .admin-section,
-html.theme-artistic .auth-form-container,
-html.theme-artistic .modal {
-    background: var(--color-surface);
-    border: 2px solid var(--color-border);
-    box-shadow: var(--box-shadow);
-}
-
-html.theme-artistic button,
-html.theme-artistic .btn {
-    border-radius: var(--border-radius);
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    transition: all var(--transition-speed) ease;
-}
-
-html.theme-artistic .btn-primary {
-    background: linear-gradient(45deg, var(--color-primary), #e91e63);
-    border: none;
-}
-
-html.theme-artistic .btn-primary:hover:not(:disabled) {
-    background: linear-gradient(45deg, var(--color-primary-hover), #c2185b);
-    transform: translateY(-2px);
-}
-
-html.theme-artistic table {
-    border-collapse: separate;
-    border-spacing: 0;
-}
-
-html.theme-artistic th {
-    background: linear-gradient(to bottom, var(--color-primary), var(--color-secondary));
-    color: white;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
-}
-
-html.theme-artistic tr:nth-child(even) {
-    background-color: rgba(255, 255, 255, 0.7);
-}
-
-/* --- Thème Vintage --- */
-html.theme-vintage {
-    --color-primary: #b58900;
-    --color-primary-hover: #cb4b16;
-    --color-secondary: #93a1a1;
-    --color-success: #859900;
-    --color-danger: #dc322f;
-    --color-info: #268bd2;
-
-    --color-text-primary: #586e75;
-    --color-text-secondary: #839496;
-    --color-text-on-primary: #fdf6e3;
-    --color-background: #fdf6e3;
-    --color-surface: #eee8d5;
-    --color-border: #93a1a1;
-    --color-header-bg: #eee8d5;
-    --color-table-hover: rgba(181, 137, 0, 0.08);
-
-    --font-family-body: "Source Sans Pro", sans-serif;
-    --font-family-heading: "Lora", serif;
-    --border-radius: 0.2rem;
-    --box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-}
 
 /* --- Styles de base et réinitialisation --- */
 *,
@@ -254,10 +151,13 @@ footer {
 nav ul {
     list-style-type: none;
     padding: 0;
-    margin: 0;
+    margin: 1rem 0 0; /* Ajout d'une marge pour séparer du titre */
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem; /* Espace entre les liens de navigation */
 }
 nav li {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0; /* Annule la marge inférieure car gérée par le gap */
 }
 nav ul strong {
     display: block;
@@ -793,10 +693,6 @@ html.theme-dark .enseignant-fictif {
     background-color: #2b3a4a;
     border-left-color: #4f7396;
 }
-html.theme-vintage .enseignant-fictif {
-    background-color: #f5f0e3;
-    border-left-color: #ccc8bc;
-}
 .enseignant-card.detail-visible {
     border-left-color: var(--color-primary);
     box-shadow: var(--box-shadow);
@@ -806,9 +702,6 @@ html.theme-light .enseignant-card.detail-visible {
 }
 html.theme-dark .enseignant-card.detail-visible {
     background-color: #344050;
-}
-html.theme-vintage .enseignant-card.detail-visible {
-    background-color: #e6e0ce;
 }
 .entete-enseignant {
     display: flex;
@@ -997,12 +890,6 @@ html.theme-dark .enseignant-fictif-sommaire {
 }
 html.theme-dark .enseignant-temps-partiel-sommaire {
     background-color: #4b4431;
-}
-html.theme-vintage .enseignant-fictif-sommaire {
-    background-color: #f5f0e3;
-}
-html.theme-vintage .enseignant-temps-partiel-sommaire {
-    background-color: #f9f4d7;
 }
 
 /* --- Icônes (Verrou, Calculatrice, etc.) --- */

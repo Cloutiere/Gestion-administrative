@@ -18,8 +18,6 @@ import psycopg2.sql
 from flask import Flask, current_app, g
 
 # --- Gestion de la connexion à la base de données ---
-# La logique de connexion est désormais encapsulée dans get_db_connection_string
-# pour gérer dynamiquement les environnements de production et de développement.
 
 
 def get_db_connection_string() -> str:
@@ -36,10 +34,7 @@ def get_db_connection_string() -> str:
     """
     app_env = os.environ.get("APP_ENV", "development")
 
-    if app_env == "production":
-        prefix = "PROD_"
-    else:
-        prefix = "DEV_"
+    prefix = "PROD_" if app_env == "production" else "DEV_"
 
     if current_app:
         # Log l'environnement utilisé pour la clarté lors du débogage
@@ -63,7 +58,7 @@ def get_db_connection_string() -> str:
             }.items()
             if not val
         ]
-        log_message = f"Variables de connexion à la base de données manquantes pour " f"l'environnement '{app_env}': {', '.join(missing_vars)}"
+        log_message = f"Variables de connexion à la base de données manquantes pour l'environnement '{app_env}': {', '.join(missing_vars)}"
         if current_app:
             current_app.logger.critical(log_message)
         # Retourner une chaîne vide provoquera une erreur contrôlée dans get_db
@@ -84,7 +79,8 @@ def get_db():
                 return None
             g.db = psycopg2.connect(conn_string)
         except psycopg2.OperationalError as e:
-            current_app.logger.error(f"Erreur de connexion à la base de données: {e}")
+            if current_app:
+                current_app.logger.error(f"Erreur de connexion à la base de données: {e}")
             g.db = None
     return g.db
 
@@ -379,6 +375,39 @@ def get_champ_details(champ_no: str, annee_id: int) -> dict[str, Any] | None:
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_champ_details pour {champ_no}, annee {annee_id}: {e}")
         return None
+
+
+def get_all_champ_statuses_for_year(annee_id: int) -> dict[str, dict[str, bool]]:
+    """
+    Récupère les statuts (verrouillé/confirmé) de tous les champs pour une année.
+
+    Args:
+        annee_id: L'ID de l'année scolaire.
+
+    Returns:
+        Un dictionnaire mappant champ_no à un dictionnaire de ses statuts.
+        Ex: {"10A": {"est_verrouille": True, "est_confirme": False}, ...}
+    """
+    db = get_db()
+    if not db:
+        return {}
+    statuses = {}
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT champ_no, est_verrouille, est_confirme
+                FROM champ_annee_statuts
+                WHERE annee_id = %s;
+                """,
+                (annee_id,),
+            )
+            for row in cur.fetchall():
+                statuses[row["champ_no"]] = {"est_verrouille": row["est_verrouille"], "est_confirme": row["est_confirme"]}
+        return statuses
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_all_champ_statuses_for_year pour annee {annee_id}: {e}")
+        return {}
 
 
 def _toggle_champ_annee_status(champ_no: str, annee_id: int, status_column: str) -> bool | None:

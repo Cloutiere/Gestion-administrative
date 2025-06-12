@@ -3,25 +3,18 @@
 Ce module contient le Blueprint pour les routes d'authentification.
 
 Il gère la connexion, la déconnexion et l'inscription des utilisateurs.
-Toutes les routes ici sont préfixées par `/auth` (bien que nous ayons omis le préfixe
-pour garder les URL `/login`, `/logout`, etc., simples).
 """
 
 from typing import Any
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_user, logout_user
-
-# Importe directement les fonctions de hachage depuis werkzeug
 from werkzeug.security import check_password_hash, generate_password_hash
 
-# Importe les fonctions de base de données et les modèles nécessaires
 from . import database as db
 from .models import User
 
 # Crée un Blueprint nommé 'auth'.
-# Le premier argument est le nom du blueprint.
-# Le deuxième est le nom du module où il se trouve, pour que Flask sache où trouver les templates.
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
@@ -30,7 +23,8 @@ def login() -> Any:
     """Gère la connexion des utilisateurs."""
     if current_user.is_authenticated:
         flash("Vous êtes déjà connecté(e).", "info")
-        return redirect(url_for("views.index"))
+        # Redirige vers le tableau de bord si déjà connecté.
+        return redirect(url_for("admin.page_sommaire"))
 
     # Vérifie si c'est le premier utilisateur pour afficher le lien d'inscription.
     first_user = db.get_users_count() == 0
@@ -40,7 +34,6 @@ def login() -> Any:
         password = request.form["password"].strip()
         user_data = db.get_user_by_username(username)
 
-        # Utilise la fonction importée directement
         if user_data and check_password_hash(user_data["password_hash"], password):
             # Les données de l'utilisateur ont été trouvées, maintenant on charge l'objet User complet
             user_obj_data = db.get_user_by_id(user_data["id"])
@@ -54,13 +47,9 @@ def login() -> Any:
                 login_user(user)
                 flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
 
-                # Redirection intelligente
-                if not user.is_admin and user.allowed_champs and len(user.allowed_champs) == 1:
-                    return redirect(url_for("views.page_champ", champ_no=user.allowed_champs[0]))
-
+                # Redirection systématique vers le tableau de bord global.
                 next_page = request.args.get("next")
-                # Redirige vers la page d'accueil du blueprint 'views'
-                return redirect(next_page or url_for("views.index"))
+                return redirect(next_page or url_for("admin.page_sommaire"))
 
         flash("Nom d'utilisateur ou mot de passe invalide.", "error")
 
@@ -81,8 +70,7 @@ def register() -> Any:
     user_count = db.get_users_count()
 
     # Si des utilisateurs existent déjà, l'inscription est désactivée.
-    # L'admin peut créer des utilisateurs via une autre page.
-    if user_count > 0:
+    if user_count > 0 and not current_user.is_authenticated:
         flash("L'inscription directe est désactivée. Veuillez contacter un administrateur.", "error")
         return redirect(url_for("auth.login"))
 
@@ -98,7 +86,6 @@ def register() -> Any:
         elif len(password) < 6:
             flash("Le mot de passe doit contenir au moins 6 caractères.", "error")
         else:
-            # Utilise la fonction importée directement
             hashed_pwd = generate_password_hash(password)
             # Le premier utilisateur est toujours admin.
             user = db.create_user(username, hashed_pwd, is_admin=True)
@@ -108,4 +95,4 @@ def register() -> Any:
             flash("Ce nom d'utilisateur est déjà pris.", "error")
 
     # Affiche le formulaire d'inscription pour le premier utilisateur.
-    return render_template("register.html", first_user=True, username=request.form.get("username", ""))
+    return render_template("register.html", first_user=(user_count == 0), username=request.form.get("username", ""))

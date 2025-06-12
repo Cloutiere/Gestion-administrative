@@ -22,9 +22,9 @@
         </h1>
         <nav>
             <ul>
-                <li><a href="{{ url_for('views.index') }}">Accueil</a></li>
                 {% if current_user.is_authenticated and current_user.is_admin %}
-                    <li><a href="{{ url_for('admin.page_sommaire') }}">Sommaire Global</a></li>
+                    <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+                    <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                     <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
                 {% endif %}
                 {% if current_user.is_authenticated %}
@@ -37,7 +37,6 @@
         <div class="theme-switcher no-print">
             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
             <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
-            <button id="theme-btn-vintage" data-theme="vintage" title="Activer le thème vintage">Vintage</button>
         </div>
     </header>
 
@@ -375,7 +374,7 @@
             });
         });
 
-        // --- NOUVEAU : Logique de gestion des années scolaires ---
+        // --- Logique de gestion des années scolaires ---
         const gestionAnneesContainer = document.getElementById('gestion-annees-container');
         const formCreerAnnee = document.getElementById('form-creer-annee');
 
@@ -497,8 +496,6 @@
                 data.nbperiodes = parseFloat(data.nbperiodes);
                 data.nbgroupeinitial = parseInt(data.nbgroupeinitial, 10);
                 data.estcoursautre = coursForm.querySelector('#form-estcoursautre').checked;
-
-                // CORRECTION: Lire 'mode' et 'originalCodeCours' directement depuis les éléments du formulaire
                 const mode = coursForm.querySelector('#cours-mode').value;
                 const originalCodeCours = coursForm.querySelector('#original-codecours').value;
 
@@ -585,8 +582,6 @@
                 const formData = new FormData(enseignantForm);
                 const data = Object.fromEntries(formData.entries()); // Contient les champs avec 'name'
                 data.esttempsplein = enseignantForm.querySelector('#form-esttempsplein').checked;
-
-                // CORRECTION: Lire 'mode' et 'enseignantId' directement depuis les éléments du formulaire
                 const mode = enseignantForm.querySelector('#enseignant-mode').value;
                 const enseignantId = enseignantForm.querySelector('#enseignant-id').value;
 

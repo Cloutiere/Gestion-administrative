@@ -3,7 +3,7 @@
 Ce module contient le Blueprint pour les vues principales de l'application.
 
 Il gère les routes qui ne sont ni liées à l'authentification ni à l'administration,
-comme la page d'accueil et la page de visualisation d'un champ.
+comme la page de visualisation d'un champ.
 Toutes les données affichées sont relatives à l'année scolaire active.
 """
 
@@ -23,28 +23,12 @@ bp = Blueprint("views", __name__)
 @login_required
 def index() -> Any:
     """
-    Affiche la page d'accueil, listant les champs accessibles à l'utilisateur.
-    Si aucune année scolaire n'est configurée, guide l'administrateur.
+    Page d'accueil de l'application.
+    Redirige tous les utilisateurs authentifiés vers le tableau de bord global.
     """
-    # Si aucune année n'est active, on ne peut rien afficher.
-    if not g.annee_active:
-        if current_user.is_admin:
-            flash("Aucune année scolaire n'est active. Veuillez en créer une dans la page 'Administration (Données)'.", "warning")
-        else:
-            flash("L'application n'est pas encore configurée pour l'année en cours. Veuillez contacter un administrateur.", "error")
-        return render_template("index.html", champs=[])
-
-    all_champs = db.get_all_champs()
-    if current_user.is_admin:
-        champs_accessible = all_champs
-    else:
-        champs_accessible = [champ for champ in all_champs if current_user.can_access_champ(champ["champno"])]
-
-    # Si un utilisateur non-admin n'a accès qu'à un seul champ, le rediriger directement.
-    if not current_user.is_admin and len(champs_accessible) == 1:
-        return redirect(url_for("views.page_champ", champ_no=champs_accessible[0]["champno"]))
-
-    return render_template("index.html", champs=champs_accessible)
+    # La page 'index.html' n'existe plus. On redirige tout le monde vers le tableau de bord.
+    # Les droits d'accès sont gérés par le template 'page_sommaire.html' lui-même.
+    return redirect(url_for("admin.page_sommaire"))
 
 
 @bp.route("/champ/<string:champ_no>")
@@ -57,20 +41,21 @@ def page_champ(champ_no: str) -> Any:
     # Vérification cruciale : pas de données sans année active.
     if not g.annee_active:
         flash("Impossible d'afficher le champ : aucune année scolaire n'est active.", "error")
-        return redirect(url_for("views.index"))
+        # Redirige vers le tableau de bord qui affichera un message approprié.
+        return redirect(url_for("admin.page_sommaire"))
 
     annee_id = g.annee_active["annee_id"]
 
     # Vérifie si l'utilisateur est autorisé à voir ce champ.
     if not current_user.can_access_champ(champ_no):
         flash("Vous n'avez pas la permission d'accéder à ce champ.", "error")
-        return redirect(url_for("views.index"))
+        return redirect(url_for("admin.page_sommaire"))
 
     # Récupère les détails du champ, y compris son statut de verrouillage pour l'année active.
     champ_details = db.get_champ_details(champ_no, annee_id)
     if not champ_details:
         flash(f"Le champ {champ_no} n'a pas été trouvé.", "error")
-        return redirect(url_for("views.index"))
+        return redirect(url_for("admin.page_sommaire"))
 
     # Récupération des données pour l'année active.
     enseignants_du_champ = db.get_enseignants_par_champ(champ_no, annee_id)
