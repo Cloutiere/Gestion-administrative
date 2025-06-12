@@ -64,8 +64,7 @@ CREATE TABLE public.attributionscours (
     attributionid integer NOT NULL,
     enseignantid integer NOT NULL,
     codecours text NOT NULL,
-    -- L'année scolaire est implicite via la clé étrangère vers enseignants (qui contient annee_id)
-    annee_id_cours integer NOT NULL, -- Ajout pour la clé étrangère composite vers Cours
+    annee_id_cours integer NOT NULL, -- Clé étrangère composite vers Cours pour l'année correcte
     nbgroupespris integer DEFAULT 1 NOT NULL,
     CONSTRAINT attributionscours_nbgroupespris_check CHECK ((nbgroupespris > 0))
 );
@@ -99,14 +98,30 @@ ALTER SEQUENCE public.attributionscours_attributionid_seq OWNED BY public.attrib
 -- Name: champs; Type: TABLE; Schema: public; Owner: neondb_owner
 --
 
+-- Table de référence pour les champs (disciplines ou départements)
 CREATE TABLE public.champs (
     champno text NOT NULL,
-    champnom text NOT NULL,
-    estverrouille boolean DEFAULT false NOT NULL
+    champnom text NOT NULL
 );
 
 
 ALTER TABLE public.champs OWNER TO neondb_owner;
+
+--
+-- Name: champ_annee_statuts; Type: TABLE; Schema: public; Owner: neondb_owner
+--
+
+-- Table pour gérer les statuts (verrouillé/confirmé) d'un champ pour une année scolaire spécifique.
+CREATE TABLE public.champ_annee_statuts (
+    champ_no text NOT NULL,
+    annee_id integer NOT NULL,
+    est_verrouille boolean DEFAULT false NOT NULL,
+    est_confirme boolean DEFAULT false NOT NULL
+);
+
+
+ALTER TABLE public.champ_annee_statuts OWNER TO neondb_owner;
+
 
 --
 -- Name: cours; Type: TABLE; Schema: public; Owner: neondb_owner
@@ -270,6 +285,14 @@ ALTER TABLE ONLY public.attributionscours
 
 
 --
+-- Name: champ_annee_statuts champ_annee_statuts_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.champ_annee_statuts
+    ADD CONSTRAINT champ_annee_statuts_pkey PRIMARY KEY (champ_no, annee_id);
+
+
+--
 -- Name: champs champs_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
 --
 
@@ -374,6 +397,22 @@ ALTER TABLE ONLY public.attributionscours
 
 ALTER TABLE ONLY public.attributionscours
     ADD CONSTRAINT attributionscours_enseignantid_fkey FOREIGN KEY (enseignantid) REFERENCES public.enseignants(enseignantid) ON DELETE CASCADE;
+
+
+--
+-- Name: champ_annee_statuts champ_annee_statuts_annee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.champ_annee_statuts
+    ADD CONSTRAINT champ_annee_statuts_annee_id_fkey FOREIGN KEY (annee_id) REFERENCES public.anneesscolaires(annee_id) ON DELETE CASCADE;
+
+
+--
+-- Name: champ_annee_statuts champ_annee_statuts_champ_no_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.champ_annee_statuts
+    ADD CONSTRAINT champ_annee_statuts_champ_no_fkey FOREIGN KEY (champ_no) REFERENCES public.champs(champno) ON DELETE CASCADE;
 
 
 --

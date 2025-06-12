@@ -195,6 +195,7 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
             user_data = cur.fetchone()
             if user_data:
                 user_dict = dict(user_data)
+                # S'assure que allowed_champs est une liste, même si ARRAY_AGG retourne NULL.
                 user_dict["allowed_champs"] = user_dict["allowed_champs"] or []
                 return user_dict
             return None
@@ -291,6 +292,7 @@ def get_all_users_with_access_info() -> list[dict[str, Any]]:
             users_data = []
             for row in cur.fetchall():
                 user_dict = dict(row)
+                # S'assure que allowed_champs est une liste, même si ARRAY_AGG retourne NULL.
                 user_dict["allowed_champs"] = user_dict["allowed_champs"] or []
                 users_data.append(user_dict)
             return users_data
@@ -343,7 +345,7 @@ def get_all_champs() -> list[dict[str, Any]]:
         return []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # Les statuts (verrouillé/confirmé) sont maintenant dans champ_annee_statuts
+            # Les statuts sont maintenant dans la table champ_annee_statuts
             cur.execute("SELECT ChampNo, ChampNom FROM Champs ORDER BY ChampNo;")
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
@@ -1118,3 +1120,62 @@ def delete_all_enseignants_for_year(annee_id: int) -> int:
         db.rollback()
         current_app.logger.error(f"Erreur DAO delete_all_enseignants_for_year pour annee {annee_id}: {e}")
         raise
+
+
+def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
+    """
+    Récupère toutes les attributions de cours pour une année donnée, formatées pour l'export.
+
+    Cette fonction joint les informations des attributions, enseignants, cours et champs.
+    Elle regroupe les attributions par enseignant/cours et somme le nombre de groupes.
+    Elle exclut les enseignants fictifs et trie les résultats pour l'export.
+
+    Args:
+        annee_id: L'ID de l'année scolaire à exporter.
+
+    Returns:
+        Une liste de dictionnaires, chaque dictionnaire représentant une ligne
+        de données agrégées pour le fichier Excel.
+    """
+    db = get_db()
+    if not db:
+        return []
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    ch.ChampNom,
+                    e.Nom,
+                    e.Prenom,
+                    c.CodeCours,
+                    c.CoursDescriptif,
+                    c.EstCoursAutre,
+                    SUM(ac.NbGroupesPris) AS total_groupes_pris,
+                    c.NbPeriodes
+                FROM AttributionsCours AS ac
+                JOIN Enseignants AS e ON ac.EnseignantID = e.EnseignantID
+                JOIN Cours AS c ON ac.CodeCours = c.CodeCours AND ac.annee_id_cours = c.annee_id
+                JOIN Champs AS ch ON c.ChampNo = ch.ChampNo
+                WHERE
+                    e.annee_id = %s AND e.EstFictif = FALSE
+                GROUP BY
+                    ch.ChampNom,
+                    e.Nom,
+                    e.Prenom,
+                    c.CodeCours,
+                    c.CoursDescriptif,
+                    c.EstCoursAutre,
+                    c.NbPeriodes
+                ORDER BY
+                    ch.ChampNom ASC,
+                    e.Nom ASC,
+                    e.Prenom ASC,
+                    c.CodeCours ASC;
+                """,
+                (annee_id,),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_all_attributions_for_export pour annee {annee_id}: {e}")
+        return []

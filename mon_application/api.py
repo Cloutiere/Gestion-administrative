@@ -43,9 +43,9 @@ def api_ajouter_attribution() -> Any:
             return jsonify({"success": False, "message": "Accès non autorisé à ce champ."}), 403
 
         # Étape 2: Vérifier les règles métier (champ verrouillé pour l'année, groupes restants)
-        # verrou_info["estverrouille"] provient maintenant de la table champ_annee_statuts
-        # et est donc spécifique à l'année de l'enseignant.
-        if verrou_info["estverrouille"] and not verrou_info["estfictif"]:
+        # CORRECTION: Remplacement de l'accès direct par .get() et utilisation de la bonne clé ('est_verrouille')
+        # pour éviter une KeyError. Le statut est spécifique à l'année de l'enseignant.
+        if verrou_info.get("est_verrouille") and not verrou_info.get("estfictif"):
             return jsonify({"success": False, "message": "Les modifications sont désactivées car le champ est verrouillé."}), 403
         if db.get_groupes_restants_pour_cours(code_cours, annee_id) < 1:
             return jsonify({"success": False, "message": "Plus de groupes disponibles pour ce cours cette année."}), 409
@@ -96,8 +96,9 @@ def api_supprimer_attribution() -> Any:
             return jsonify({"success": False, "message": "Accès non autorisé à ce champ."}), 403
 
         # Étape 2: Vérifier les règles métier (champ verrouillé pour l'année de l'attribution)
-        # attr_info["estverrouille"] est spécifique à l'année de l'attribution.
-        if attr_info["estverrouille"] and not attr_info["estfictif"]:
+        # CORRECTION: Remplacement de l'accès direct par .get() et utilisation de la bonne clé ('est_verrouille')
+        # pour éviter une KeyError. Le statut est spécifique à l'année de l'attribution.
+        if attr_info.get("est_verrouille") and not attr_info.get("estfictif"):
             return jsonify({"success": False, "message": "Les modifications sont désactivées car le champ est verrouillé."}), 403
 
         # Étape 3: Exécuter l'action

@@ -25,7 +25,9 @@
             fill: #ccc;
         }
         .details-link-container {
-            text-align: right;
+            display: flex; /* Utilise flexbox pour aligner les éléments */
+            justify-content: flex-end; /* Aligne les éléments à droite */
+            gap: 1rem; /* Espace entre les boutons */
             margin-bottom: 1rem;
         }
         .details-link-container a {
@@ -35,9 +37,17 @@
             text-decoration: none;
             border-radius: 4px;
             font-weight: bold;
+            display: inline-block; /* Assure que les liens se comportent comme des blocs pour le padding */
         }
         .details-link-container a:hover {
             background-color: var(--color-primary-dark);
+        }
+        /* Style spécifique pour le bouton d'export */
+        .details-link-container a.export-button {
+            background-color: var(--color-secondary); /* Couleur verte ou autre pour le distinguer */
+        }
+        .details-link-container a.export-button:hover {
+            background-color: var(--color-secondary-dark);
         }
     </style>
 
@@ -122,9 +132,10 @@
                 <div>
                     <h2>Moyennes par champ (temps plein)</h2>
 
-                    <!-- Lien vers le détail des tâches -->
+                    <!-- Liens d'action -->
                     <div class="details-link-container no-print">
-                        <a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches par enseignant</a>
+                        <a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches</a>
+                        <a href="{{ url_for('admin.exporter_taches_excel') }}" class="export-button">Exporter les tâches (Excel)</a>
                     </div>
 
                     {% if moyennes_par_champ %}
@@ -287,11 +298,11 @@
             // Calcul et affichage du "Chiffre magique" et du "Solde Final"
             const chiffreMagique = (totals.total_enseignants_tp || 0) * 0.6;
             document.getElementById('valeur-chiffre-magique').textContent = formatPeriodes(chiffreMagique);
-            
+
             const soldeFinal = totalConfirme - chiffreMagique;
             const soldeCell = document.getElementById('valeur-solde-final');
             soldeCell.textContent = formatPeriodes(soldeFinal);
-            
+
             // Appliquer la couleur en fonction du solde
             soldeCell.classList.remove('solde-positif', 'solde-negatif');
             if (soldeFinal < 0) {
@@ -408,7 +419,7 @@
                     confirmIcon.dataset.champNo = champ_no;
                     mettreAJourIconeConfirmation(confirmIcon, data.est_confirme);
                     cellConfirme.appendChild(confirmIcon);
-                    
+
                     const cellDiffConfirme = row.insertCell();
                     if (data.est_confirme) {
                         cellDiffConfirme.textContent = formatPeriodes(data.periodes_magiques);
@@ -418,7 +429,7 @@
                     }
                 });
             }
-            
+
             // Retourne le total calculé pour que la fonction appelante puisse l'utiliser.
             return totalPeriodesMagiquesConfirmees;
         }

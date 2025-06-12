@@ -7,13 +7,27 @@ pour les opérations qui nécessitent des privilèges d'administrateur.
 Toutes les opérations sont désormais dépendantes de l'année scolaire active.
 """
 
+import io
 from typing import Any, cast
 
 import openpyxl
 import psycopg2
 import psycopg2.extras
-from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    Blueprint,
+    Response,
+    current_app,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_login import current_user
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 from psycopg2.extensions import connection
@@ -291,7 +305,13 @@ def api_get_donnees_sommaire() -> Any:
         )
 
     annee_id = g.annee_active["annee_id"]
-    enseignants_groupes, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = calculer_donnees_sommaire(annee_id)
+    (
+        enseignants_groupes,
+        moyennes_champs,
+        moyenne_gen,
+        moyenne_prelim_conf,
+        grand_totals_data,
+    ) = calculer_donnees_sommaire(annee_id)
     return jsonify(
         enseignants_par_champ=enseignants_groupes,
         moyennes_par_champ=moyennes_champs,
@@ -502,11 +522,9 @@ def api_importer_cours_excel() -> Any:
     nouveaux_cours = []
     try:
         workbook = openpyxl.load_workbook(file.stream)
-        sheet = workbook.active
-        if not isinstance(sheet, Worksheet) or sheet.max_row <= 1:
+        sheet = cast(Worksheet, workbook.active)
+        if sheet.max_row <= 1:
             raise ValueError("Fichier Excel vide ou ne contient que l'en-tête.")
-
-        _header = [cell.value for cell in sheet[1]]
 
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
@@ -519,7 +537,7 @@ def api_importer_cours_excel() -> Any:
             desc_raw = values[3]
             nb_grp_raw = values[4]
             nb_per_raw = values[5]
-            est_autre_raw = values[7]
+            est_autre_raw = values[7] if len(values) > 7 else None
 
             if not all([champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw is not None, nb_per_raw is not None]):
                 flash(
@@ -534,8 +552,8 @@ def api_importer_cours_excel() -> Any:
                 desc = str(desc_raw).strip()
                 nb_grp = int(float(str(nb_grp_raw).replace(",", ".")))
                 nb_per = float(str(nb_per_raw).replace(",", "."))
-                est_autre = str(est_autre_raw).strip().upper() in ("VRAI", "TRUE") if est_autre_raw is not None else False
-            except ValueError as ve:
+                est_autre = str(est_autre_raw).strip().upper() in ("VRAI", "TRUE", "OUI", "YES", "1") if est_autre_raw is not None else False
+            except (ValueError, TypeError) as ve:
                 flash(
                     f"Ligne {row_idx}: Erreur de type de données ({ve}). Vérifiez les nombres et le format 'VRAI/FAUX'.",
                     "warning",
@@ -638,8 +656,8 @@ def api_importer_enseignants_excel() -> Any:
     nouveaux_enseignants = []
     try:
         workbook = openpyxl.load_workbook(file.stream)
-        sheet = workbook.active
-        if not isinstance(sheet, Worksheet) or sheet.max_row <= 1:
+        sheet = cast(Worksheet, workbook.active)
+        if sheet.max_row <= 1:
             raise ValueError("Fichier Excel vide ou ne contient que l'en-tête.")
 
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
@@ -661,8 +679,8 @@ def api_importer_enseignants_excel() -> Any:
                 champ_no = str(champ_no_raw).strip()
                 nom_clean = str(nom_raw).strip()
                 prenom_clean = str(prenom_raw).strip()
-                est_temps_plein = str(temps_plein_raw).strip().upper() in ("VRAI", "TRUE")
-            except ValueError as ve_ens:
+                est_temps_plein = str(temps_plein_raw).strip().upper() in ("VRAI", "TRUE", "OUI", "YES", "1")
+            except (ValueError, TypeError) as ve_ens:
                 flash(f"Ligne enseignant {row_idx}: Erreur de conversion de données ({ve_ens}).", "warning")
                 continue
 
@@ -735,6 +753,138 @@ def api_importer_enseignants_excel() -> Any:
         flash(f"Erreur inconnue: {e_final_ens}. L'importation a été annulée.", "error")
 
     return redirect(url_for("admin.page_administration_donnees"))
+
+
+@bp.route("/exporter_taches_excel")
+@admin_required
+def exporter_taches_excel() -> Any:
+    """
+    Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel.
+
+    Cette route génère un fichier .xlsx formaté contenant les détails de chaque attribution
+    pour l'année en cours, en excluant les enseignants fictifs ("tâches restantes").
+    La couleur de fond des lignes alterne à chaque nouvel enseignant pour une meilleure lisibilité.
+    Le fichier est ensuite proposé au téléchargement.
+    """
+    if not g.annee_active:
+        flash("Exportation impossible : aucune année scolaire n'est active.", "error")
+        return redirect(url_for("admin.page_sommaire"))
+
+    annee_id = g.annee_active["annee_id"]
+    annee_libelle = g.annee_active["libelle_annee"]
+
+    attributions = db.get_all_attributions_for_export(annee_id)
+
+    if not attributions:
+        flash(f"Aucune tâche attribuée à exporter pour l'année '{annee_libelle}'.", "warning")
+        return redirect(url_for("admin.page_sommaire"))
+
+    workbook = openpyxl.Workbook()
+    sheet = cast(Worksheet, workbook.active)
+    sheet.title = f"Tâches {annee_libelle}"
+
+    # --- Définition des styles ---
+    header_font = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+    header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+
+    cell_font = Font(name="Calibri", size=11)
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    number_format_periods = "0.00"
+
+    # --- Définition des styles d'alternance de couleur ---
+    fill_color_a = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")  # Bleu clair
+    fill_color_b = PatternFill(fill_type=None)  # Pas de couleur de fond (blanc)
+
+    # --- Écriture des en-têtes avec style ---
+    headers = [
+        "Champ",
+        "Enseignant",
+        "Code cours",
+        "Description",
+        "Cours autre",
+        "Nb. grp.",
+        "Pér./ groupe",
+        "Pér. Total",
+        "Information",
+        "Plan B",
+    ]
+    sheet.append(headers)
+
+    for cell in sheet[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+
+    # --- Écriture des données avec style et couleur alternée ---
+    previous_teacher_name = None
+    use_fill_color_a = True
+
+    for attr in attributions:
+        nom_enseignant = f"{attr['nom']}, {attr['prenom']}"
+
+        if nom_enseignant != previous_teacher_name:
+            use_fill_color_a = not use_fill_color_a
+
+        chosen_fill = fill_color_a if use_fill_color_a else fill_color_b
+
+        est_autre = "Oui" if attr["estcoursautre"] else "Non"
+        nb_groupes = attr["total_groupes_pris"]
+        per_groupe = attr["nbperiodes"]
+        per_total = int(nb_groupes) * float(per_groupe)
+
+        row_data = [
+            attr["champnom"],
+            nom_enseignant,
+            attr["codecours"],
+            attr["coursdescriptif"],
+            est_autre,
+            nb_groupes,
+            per_groupe,
+            per_total,
+            "",
+            "",
+        ]
+        sheet.append(row_data)
+
+        current_row = sheet.max_row
+        for col_idx, _cell_value in enumerate(row_data, 1):
+            cell = sheet.cell(row=current_row, column=col_idx)
+
+            cell.font = cell_font
+            if col_idx in [5, 6, 7, 8]:
+                cell.alignment = center_align
+            else:
+                cell.alignment = left_align
+            if col_idx in [7, 8]:
+                cell.number_format = number_format_periods
+
+            cell.fill = chosen_fill
+
+        previous_teacher_name = nom_enseignant
+
+    # --- Ajustement final de la feuille ---
+    column_widths = {"A": 25, "B": 25, "C": 15, "D": 40, "E": 12, "F": 10, "G": 12, "H": 12, "I": 15, "J": 15}
+    for col_letter, width in column_widths.items():
+        sheet.column_dimensions[col_letter].width = width
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
+    # --- Génération de la réponse HTTP ---
+    mem_file = io.BytesIO()
+    workbook.save(mem_file)
+    mem_file.seek(0)
+
+    filename = f"export_taches_{annee_libelle}.xlsx"
+    current_app.logger.info(f"Génération du fichier d'export formaté et agrégé '{filename}' pour l'année ID {annee_id}.")
+
+    return Response(
+        mem_file,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # --- API non modifiées car indépendantes de l'année ---
