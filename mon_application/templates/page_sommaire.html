@@ -121,12 +121,12 @@
 
                 <div>
                     <h2>Moyennes par champ (temps plein)</h2>
-                    
+
                     <!-- Lien vers le détail des tâches -->
                     <div class="details-link-container no-print">
                         <a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches par enseignant</a>
                     </div>
-                    
+
                     {% if moyennes_par_champ %}
                     <table id="table-moyennes-par-champ">
                         <thead>
@@ -241,7 +241,7 @@
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }
                 const data = await response.json();
-                
+
                 // Mettre à jour les données du tableau et les totaux
                 mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
                 if (data.grand_totals) {
@@ -352,7 +352,7 @@
                     if (data.est_confirme) row.classList.add('champ-confirme');
 
                     row.insertCell().textContent = champ_no;
-                    
+
                     // Rendre le nom du champ cliquable
                     const cellNomChamp = row.insertCell();
                     const link = document.createElement('a');

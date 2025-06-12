@@ -27,78 +27,102 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 # --- Fonctions utilitaires pour le sommaire (maintenant dépendantes de l'année) ---
-def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], float, float, dict[str, float]]:
+def calculer_donnees_sommaire(
+    annee_id: int,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], float, float, dict[str, float]]:
     """
     Calcule les données agrégées pour la page sommaire globale pour une année donnée.
 
+    Cette fonction adopte une approche "centrée sur le champ" :
+    1. Récupère tous les champs définis dans l'établissement.
+    2. Initialise une structure de données pour chaque champ avec des statistiques à zéro.
+    3. Met à jour ces statistiques en parcourant les enseignants de l'année active.
+    Cela garantit que tous les champs sont présents dans le résultat, même ceux
+    sans enseignant assigné pour l'année en cours.
+
     Retourne:
         Un tuple contenant :
-        - La liste des enseignants groupés par champ.
+        - La liste des enseignants groupés par champ (pour la page de détail).
         - Un dictionnaire des moyennes et totaux par champ, incluant les statuts.
         - La moyenne générale des périodes pour les enseignants à temps plein.
         - La moyenne "Préliminaire confirmée" (enseignants TP des champs confirmés).
         - Un dictionnaire contenant les totaux globaux pour le pied de tableau.
     """
+    # Étape 1 : Récupérer toutes les données brutes nécessaires de la base de données.
+    tous_les_champs = db.get_all_champs()
+    statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
     tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
 
-    enseignants_par_champ_temp: dict[str, Any] = {}
+    # Étape 2 : Initialiser les structures de données en se basant sur TOUS les champs.
+    # C'est le cœur de la correction pour garantir que chaque champ soit listé.
     moyennes_par_champ_calculees: dict[str, Any] = {}
+    for champ in tous_les_champs:
+        # CORRECTION: Utilisation de clés en minuscules ('champno', 'champnom')
+        champ_no = str(champ["champno"])
+        statut = statuts_champs.get(champ_no, {"est_verrouille": False, "est_confirme": False})
+        moyennes_par_champ_calculees[champ_no] = {
+            "champ_nom": champ["champnom"],
+            "est_verrouille": statut["est_verrouille"],
+            "est_confirme": statut["est_confirme"],
+            "nb_enseignants_tp": 0,
+            "periodes_choisies_tp": 0.0,
+            "moyenne": 0.0,
+            "periodes_magiques": 0.0,
+        }
 
-    total_enseignants_tp_etablissement = 0
-    total_periodes_choisies_tp_etablissement = 0.0
-    total_periodes_magiques_etablissement = 0.0
+    # Structure pour la page de détail des tâches (doit aussi inclure tous les champs).
+    enseignants_par_champ_temp: dict[str, Any] = {
+        # CORRECTION: Utilisation de clés en minuscules ('champno', 'champnom')
+        str(champ["champno"]): {
+            "champno": str(champ["champno"]),
+            "champnom": champ["champnom"],
+            "enseignants": [],
+            "est_verrouille": moyennes_par_champ_calculees[str(champ["champno"])]["est_verrouille"],
+            "est_confirme": moyennes_par_champ_calculees[str(champ["champno"])]["est_confirme"],
+        }
+        for champ in tous_les_champs
+    }
 
+    # Étape 3 : Parcourir les enseignants pour peupler les structures initialisées.
+    for ens in tous_enseignants_details:
+        champ_no = ens["champno"]
+        if champ_no in enseignants_par_champ_temp:
+            enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
+
+        # Mettre à jour les statistiques uniquement pour les enseignants pertinents.
+        if ens["compte_pour_moyenne_champ"] and champ_no in moyennes_par_champ_calculees:
+            moyennes_par_champ_calculees[champ_no]["nb_enseignants_tp"] += 1
+            moyennes_par_champ_calculees[champ_no]["periodes_choisies_tp"] += ens["total_periodes"]
+
+    # Étape 4 : Calculer les moyennes, totaux et agrégats finaux.
     total_periodes_global_tp = 0.0
     nb_enseignants_tp_global = 0
     total_periodes_confirme_tp = 0.0
     nb_enseignants_confirme_tp = 0
+    total_enseignants_tp_etablissement = 0
+    total_periodes_choisies_tp_etablissement = 0.0
+    total_periodes_magiques_etablissement = 0.0
 
-    for ens in tous_enseignants_details:
-        champ_no = ens["champno"]
-        if champ_no not in enseignants_par_champ_temp:
-            enseignants_par_champ_temp[champ_no] = {
-                "champno": champ_no,
-                "champnom": ens["champnom"],
-                "enseignants": [],
-                "est_verrouille": ens["est_verrouille"],
-                "est_confirme": ens["est_confirme"],
-            }
-        enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
+    # Cette boucle s'exécute maintenant sur TOUS les champs.
+    for data in moyennes_par_champ_calculees.values():
+        nb_ens_tp = data["nb_enseignants_tp"]
+        periodes_choisies_tp = data["periodes_choisies_tp"]
 
-    for champ_no, data in enseignants_par_champ_temp.items():
-        _enseignants = data.get("enseignants", [])
-        if _enseignants:
-            enseignants_temps_plein = [e for e in _enseignants if e["compte_pour_moyenne_champ"]]
-            nb_enseignants_champ_tp = len(enseignants_temps_plein)
+        data["moyenne"] = (periodes_choisies_tp / nb_ens_tp) if nb_ens_tp > 0 else 0.0
+        data["periodes_magiques"] = periodes_choisies_tp - (nb_ens_tp * 24)
 
-            total_periodes_choisies_tp_champ = sum(e["total_periodes"] for e in enseignants_temps_plein)
+        # Agrégation pour les totaux du tableau
+        total_enseignants_tp_etablissement += nb_ens_tp
+        total_periodes_choisies_tp_etablissement += periodes_choisies_tp
+        total_periodes_magiques_etablissement += data["periodes_magiques"]
 
-            base_magique = nb_enseignants_champ_tp * 24
-            periodes_magiques_champ = total_periodes_choisies_tp_champ - base_magique
-
-            moyenne_champ = (total_periodes_choisies_tp_champ / nb_enseignants_champ_tp) if nb_enseignants_champ_tp > 0 else 0.0
-            est_confirme_champ = data["est_confirme"]
-
-            moyennes_par_champ_calculees[champ_no] = {
-                "champ_nom": data["champnom"],
-                "moyenne": moyenne_champ,
-                "est_verrouille": data["est_verrouille"],
-                "est_confirme": est_confirme_champ,
-                "nb_enseignants_tp": nb_enseignants_champ_tp,
-                "periodes_choisies_tp": total_periodes_choisies_tp_champ,
-                "periodes_magiques": periodes_magiques_champ,
-            }
-
-            total_enseignants_tp_etablissement += nb_enseignants_champ_tp
-            total_periodes_choisies_tp_etablissement += total_periodes_choisies_tp_champ
-            total_periodes_magiques_etablissement += periodes_magiques_champ
-
-            if nb_enseignants_champ_tp > 0:
-                total_periodes_global_tp += total_periodes_choisies_tp_champ
-                nb_enseignants_tp_global += nb_enseignants_champ_tp
-                if est_confirme_champ:
-                    total_periodes_confirme_tp += total_periodes_choisies_tp_champ
-                    nb_enseignants_confirme_tp += nb_enseignants_champ_tp
+        # Agrégation pour les moyennes générales
+        if nb_ens_tp > 0:
+            total_periodes_global_tp += periodes_choisies_tp
+            nb_enseignants_tp_global += nb_ens_tp
+            if data["est_confirme"]:
+                total_periodes_confirme_tp += periodes_choisies_tp
+                nb_enseignants_confirme_tp += nb_ens_tp
 
     moyenne_generale_calculee = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
     moyenne_prelim_conf = (total_periodes_confirme_tp / nb_enseignants_confirme_tp) if nb_enseignants_confirme_tp > 0 else 0.0
@@ -109,7 +133,13 @@ def calculer_donnees_sommaire(annee_id: int) -> tuple[list[dict[str, Any]], dict
         "total_periodes_magiques": total_periodes_magiques_etablissement,
     }
 
-    return list(enseignants_par_champ_temp.values()), moyennes_par_champ_calculees, moyenne_generale_calculee, moyenne_prelim_conf, grand_totals
+    return (
+        list(enseignants_par_champ_temp.values()),
+        moyennes_par_champ_calculees,
+        moyenne_generale_calculee,
+        moyenne_prelim_conf,
+        grand_totals,
+    )
 
 
 # --- ROUTES DES PAGES D'ADMINISTRATION (HTML) ---
@@ -130,7 +160,7 @@ def page_sommaire() -> str:
         )
 
     annee_id = g.annee_active["annee_id"]
-    # La liste des enseignants n'est plus nécessaire pour ce template
+    # La liste des enseignants n'est plus directement utilisée par ce template, mais est calculée pour d'autres usages.
     _, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = calculer_donnees_sommaire(annee_id)
 
     return render_template(
@@ -388,7 +418,10 @@ def api_create_enseignant() -> Any:
         current_app.logger.info(f"Enseignant '{data['nom']}' créé pour l'année ID {g.annee_active['annee_id']}.")
         return jsonify({"success": True, "message": "Enseignant créé.", "enseignant": new_enseignant}), 201
     except psycopg2.errors.UniqueViolation:
-        return jsonify({"success": False, "message": "Cet enseignant (nom/prénom) existe déjà pour cette année."}), 409
+        return (
+            jsonify({"success": False, "message": "Cet enseignant (nom/prénom) existe déjà pour cette année."}),
+            409,
+        )
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DB création enseignant: {e}")
         return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
@@ -419,7 +452,10 @@ def api_update_enseignant(enseignant_id: int) -> Any:
         current_app.logger.info(f"Enseignant ID {enseignant_id} modifié.")
         return jsonify({"success": True, "message": "Enseignant mis à jour.", "enseignant": updated_enseignant})
     except psycopg2.errors.UniqueViolation:
-        return jsonify({"success": False, "message": "Un enseignant avec ce nom/prénom existe déjà pour l'année de cet enseignant."}), 409
+        return (
+            jsonify({"success": False, "message": "Un enseignant avec ce nom/prénom existe déjà pour l'année de cet enseignant."}),
+            409,
+        )
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DB modification enseignant {enseignant_id}: {e}")
         return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
@@ -488,7 +524,10 @@ def api_importer_cours_excel() -> Any:
             est_autre_raw = values[7]
 
             if not all([champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw is not None, nb_per_raw is not None]):
-                flash(f"Ligne {row_idx}: Données manquantes. Vérifiez ChampNo, CodeCours, Descriptif, NbGroupes, NbPériodes.", "warning")
+                flash(
+                    f"Ligne {row_idx}: Données manquantes. Vérifiez ChampNo, CodeCours, Descriptif, NbGroupes, NbPériodes.",
+                    "warning",
+                )
                 continue
 
             try:
@@ -499,7 +538,10 @@ def api_importer_cours_excel() -> Any:
                 nb_per = float(str(nb_per_raw).replace(",", "."))
                 est_autre = str(est_autre_raw).strip().upper() in ("VRAI", "TRUE") if est_autre_raw is not None else False
             except ValueError as ve:
-                flash(f"Ligne {row_idx}: Erreur de type de données ({ve}). Vérifiez les nombres et le format 'VRAI/FAUX'.", "warning")
+                flash(
+                    f"Ligne {row_idx}: Erreur de type de données ({ve}). Vérifiez les nombres et le format 'VRAI/FAUX'.",
+                    "warning",
+                )
                 continue
 
             nouveaux_cours.append(
@@ -525,7 +567,10 @@ def api_importer_cours_excel() -> Any:
         return redirect(url_for("admin.page_administration_donnees"))
 
     if not nouveaux_cours:
-        flash("Aucun cours valide trouvé dans le fichier après traitement. Vérifiez le contenu et les messages d'avertissement.", "warning")
+        flash(
+            "Aucun cours valide trouvé dans le fichier après traitement. Vérifiez le contenu et les messages d'avertissement.",
+            "warning",
+        )
         return redirect(url_for("admin.page_administration_donnees"))
 
     conn = cast(connection, db.get_db())
@@ -608,7 +653,10 @@ def api_importer_enseignants_excel() -> Any:
             champ_no_raw, nom_raw, prenom_raw, temps_plein_raw = values[0], values[1], values[2], values[3]
 
             if not all([champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]):
-                flash(f"Ligne enseignant {row_idx}: Données manquantes. Vérifiez ChampNo, Nom, Prénom, EstTempsPlein.", "warning")
+                flash(
+                    f"Ligne enseignant {row_idx}: Données manquantes. Vérifiez ChampNo, Nom, Prénom, EstTempsPlein.",
+                    "warning",
+                )
                 continue
 
             try:
@@ -646,7 +694,10 @@ def api_importer_enseignants_excel() -> Any:
         return redirect(url_for("admin.page_administration_donnees"))
 
     if not nouveaux_enseignants:
-        flash("Aucun enseignant valide trouvé dans le fichier après traitement. Vérifiez le contenu et les messages d'avertissement.", "warning")
+        flash(
+            "Aucun enseignant valide trouvé dans le fichier après traitement. Vérifiez le contenu et les messages d'avertissement.",
+            "warning",
+        )
         return redirect(url_for("admin.page_administration_donnees"))
 
     conn = cast(connection, db.get_db())
@@ -736,7 +787,10 @@ def api_update_user_access(user_id: int) -> Any:
     if not target_user:
         return jsonify({"success": False, "message": "Utilisateur non trouvé."}), 404
     if target_user["is_admin"]:
-        return jsonify({"success": False, "message": "Les accès d'un administrateur ne peuvent pas être modifiés via cette interface."}), 403
+        return (
+            jsonify({"success": False, "message": "Les accès d'un administrateur ne peuvent pas être modifiés via cette interface."}),
+            403,
+        )
 
     if db.update_user_champ_access(user_id, champ_nos):
         current_app.logger.info(f"Accès aux champs mis à jour pour l'utilisateur ID {user_id}.")
@@ -776,7 +830,10 @@ def api_reassigner_cours_champ() -> Any:
 
     data = request.get_json()
     if not data or not (code_cours := data.get("code_cours")) or not (nouveau_champ_no := data.get("nouveau_champ_no")):
-        return jsonify({"success": False, "message": "Données manquantes : 'code_cours' et 'nouveau_champ_no' requis."}), 400
+        return (
+            jsonify({"success": False, "message": "Données manquantes : 'code_cours' et 'nouveau_champ_no' requis."}),
+            400,
+        )
 
     result = db.reassign_cours_to_champ(code_cours, g.annee_active["annee_id"], nouveau_champ_no)
     if result:
