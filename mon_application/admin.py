@@ -57,7 +57,6 @@ def calculer_donnees_sommaire(
     # C'est le cœur de la correction pour garantir que chaque champ soit listé.
     moyennes_par_champ_calculees: dict[str, Any] = {}
     for champ in tous_les_champs:
-        # CORRECTION: Utilisation de clés en minuscules ('champno', 'champnom')
         champ_no = str(champ["champno"])
         statut = statuts_champs.get(champ_no, {"est_verrouille": False, "est_confirme": False})
         moyennes_par_champ_calculees[champ_no] = {
@@ -72,7 +71,6 @@ def calculer_donnees_sommaire(
 
     # Structure pour la page de détail des tâches (doit aussi inclure tous les champs).
     enseignants_par_champ_temp: dict[str, Any] = {
-        # CORRECTION: Utilisation de clés en minuscules ('champno', 'champnom')
         str(champ["champno"]): {
             "champno": str(champ["champno"]),
             "champnom": champ["champnom"],

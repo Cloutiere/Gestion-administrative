@@ -42,7 +42,7 @@ html.theme-dark {
 
     --color-text-primary: #e9ecef;
     --color-text-secondary: #adb5bd;
-    --color-text-on-primary: #ffffff; /* Corrigé pour une meilleure lisibilité */
+    --color-text-on-primary: #ffffff;
     --color-background: #1a1b1e;
     --color-surface: #2c2e33;
     --color-border: #495057;
@@ -877,6 +877,14 @@ html.theme-dark .enseignant-card.detail-visible {
 }
 /* NOUVELLE RÈGLE : Applique un style gras à toute la ligne pour un champ verrouillé */
 .champ-verrouille-row {
+    font-weight: bold;
+}
+.solde-positif {
+    color: var(--color-success);
+    font-weight: bold;
+}
+.solde-negatif {
+    color: var(--color-danger);
     font-weight: bold;
 }
 html.theme-light .enseignant-fictif-sommaire {

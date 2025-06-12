@@ -139,6 +139,7 @@
                                 <th>Moyenne</th>
                                 <th>Diff. / 24p</th>
                                 <th>Confirmé</th>
+                                <th>Diff. Confirmé</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -150,8 +151,17 @@
                                 <td id="total-enseignants-tp" style="font-weight: bold;"></td>
                                 <td id="total-periodes-choisies-tp" style="font-weight: bold;"></td>
                                 <td></td> <!-- Cellule vide pour la colonne moyenne -->
-                                <td id="total-periodes-magiques" style="font-weight: bold;"></td>
+                                <td></td> <!-- Cellule vide pour le total de "Diff. / 24p" -->
                                 <td></td> <!-- Cellule vide pour la colonne Confirmé -->
+                                <td id="total-periodes-confirmees-magiques" style="font-weight: bold;"></td>
+                            </tr>
+                            <tr>
+                                <td colspan="8" style="text-align: right; font-weight: bold;">Chiffre magique</td>
+                                <td id="valeur-chiffre-magique" style="font-weight: bold;"></td>
+                            </tr>
+                             <tr>
+                                <td colspan="8" style="text-align: right; font-weight: bold;">Solde Final</td>
+                                <td id="valeur-solde-final"></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -192,7 +202,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             {% if annee_active %}
                 // La mise à jour initiale des données se fait dans mettreAJourDonneesSommaire()
-                mettreAJourDonneesSommaire(); 
+                mettreAJourDonneesSommaire();
                 setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
 
                 const tableMoyennes = document.getElementById('table-moyennes-par-champ');
@@ -242,13 +252,15 @@
                 }
                 const data = await response.json();
 
-                // Mettre à jour les données du tableau et les totaux
-                mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
+                // Mettre à jour les données du tableau et calculer le total confirmé
+                const totalConfirme = mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
+
+                // Mettre à jour les totaux globaux du pied de page
                 if (data.grand_totals) {
-                    mettreAJourTotaux(data.grand_totals);
+                    mettreAJourTotaux(data.grand_totals, totalConfirme);
                 }
 
-                // Mettre à jour les moyennes globales
+                // Mettre à jour les moyennes globales en haut de la page
                 const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
                 if (elMoyenneGenerale) {
                     elMoyenneGenerale.textContent = (data.moyenne_generale !== undefined && data.moyenne_generale !== null)
@@ -266,10 +278,27 @@
             }
         }
 
-        function mettreAJourTotaux(totals) {
+        function mettreAJourTotaux(totals, totalConfirme) {
+            // Mise à jour des totaux de base
             document.getElementById('total-enseignants-tp').textContent = totals.total_enseignants_tp;
             document.getElementById('total-periodes-choisies-tp').textContent = formatPeriodes(totals.total_periodes_choisies_tp);
-            document.getElementById('total-periodes-magiques').textContent = formatPeriodes(totals.total_periodes_magiques);
+            document.getElementById('total-periodes-confirmees-magiques').textContent = formatPeriodes(totalConfirme);
+
+            // Calcul et affichage du "Chiffre magique" et du "Solde Final"
+            const chiffreMagique = (totals.total_enseignants_tp || 0) * 0.6;
+            document.getElementById('valeur-chiffre-magique').textContent = formatPeriodes(chiffreMagique);
+            
+            const soldeFinal = totalConfirme - chiffreMagique;
+            const soldeCell = document.getElementById('valeur-solde-final');
+            soldeCell.textContent = formatPeriodes(soldeFinal);
+            
+            // Appliquer la couleur en fonction du solde
+            soldeCell.classList.remove('solde-positif', 'solde-negatif');
+            if (soldeFinal < 0) {
+                soldeCell.classList.add('solde-negatif');
+            } else if (soldeFinal > 0) {
+                soldeCell.classList.add('solde-positif');
+            }
         }
 
         async function basculerVerrouChamp(champNo, iconElement) {
@@ -333,7 +362,7 @@
             const tbody = document.querySelector('#table-moyennes-par-champ tbody');
             const aucuneMoyenneMsg = document.getElementById('aucune-moyenne-champ-message');
             const table = document.getElementById('table-moyennes-par-champ');
-            if (!tbody || !aucuneMoyenneMsg || !table) return;
+            if (!tbody || !aucuneMoyenneMsg || !table) return 0;
 
             tbody.innerHTML = '';
             const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
@@ -341,6 +370,8 @@
             const hasData = champNosTries.length > 0;
             aucuneMoyenneMsg.style.display = hasData ? 'none' : 'block';
             table.style.display = hasData ? '' : 'none';
+
+            let totalPeriodesMagiquesConfirmees = 0.0;
 
             if (hasData) {
                 champNosTries.forEach(champ_no => {
@@ -353,7 +384,6 @@
 
                     row.insertCell().textContent = champ_no;
 
-                    // Rendre le nom du champ cliquable
                     const cellNomChamp = row.insertCell();
                     const link = document.createElement('a');
                     link.href = `/champ/${encodeURIComponent(champ_no)}`;
@@ -378,8 +408,19 @@
                     confirmIcon.dataset.champNo = champ_no;
                     mettreAJourIconeConfirmation(confirmIcon, data.est_confirme);
                     cellConfirme.appendChild(confirmIcon);
+                    
+                    const cellDiffConfirme = row.insertCell();
+                    if (data.est_confirme) {
+                        cellDiffConfirme.textContent = formatPeriodes(data.periodes_magiques);
+                        totalPeriodesMagiquesConfirmees += data.periodes_magiques;
+                    } else {
+                        cellDiffConfirme.textContent = '';
+                    }
                 });
             }
+            
+            // Retourne le total calculé pour que la fonction appelante puisse l'utiliser.
+            return totalPeriodesMagiquesConfirmees;
         }
     </script>
 
