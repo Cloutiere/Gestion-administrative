@@ -521,6 +521,83 @@ def toggle_champ_annee_confirm_status(champ_no: str, annee_id: int) -> bool | No
     return _toggle_champ_annee_status(champ_no, annee_id, "est_confirme")
 
 
+# --- Fonctions DAO - Types de Financement ---
+
+
+def get_all_financements() -> list[dict[str, Any]]:
+    """Récupère tous les types de financement, triés par code."""
+    db_conn = get_db()
+    if not db_conn:
+        return []
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute("SELECT code, libelle FROM typesfinancement ORDER BY code;")
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_all_financements: {e}")
+        return []
+
+
+def create_financement(code: str, libelle: str) -> dict[str, Any] | None:
+    """Crée un nouveau type de financement."""
+    db_conn = get_db()
+    if not db_conn:
+        return None
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                "INSERT INTO typesfinancement (code, libelle) VALUES (%s, %s) RETURNING *;",
+                (code, libelle),
+            )
+            new_financement = cur.fetchone()
+            db_conn.commit()
+            return dict(new_financement) if new_financement else None
+    except psycopg2.Error:
+        db_conn.rollback()
+        raise
+
+
+def update_financement(code: str, libelle: str) -> dict[str, Any] | None:
+    """Met à jour le libellé d'un type de financement (le code est immuable)."""
+    db_conn = get_db()
+    if not db_conn:
+        return None
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                "UPDATE typesfinancement SET libelle = %s WHERE code = %s RETURNING *;",
+                (libelle, code),
+            )
+            updated_financement = cur.fetchone()
+            db_conn.commit()
+            return dict(updated_financement) if updated_financement else None
+    except psycopg2.Error:
+        db_conn.rollback()
+        raise
+
+
+def delete_financement(code: str) -> tuple[bool, str]:
+    """Supprime un type de financement."""
+    db_conn = get_db()
+    if not db_conn:
+        return False, "Erreur de connexion."
+    try:
+        with db_conn.cursor() as cur:
+            cur.execute("DELETE FROM typesfinancement WHERE code = %s;", (code,))
+            db_conn.commit()
+            if cur.rowcount > 0:
+                return True, "Type de financement supprimé."
+            return False, "Type de financement non trouvé."
+    except psycopg2.errors.ForeignKeyViolation:
+        db_conn.rollback()
+        msg = "Impossible de supprimer : ce financement est utilisé par des cours."
+        return False, msg
+    except psycopg2.Error as e:
+        db_conn.rollback()
+        current_app.logger.error(f"Erreur DAO delete_financement pour {code}: {e}")
+        return False, "Erreur base de données."
+
+
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---
 
 
@@ -656,7 +733,7 @@ def get_cours_disponibles_par_champ(
                 """
                 SELECT
                     c.CodeCours, c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre,
-                    c.NbGroupeInitial, c.annee_id, c.clientele,
+                    c.NbGroupeInitial, c.annee_id, c.financement_code,
                     (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0))
                         AS grprestant
                 FROM Cours c
@@ -688,7 +765,7 @@ def get_attributions_enseignant(enseignant_id: int) -> list[dict[str, Any]]:
                 """
                 SELECT ac.AttributionID, ac.CodeCours, ac.NbGroupesPris,
                        c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre,
-                       c.annee_id, c.clientele
+                       c.annee_id, c.financement_code
                 FROM AttributionsCours ac
                 JOIN Cours c
                     ON ac.CodeCours = c.CodeCours AND ac.annee_id_cours = c.annee_id
@@ -715,7 +792,7 @@ def get_toutes_les_attributions(annee_id: int) -> list[dict[str, Any]]:
             cur.execute(
                 """
                 SELECT ac.AttributionID, ac.EnseignantID, ac.CodeCours, ac.NbGroupesPris,
-                       c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre, c.clientele
+                       c.CoursDescriptif, c.NbPeriodes, c.EstCoursAutre, c.financement_code
                 FROM AttributionsCours ac
                 JOIN Cours c
                     ON ac.CodeCours = c.CodeCours AND ac.annee_id_cours = c.annee_id
@@ -798,7 +875,7 @@ def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
             cur.execute(
                 """
                 SELECT c.CodeCours, c.CoursDescriptif, c.NbPeriodes,
-                       c.NbGroupeInitial, c.EstCoursAutre, c.clientele,
+                       c.NbGroupeInitial, c.EstCoursAutre, c.financement_code,
                        c.ChampNo, ch.ChampNom
                 FROM Cours c JOIN Champs ch ON c.ChampNo = ch.ChampNo
                 WHERE c.annee_id = %s
@@ -1054,27 +1131,23 @@ def reassign_cours_to_champ(
 
 
 def create_cours(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
-    """Crée un nouveau cours pour une année donnée, en gérant la logique pour 'clientele'."""
+    """Crée un nouveau cours pour une année donnée, en gérant la logique pour le financement."""
     db_conn = get_db()
     if not db_conn:
         return None
 
-    # Applique la logique métier pour 'clientele' avant l'insertion.
-    if data.get("estcoursautre", False):
-        data["clientele"] = None
-    else:
-        # 'R' (Régulier) est la valeur par défaut si rien n'est fourni.
-        data["clientele"] = data.get("clientele") or "R"
+    # Gère la valeur de 'financement_code' (une chaîne vide doit devenir NULL).
+    data["financement_code"] = data.get("financement_code") or None
 
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 INSERT INTO Cours (CodeCours, annee_id, ChampNo, CoursDescriptif,
-                                   NbPeriodes, NbGroupeInitial, EstCoursAutre, clientele)
+                                   NbPeriodes, NbGroupeInitial, EstCoursAutre, financement_code)
                 VALUES (%(codecours)s, %(annee_id)s, %(champno)s, %(coursdescriptif)s,
                         %(nbperiodes)s, %(nbgroupeinitial)s, %(estcoursautre)s,
-                        %(clientele)s)
+                        %(financement_code)s)
                 RETURNING *;
                 """,
                 {**data, "annee_id": annee_id},
@@ -1109,17 +1182,13 @@ def get_cours_details(code_cours: str, annee_id: int) -> dict[str, Any] | None:
 def update_cours(
     code_cours: str, annee_id: int, data: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Met à jour un cours pour une année, en gérant la logique pour 'clientele'."""
+    """Met à jour un cours pour une année, en gérant la logique pour le financement."""
     db_conn = get_db()
     if not db_conn:
         return None
 
-    # Applique la logique métier pour 'clientele' avant la mise à jour.
-    if data.get("estcoursautre", False):
-        data["clientele"] = None
-    elif "clientele" in data and not data["clientele"]:
-        # Le formulaire peut envoyer une chaîne vide, qui doit devenir NULL en DB.
-        data["clientele"] = None
+    # Gère la valeur de 'financement_code' (une chaîne vide doit devenir NULL).
+    data["financement_code"] = data.get("financement_code") or None
 
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
@@ -1129,7 +1198,7 @@ def update_cours(
                 SET ChampNo = %(champno)s, CoursDescriptif = %(coursdescriptif)s,
                     NbPeriodes = %(nbperiodes)s,
                     NbGroupeInitial = %(nbgroupeinitial)s,
-                    EstCoursAutre = %(estcoursautre)s, clientele = %(clientele)s
+                    EstCoursAutre = %(estcoursautre)s, financement_code = %(financement_code)s
                 WHERE CodeCours = %(original_codecours)s AND annee_id = %(annee_id)s
                 RETURNING *;
                 """,
@@ -1168,6 +1237,34 @@ def delete_cours(code_cours: str, annee_id: int) -> tuple[bool, str]:
             f"Erreur DAO delete_cours pour {code_cours}, annee {annee_id}: {e}"
         )
         return False, "Erreur base de données."
+
+
+def reassign_cours_to_financement(
+    code_cours: str, annee_id: int, nouveau_financement_code: str | None
+) -> bool:
+    """Réassigne un cours à un nouveau type de financement pour une année donnée."""
+    db_conn = get_db()
+    if not db_conn:
+        return False
+    try:
+        with db_conn.cursor() as cur:
+            cur.execute(
+                "UPDATE Cours SET financement_code = %s "
+                "WHERE CodeCours = %s AND annee_id = %s;",
+                (nouveau_financement_code, code_cours, annee_id),
+            )
+            if cur.rowcount == 0:
+                db_conn.rollback()
+                return False  # Cours non trouvé pour cette année
+            db_conn.commit()
+            return True
+    except psycopg2.Error as e:
+        db_conn.rollback()
+        current_app.logger.error(
+            "Erreur DAO reassign_cours_to_financement pour cours "
+            f"{code_cours}, annee {annee_id}: {e}"
+        )
+        return False
 
 
 def create_enseignant(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
@@ -1365,7 +1462,7 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
                 """
                 SELECT
                     ch.ChampNo, ch.ChampNom, e.Nom, e.Prenom, c.CodeCours,
-                    c.CoursDescriptif, c.EstCoursAutre, c.clientele,
+                    c.CoursDescriptif, c.EstCoursAutre, c.financement_code,
                     SUM(ac.NbGroupesPris) AS total_groupes_pris, c.NbPeriodes
                 FROM AttributionsCours AS ac
                 JOIN Enseignants AS e ON ac.EnseignantID = e.EnseignantID
@@ -1376,7 +1473,7 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
                     e.annee_id = %s AND e.EstFictif = FALSE
                 GROUP BY
                     ch.ChampNo, ch.ChampNom, e.Nom, e.Prenom, c.CodeCours,
-                    c.CoursDescriptif, c.EstCoursAutre, c.clientele, c.NbPeriodes
+                    c.CoursDescriptif, c.EstCoursAutre, c.financement_code, c.NbPeriodes
                 ORDER BY
                     ch.ChampNo ASC, e.Nom ASC, e.Prenom ASC, c.CodeCours ASC;
                 """,
@@ -1403,7 +1500,6 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
     La fonction utilise `generate_series` pour "exploser" les décomptes de
     groupes en plusieurs lignes. Le tri final place les tâches "Non attribuées"
     après les tâches fictives nommées, qui sont elles-mêmes triées numériquement.
-    Les % wildcards pour LIKE sont échappés en %%.
 
     Args:
         annee_id: L'ID de l'année scolaire.
@@ -1428,7 +1524,7 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
                     SELECT
                         ch.ChampNo, ch.ChampNom, e.NomComplet AS tache_restante,
                         c.CodeCours, c.CoursDescriptif, c.EstCoursAutre,
-                        c.NbPeriodes, c.clientele, SUM(ac.NbGroupesPris) AS nb_groupes_total
+                        c.NbPeriodes, c.financement_code, SUM(ac.NbGroupesPris) AS nb_groupes_total
                     FROM AttributionsCours AS ac
                     JOIN Enseignants AS e ON ac.EnseignantID = e.EnseignantID
                     JOIN Cours AS c
@@ -1436,12 +1532,12 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
                     JOIN Champs AS ch ON c.ChampNo = ch.ChampNo
                     WHERE e.annee_id = %(annee_id)s AND e.EstFictif = TRUE
                     GROUP BY ch.ChampNo, ch.ChampNom, e.NomComplet, c.CodeCours,
-                             c.CoursDescriptif, c.EstCoursAutre, c.NbPeriodes, c.clientele
+                             c.CoursDescriptif, c.EstCoursAutre, c.NbPeriodes, c.financement_code
                     UNION ALL
                     SELECT
                         ch.ChampNo, ch.ChampNom, 'Non attribuées' AS tache_restante,
                         c.CodeCours, c.CoursDescriptif, c.EstCoursAutre,
-                        c.NbPeriodes, c.clientele,
+                        c.NbPeriodes, c.financement_code,
                         (c.NbGroupeInitial - COALESCE(ta.total_pris, 0)) AS nb_groupes_total
                     FROM Cours AS c
                     JOIN Champs AS ch ON c.ChampNo = ch.ChampNo
@@ -1452,7 +1548,7 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
                 )
                 SELECT
                     r.ChampNo, r.ChampNom, r.tache_restante, r.CodeCours,
-                    r.CoursDescriptif, r.EstCoursAutre, r.NbPeriodes, r.clientele,
+                    r.CoursDescriptif, r.EstCoursAutre, r.NbPeriodes, r.financement_code,
                     1 AS nb_groupes
                 FROM
                     remaining_groups_aggregated r,
@@ -1460,11 +1556,6 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
                 ORDER BY
                     r.ChampNo,
                     CASE WHEN r.tache_restante = 'Non attribuées' THEN 1 ELSE 0 END,
-                    -- Tri numérique pour les tâches comme "ChampNo-Tâche restante-X"
-                    -- Le wildcard % pour LIKE doit être %% dans la chaîne de requête Python
-                    -- Mais ici, substring est une fonction SQL, donc le % est pour son propre pattern.
-                    -- Toutefois, si tache_restante est construite avec LIKE, le problème serait en amont.
-                    -- Ici, c'est un nom exact, donc pas de % à gérer dans substring directement.
                     CAST(substring(r.tache_restante from '-(\\d+)$') AS INTEGER),
                     r.tache_restante,
                     r.CodeCours;
@@ -1483,64 +1574,47 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
 
 def get_data_for_org_scolaire_export(annee_id: int) -> list[dict[str, Any]]:
     """
-    Récupère les données pour l'export "Organisation Scolaire".
+    Récupère les données brutes pour l'export "Organisation Scolaire".
 
-    Combine les attributions des enseignants (réels et fictifs) avec les
-    périodes non attribuées, en pivotant les périodes par type de clientèle et
-    par type de cours spécifique (Soutien, Ressource).
-    Le NomComplet des tâches fictives est nettoyé de son préfixe de champ.
-    Un tri numérique est appliqué sur le suffixe des tâches fictives.
-    Les % wildcards pour LIKE sont échappés en %%.
+    Cette fonction ne pivote PAS les données. Elle retourne les données agrégées
+    par enseignant/tâche et par type de cours/financement, prêtes à être
+    pivotées en Python. Elle combine les attributions (réels et fictifs)
+    et les périodes non attribuées.
 
     Args:
         annee_id: L'ID de l'année scolaire.
 
     Returns:
-        Une liste de dictionnaires formatée pour l'export.
+        Une liste de dictionnaires contenant les données brutes pour l'export.
+        Chaque dictionnaire inclut des informations sur l'enseignant, le champ,
+        le type de cours (`financement_code`, `CodeCours`, `EstCoursAutre`) et
+        le total des périodes associées.
     """
     db_conn = get_db()
     if not db_conn:
         return []
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # Les % wildcards pour LIKE doivent être échappés en %% dans la chaîne de requête Python
-            # pour ne pas être interprétés comme des placeholders psycopg2.
-            # Le placeholder pour la variable annee_id est %(annee_id)s.
             query_sql = """
-                WITH all_tasks AS (
-                    -- Part 1: Attributions existantes (enseignants réels et fictifs)
+                WITH all_tasks_raw AS (
+                    -- Part 1: Attributions existantes
                     SELECT
                         e.annee_id,
                         ch.ChampNo,
                         ch.ChampNom,
                         e.Nom,
                         e.Prenom,
-                        CASE
-                            WHEN e.EstFictif = TRUE AND e.NomComplet LIKE ch.ChampNo || '-Tâche restante-%%'
-                            THEN regexp_replace(e.NomComplet, '^' || ch.ChampNo || '[-\s]*', '')
-                            ELSE e.NomComplet
-                        END AS NomComplet,
+                        e.NomComplet,
                         e.EstFictif,
-                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele = 'R' AND NOT c.EstCoursAutre) AS periodes_r,
-                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele = 'A' AND NOT c.EstCoursAutre) AS periodes_a,
-                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele = 'SE' AND NOT c.EstCoursAutre) AS periodes_ci_se,
-                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'SOU%%') AS periodes_soutien_se,
-                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESSA%%') AS periodes_ressource_autre,
-                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A') AS periodes_enseignant_ressource,
-                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (
-                            WHERE c.clientele IS NULL AND c.EstCoursAutre
-                              AND NOT (
-                                  c.CodeCours LIKE 'SOU%%' OR
-                                  c.CodeCours LIKE 'RESSA%%' OR
-                                  (c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A')
-                              )
-                        ) AS periodes_autres
+                        c.financement_code,
+                        c.CodeCours,
+                        c.EstCoursAutre,
+                        c.NbPeriodes * ac.NbGroupesPris AS periodes_calculees
                     FROM AttributionsCours AS ac
                     JOIN Enseignants AS e ON ac.EnseignantID = e.EnseignantID
                     JOIN Cours AS c ON ac.CodeCours = c.CodeCours AND ac.annee_id_cours = c.annee_id
                     JOIN Champs AS ch ON e.ChampNo = ch.ChampNo
                     WHERE e.annee_id = %(annee_id)s
-                    GROUP BY e.annee_id, ch.ChampNo, ch.ChampNom, e.EnseignantID, e.Nom, e.Prenom, e.NomComplet, e.EstFictif
 
                     UNION ALL
 
@@ -1553,20 +1627,10 @@ def get_data_for_org_scolaire_export(annee_id: int) -> list[dict[str, Any]]:
                         NULL AS Prenom,
                         'Non attribué' AS NomComplet,
                         TRUE AS EstFictif,
-                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele = 'R' AND NOT c.EstCoursAutre) AS periodes_r,
-                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele = 'A' AND NOT c.EstCoursAutre) AS periodes_a,
-                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele = 'SE' AND NOT c.EstCoursAutre) AS periodes_ci_se,
-                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'SOU%%') AS periodes_soutien_se,
-                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESSA%%') AS periodes_ressource_autre,
-                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A') AS periodes_enseignant_ressource,
-                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (
-                            WHERE c.clientele IS NULL AND c.EstCoursAutre
-                              AND NOT (
-                                  c.CodeCours LIKE 'SOU%%' OR
-                                  c.CodeCours LIKE 'RESSA%%' OR
-                                  (c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A')
-                              )
-                        ) AS periodes_autres
+                        c.financement_code,
+                        c.CodeCours,
+                        c.EstCoursAutre,
+                        c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0)) AS periodes_calculees
                     FROM Cours AS c
                     JOIN Champs AS ch ON c.ChampNo = ch.ChampNo
                     LEFT JOIN (
@@ -1575,18 +1639,25 @@ def get_data_for_org_scolaire_export(annee_id: int) -> list[dict[str, Any]]:
                         GROUP BY CodeCours, annee_id_cours
                     ) AS ta ON c.CodeCours = ta.CodeCours AND c.annee_id = ta.annee_id_cours
                     WHERE c.annee_id = %(annee_id)s AND (c.NbGroupeInitial - COALESCE(ta.total_pris, 0)) > 0
-                    GROUP BY c.annee_id, ch.ChampNo, ch.ChampNom
                 )
                 SELECT
-                    ChampNo, ChampNom, Nom, Prenom, NomComplet, EstFictif,
-                    COALESCE(periodes_r, 0) AS periodes_r,
-                    COALESCE(periodes_a, 0) AS periodes_a,
-                    COALESCE(periodes_ci_se, 0) AS periodes_ci_se,
-                    COALESCE(periodes_soutien_se, 0) AS periodes_soutien_se,
-                    COALESCE(periodes_ressource_autre, 0) AS periodes_ressource_autre,
-                    COALESCE(periodes_enseignant_ressource, 0) AS periodes_enseignant_ressource,
-                    COALESCE(periodes_autres, 0) AS periodes_autres
-                FROM all_tasks
+                    ChampNo,
+                    ChampNom,
+                    Nom,
+                    Prenom,
+                    CASE
+                        WHEN EstFictif = TRUE AND NomComplet LIKE ChampNo || '-Tâche restante-%%'
+                        THEN regexp_replace(NomComplet, '^' || ChampNo || '[-\\s]*', '')
+                        ELSE NomComplet
+                    END AS NomComplet,
+                    EstFictif,
+                    financement_code,
+                    CodeCours,
+                    EstCoursAutre,
+                    SUM(periodes_calculees) as total_periodes
+                FROM all_tasks_raw
+                GROUP BY ChampNo, ChampNom, Nom, Prenom, NomComplet, EstFictif, financement_code, CodeCours, EstCoursAutre
+                HAVING SUM(periodes_calculees) > 0
                 ORDER BY
                     ChampNo,
                     CASE

@@ -245,6 +245,7 @@ def page_administration_donnees() -> str:
         cours_par_champ=cours_par_champ_data,
         enseignants_par_champ=enseignants_par_champ_data,
         tous_les_champs=db.get_all_champs(),
+        tous_les_financements=db.get_all_financements(),
     )
 
 
@@ -466,17 +467,15 @@ def api_create_cours() -> Any:
     if not g.annee_active:
         return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     data = request.get_json()
-    if not data or not all(
-        k in data
-        for k in [
-            "codecours",
-            "champno",
-            "coursdescriptif",
-            "nbperiodes",
-            "nbgroupeinitial",
-            "estcoursautre",
-        ]
-    ):
+    required_keys = [
+        "codecours",
+        "champno",
+        "coursdescriptif",
+        "nbperiodes",
+        "nbgroupeinitial",
+        "estcoursautre",
+    ]
+    if not data or not all(k in data for k in required_keys):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
     try:
         new_cours = db.create_cours(data, g.annee_active["annee_id"])
@@ -528,16 +527,14 @@ def api_update_cours(code_cours: str) -> Any:
     if not g.annee_active:
         return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     data = request.get_json()
-    if not data or not all(
-        k in data
-        for k in [
-            "champno",
-            "coursdescriptif",
-            "nbperiodes",
-            "nbgroupeinitial",
-            "estcoursautre",
-        ]
-    ):
+    required_keys = [
+        "champno",
+        "coursdescriptif",
+        "nbperiodes",
+        "nbgroupeinitial",
+        "estcoursautre",
+    ]
+    if not data or not all(k in data for k in required_keys):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
     try:
         updated_cours = db.update_cours(code_cours, g.annee_active["annee_id"], data)
@@ -749,17 +746,19 @@ def api_importer_cours_excel() -> Any:
 
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
-            if not any(v is not None and str(v).strip() != "" for v in values[:6]):
+            # Colonnes: 0:champ, 1:code, 2:N/A, 3:desc, 4:grp, 5:per, 6:autre, 7:financement
+            if not any(v is not None and str(v).strip() != "" for v in values[:7]):
                 continue
 
-            champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw = (
-                values[0],
-                values[1],
-                values[3],
-                values[4],
-                values[5],
-            )
-            est_autre_raw = values[7] if len(values) > 7 else None
+            (
+                champ_no_raw,
+                code_cours_raw,
+                desc_raw,
+                nb_grp_raw,
+                nb_per_raw,
+            ) = (values[0], values[1], values[3], values[4], values[5])
+            est_autre_raw = values[6] if len(values) > 6 else None
+            financement_code_raw = values[7] if len(values) > 7 else None
 
             if not all([champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw]):
                 flash(f"Ligne {row_idx}: Données manquantes.", "warning")
@@ -773,7 +772,10 @@ def api_importer_cours_excel() -> Any:
                     "YES",
                     "1",
                 )
-                clientele = None if est_autre else "R"
+                financement_code = (
+                    str(financement_code_raw).strip() if financement_code_raw else None
+                )
+
                 nouveaux_cours.append(
                     {
                         "codecours": str(code_cours_raw).strip(),
@@ -782,7 +784,7 @@ def api_importer_cours_excel() -> Any:
                         "nbperiodes": float(str(nb_per_raw).replace(",", ".")),
                         "nbgroupeinitial": int(float(str(nb_grp_raw).replace(",", "."))),
                         "estcoursautre": est_autre,
-                        "clientele": clientele,
+                        "financement_code": financement_code,
                     }
                 )
             except (ValueError, TypeError) as ve:
@@ -1025,23 +1027,72 @@ def exporter_org_scolaire_excel() -> Any:
 
     annee_id = g.annee_active["annee_id"]
     annee_libelle = g.annee_active["libelle_annee"]
-    donnees_raw = db.get_data_for_org_scolaire_export(annee_id)
 
+    # Étape 1: Récupérer les types de financement pour les en-têtes
+    tous_les_financements = db.get_all_financements()
+    headers_financement = [(f["code"], f["libelle"]) for f in tous_les_financements]
+    codes_financement_valides = {code for code, _libelle in headers_financement}
+
+    # Étape 2: Récupérer les données brutes
+    donnees_raw = db.get_data_for_org_scolaire_export(annee_id)
     if not donnees_raw:
         flash(f"Aucune donnée à exporter pour '{annee_libelle}'.", "warning")
         return redirect(url_for("admin.page_sommaire"))
 
-    donnees_par_champ: dict[str, dict[str, Any]] = {}
+    # Étape 3: Pivoter les données en Python
+    pivot_data: dict[str, dict[str, Any]] = {}
+
     for item in donnees_raw:
         champ_no = item["champno"]
+        # Clé unique pour chaque enseignant/tâche au sein d'un champ
+        enseignant_key = (
+            f"fictif-{item['nomcomplet']}"
+            if item["estfictif"]
+            else f"reel-{item['nom']}-{item['prenom']}"
+        )
+
+        if champ_no not in pivot_data:
+            pivot_data[champ_no] = {}
+        if enseignant_key not in pivot_data[champ_no]:
+            pivot_data[champ_no][enseignant_key] = {
+                "nom": item["nom"],
+                "prenom": item["prenom"],
+                "nomcomplet": item["nomcomplet"],
+                "estfictif": item["estfictif"],
+                "champnom": item["champnom"],
+                "periodes": {code: 0.0 for code, _libelle in headers_financement},
+                "soutien_se": 0.0,
+                "ressource_autre": 0.0,
+                "enseignant_ressource": 0.0,
+                "autres": 0.0,
+            }
+
+        # Distribution des périodes dans les bonnes "colonnes"
+        total_p = float(item["total_periodes"] or 0.0)
+        code_cours = item["codecours"]
+        if item["financement_code"] in codes_financement_valides:
+            pivot_data[champ_no][enseignant_key]["periodes"][item["financement_code"]] += total_p
+        elif code_cours and code_cours.startswith("SOU"):
+            pivot_data[champ_no][enseignant_key]["soutien_se"] += total_p
+        elif code_cours and code_cours.startswith("RESSA"):
+            pivot_data[champ_no][enseignant_key]["ressource_autre"] += total_p
+        elif code_cours and code_cours.startswith("RESS_"):
+            pivot_data[champ_no][enseignant_key]["enseignant_ressource"] += total_p
+        else:
+            pivot_data[champ_no][enseignant_key]["autres"] += total_p
+
+    # Conversion de la structure pivotée vers le format attendu par la fonction d'export
+    donnees_par_champ: dict[str, dict[str, Any]] = {}
+    for champ_no, enseignants in pivot_data.items():
         if champ_no not in donnees_par_champ:
             donnees_par_champ[champ_no] = {
-                "nom": item["champnom"],
+                "nom": next(iter(enseignants.values()))["champnom"],
                 "donnees": [],
             }
-        donnees_par_champ[champ_no]["donnees"].append(item)
+        donnees_par_champ[champ_no]["donnees"] = list(enseignants.values())
 
-    mem_file = exports.generer_export_org_scolaire(donnees_par_champ)
+    # Étape 4: Générer le fichier Excel
+    mem_file = exports.generer_export_org_scolaire(donnees_par_champ, headers_financement)
     filename = f"export_org_scolaire_{annee_libelle}.xlsx"
     current_app.logger.info(f"Génération de l'export '{filename}'.")
 
@@ -1050,6 +1101,94 @@ def exporter_org_scolaire_excel() -> Any:
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# --- API pour la gestion des Types de Financement ---
+
+
+@bp.route("/api/financements", methods=["GET"])
+@admin_api_required
+def api_get_all_financements() -> Any:
+    """Récupère tous les types de financement."""
+    financements = db.get_all_financements()
+    return jsonify(financements)
+
+
+@bp.route("/api/financements/creer", methods=["POST"])
+@admin_api_required
+def api_create_financement() -> Any:
+    """Crée un nouveau type de financement."""
+    data = request.get_json()
+    if (
+        not data
+        or not (code := data.get("code", "").strip())
+        or not (libelle := data.get("libelle", "").strip())
+    ):
+        return jsonify({"success": False, "message": "Code et libellé requis."}), 400
+
+    try:
+        new_financement = db.create_financement(code, libelle)
+        current_app.logger.info(f"Type de financement '{code}' créé.")
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": "Type de financement créé.",
+                    "financement": new_financement,
+                }
+            ),
+            201,
+        )
+    except psycopg2.errors.UniqueViolation:
+        return (
+            jsonify({"success": False, "message": "Ce code de financement existe déjà."}),
+            409,
+        )
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DB création financement: {e}")
+        return jsonify({"success": False, "message": "Erreur de base de données."}), 500
+
+
+@bp.route("/api/financements/<code>/modifier", methods=["POST"])
+@admin_api_required
+def api_update_financement(code: str) -> Any:
+    """Met à jour le libellé d'un type de financement (le code est immuable)."""
+    data = request.get_json()
+    if not data or not (libelle := data.get("libelle", "").strip()):
+        return jsonify({"success": False, "message": "Libellé requis."}), 400
+
+    try:
+        updated = db.update_financement(code, libelle)
+        if not updated:
+            return (
+                jsonify({"success": False, "message": "Financement non trouvé."}),
+                404,
+            )
+        current_app.logger.info(f"Type de financement '{code}' mis à jour.")
+        return jsonify(
+            {
+                "success": True,
+                "message": "Type de financement mis à jour.",
+                "financement": updated,
+            }
+        )
+    except psycopg2.Error as e:
+        db_conn = db.get_db()
+        if db_conn:
+            db_conn.rollback()
+        current_app.logger.error(f"Erreur DB modif. financement: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "Erreur de base de données."}), 500
+
+
+@bp.route("/api/financements/<code>/supprimer", methods=["POST"])
+@admin_api_required
+def api_delete_financement(code: str) -> Any:
+    """Supprime un type de financement."""
+    success, message = db.delete_financement(code)
+    status_code = 200 if success else 400
+    if success:
+        current_app.logger.info(f"Type de financement '{code}' supprimé.")
+    return jsonify({"success": success, "message": message}), status_code
 
 
 # --- API non modifiées car indépendantes de l'année ---
@@ -1205,5 +1344,45 @@ def api_reassigner_cours_champ() -> Any:
     )
     return (
         jsonify({"success": False, "message": "Impossible de réassigner le cours."}),
+        500,
+    )
+
+
+@bp.route("/api/cours/reassigner_financement", methods=["POST"])
+@admin_api_required
+def api_reassigner_cours_financement() -> Any:
+    """API pour réassigner un cours à un nouveau type de financement, pour l'année active."""
+    if not g.annee_active:
+        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+
+    data = request.get_json()
+    if not data or not (code_cours := data.get("code_cours")):
+        return jsonify({"success": False, "message": "Données manquantes."}), 400
+
+    # nouveau_financement_code peut être une chaîne vide, ce qui est valide (pour 'Aucun')
+    nouveau_financement_code = data.get("nouveau_financement_code")
+    # Une chaîne vide en JS doit devenir NULL en base de données.
+    financement_a_stocker = nouveau_financement_code if nouveau_financement_code else None
+
+    result = db.reassign_cours_to_financement(
+        code_cours, g.annee_active["annee_id"], financement_a_stocker
+    )
+    if result:
+        current_app.logger.info(
+            f"Cours '{code_cours}' réassigné au financement '{financement_a_stocker}' "
+            f"pour l'année ID {g.annee_active['annee_id']}."
+        )
+        return jsonify(
+            success=True,
+            message=f"Financement du cours '{code_cours}' mis à jour.",
+        )
+
+    current_app.logger.warning(
+        f"Échec réassignation financement pour cours '{code_cours}'."
+    )
+    return (
+        jsonify(
+            {"success": False, "message": "Impossible de réassigner le financement."}
+        ),
         500,
     )

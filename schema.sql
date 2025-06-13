@@ -124,6 +124,20 @@ ALTER TABLE public.champ_annee_statuts OWNER TO neondb_owner;
 
 
 --
+-- Name: typesfinancement; Type: TABLE; Schema: public; Owner: neondb_owner
+--
+
+-- Table de référence pour les types de financement des cours.
+CREATE TABLE public.typesfinancement (
+    code text NOT NULL,
+    libelle text NOT NULL
+);
+
+
+ALTER TABLE public.typesfinancement OWNER TO neondb_owner;
+
+
+--
 -- Name: cours; Type: TABLE; Schema: public; Owner: neondb_owner
 --
 
@@ -135,17 +149,13 @@ CREATE TABLE public.cours (
     nbperiodes numeric(5, 2) NOT NULL,
     nbgroupeinitial integer NOT NULL,
     estcoursautre boolean DEFAULT false NOT NULL,
-    clientele text, -- 'SE', 'R', 'A'. NULL si estcoursautre=TRUE.
-                    -- Pour les cours de soutien SE (ex: CodeCours 'SOUxxx'), clientele est NULL et estcoursautre=FALSE.
+    financement_code text, -- Clé étrangère vers typesfinancement. NULL si estcoursautre=TRUE.
     CONSTRAINT cours_nbgroupeinitial_check CHECK ((nbgroupeinitial >= 0)),
     CONSTRAINT cours_nbperiodes_check CHECK ((nbperiodes >= 0)),
-    -- Contrainte de validation pour 'clientele':
-    -- 1. Si estcoursautre est TRUE, clientele DOIT être NULL.
-    -- 2. Si estcoursautre est FALSE, clientele PEUT être NULL (ex: soutien SE) ou une des valeurs spécifiées.
-    CONSTRAINT cours_clientele_validation_check CHECK (
-        (estcoursautre = TRUE AND clientele IS NULL) OR
-        (estcoursautre = FALSE AND (clientele IS NULL OR clientele IN ('SE', 'R', 'A')))
-    )
+    -- Contrainte de validation pour 'financement_code':
+    -- 1. Si estcoursautre est TRUE, financement_code DOIT être NULL.
+    -- 2. Si estcoursautre est FALSE, financement_code peut être NULL ou une valeur valide.
+    CONSTRAINT cours_financement_validation_check CHECK (((estcoursautre = false) OR (financement_code IS NULL)))
 );
 
 
@@ -334,6 +344,14 @@ ALTER TABLE ONLY public.enseignants
 
 
 --
+-- Name: typesfinancement typesfinancement_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.typesfinancement
+    ADD CONSTRAINT typesfinancement_pkey PRIMARY KEY (code);
+
+
+--
 -- Name: user_champ_access user_champ_access_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
 --
 
@@ -438,6 +456,14 @@ ALTER TABLE ONLY public.cours
 
 ALTER TABLE ONLY public.cours
     ADD CONSTRAINT cours_champno_fkey FOREIGN KEY (champno) REFERENCES public.champs(champno);
+
+
+--
+-- Name: cours cours_financement_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.cours
+    ADD CONSTRAINT cours_financement_code_fkey FOREIGN KEY (financement_code) REFERENCES public.typesfinancement(code) ON DELETE SET NULL;
 
 
 --
