@@ -1021,11 +1021,8 @@ def api_importer_enseignants_excel() -> Any:
 @admin_required
 def exporter_taches_excel() -> Any:
     """
-    Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel.
-
-    Cette route récupère les données via la base de données, puis appelle le
-    module d'export pour générer le fichier Excel, qui est ensuite servi
-    en tant que réponse HTTP.
+    Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel
+    avec une feuille par champ et des totaux.
     """
     if not g.annee_active:
         flash("Exportation impossible : aucune année scolaire n'est active.", "error")
@@ -1034,17 +1031,28 @@ def exporter_taches_excel() -> Any:
     annee_id = g.annee_active["annee_id"]
     annee_libelle = g.annee_active["libelle_annee"]
 
-    attributions = db.get_all_attributions_for_export(annee_id)
+    attributions_raw = db.get_all_attributions_for_export(annee_id)
 
-    if not attributions:
+    if not attributions_raw:
         flash(
             f"Aucune tâche attribuée à exporter pour l'année '{annee_libelle}'.",
             "warning",
         )
         return redirect(url_for("admin.page_sommaire"))
 
-    # Appel de la fonction de génération déportée dans le module exports
-    mem_file = exports.generer_export_taches(attributions)
+    # Transformer la liste plate en un dictionnaire groupé par champ
+    attributions_par_champ: dict[str, dict[str, Any]] = {}
+    for attr in attributions_raw:
+        champ_no = attr["champno"]
+        if champ_no not in attributions_par_champ:
+            attributions_par_champ[champ_no] = {
+                "nom": attr["champnom"],
+                "attributions": [],
+            }
+        attributions_par_champ[champ_no]["attributions"].append(attr)
+
+    # Appel de la fonction de génération (qui sera modifiée) avec les données structurées
+    mem_file = exports.generer_export_taches(attributions_par_champ)
 
     filename = f"export_taches_{annee_libelle}.xlsx"
     current_app.logger.info(

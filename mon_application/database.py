@@ -1293,6 +1293,7 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
             cur.execute(
                 """
                 SELECT
+                    ch.ChampNo,
                     ch.ChampNom,
                     e.Nom,
                     e.Prenom,
@@ -1308,6 +1309,7 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
                 WHERE
                     e.annee_id = %s AND e.EstFictif = FALSE
                 GROUP BY
+                    ch.ChampNo,
                     ch.ChampNom,
                     e.Nom,
                     e.Prenom,
@@ -1316,7 +1318,7 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
                     c.EstCoursAutre,
                     c.NbPeriodes
                 ORDER BY
-                    ch.ChampNom ASC,
+                    ch.ChampNo ASC,
                     e.Nom ASC,
                     e.Prenom ASC,
                     c.CodeCours ASC;
