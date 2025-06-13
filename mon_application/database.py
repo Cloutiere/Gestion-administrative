@@ -97,9 +97,9 @@ def get_db() -> psycopg2.extensions.connection | None:
 
 def close_db(_exception: BaseException | None = None) -> None:
     """Ferme la connexion à la base de données à la fin de la requête (teardown)."""
-    db = g.pop("db", None)
-    if db is not None and not db.closed:
-        db.close()
+    db_conn = g.pop("db", None)
+    if db_conn is not None and not db_conn.closed:
+        db_conn.close()
 
 
 def init_app(app: Flask) -> None:
@@ -113,11 +113,11 @@ def init_app(app: Flask) -> None:
 
 def get_all_annees() -> list[dict[str, Any]]:
     """Récupère toutes les années scolaires, ordonnées par libellé décroissant (plus récent en premier)."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT annee_id, libelle_annee, est_courante "
                 "FROM anneesscolaires ORDER BY libelle_annee DESC;"
@@ -130,11 +130,11 @@ def get_all_annees() -> list[dict[str, Any]]:
 
 def get_annee_courante() -> dict[str, Any] | None:
     """Récupère l'année scolaire marquée comme courante."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT annee_id, libelle_annee, est_courante "
                 "FROM anneesscolaires WHERE est_courante = TRUE;"
@@ -147,48 +147,48 @@ def get_annee_courante() -> dict[str, Any] | None:
 
 def create_annee_scolaire(libelle: str) -> dict[str, Any] | None:
     """Crée une nouvelle année scolaire."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "INSERT INTO anneesscolaires (libelle_annee) VALUES (%s) "
                 "RETURNING annee_id, libelle_annee, est_courante;",
                 (libelle,),
             )
             new_annee = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return dict(new_annee) if new_annee else None
     except psycopg2.errors.UniqueViolation:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.warning(
             f"Tentative de création d'une année scolaire existante: {libelle}"
         )
         return None
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(f"Erreur DAO create_annee_scolaire: {e}")
         return None
 
 
 def set_annee_courante(annee_id: int) -> bool:
     """Définit une année scolaire comme courante, en s'assurant que toutes les autres ne le sont pas."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return False
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             # Transaction pour assurer l'atomicité
             cur.execute("UPDATE anneesscolaires SET est_courante = FALSE;")
             cur.execute(
                 "UPDATE anneesscolaires SET est_courante = TRUE WHERE annee_id = %s;",
                 (annee_id,),
             )
-            db.commit()
+            db_conn.commit()
             return cur.rowcount > 0
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO set_annee_courante pour annee_id {annee_id}: {e}"
         )
@@ -200,11 +200,11 @@ def set_annee_courante(annee_id: int) -> bool:
 
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     """Récupère un utilisateur par son ID, y compris ses permissions d'accès aux champs."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT u.id, u.username, u.password_hash, u.is_admin,
@@ -231,11 +231,11 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
 
 def get_user_by_username(username: str) -> dict[str, Any] | None:
     """Récupère un utilisateur par son nom d'utilisateur."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT id, username, password_hash, is_admin "
                 "FROM Users WHERE username = %s;",
@@ -252,11 +252,11 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
 
 def get_users_count() -> int:
     """Compte le nombre total d'utilisateurs."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return 0
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM Users;")
             result = cur.fetchone()
             return result[0] if result else 0
@@ -267,11 +267,11 @@ def get_users_count() -> int:
 
 def get_admin_count() -> int:
     """Compte le nombre total d'administrateurs."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return 0
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
             result = cur.fetchone()
             return result[0] if result else 0
@@ -284,35 +284,35 @@ def create_user(
     username: str, password_hash: str, is_admin: bool = False
 ) -> dict[str, Any] | None:
     """Crée un nouvel utilisateur."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "INSERT INTO Users (username, password_hash, is_admin) "
                 "VALUES (%s, %s, %s) RETURNING id, username, is_admin;",
                 (username, password_hash, is_admin),
             )
             user_data = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return dict(user_data) if user_data else None
     except psycopg2.errors.UniqueViolation:
-        db.rollback()
+        db_conn.rollback()
         return None
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(f"Erreur DAO create_user pour {username}: {e}")
         return None
 
 
 def get_all_users_with_access_info() -> list[dict[str, Any]]:
     """Récupère tous les utilisateurs avec leurs accès."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT u.id, u.username, u.is_admin,
@@ -338,11 +338,11 @@ def get_all_users_with_access_info() -> list[dict[str, Any]]:
 
 def update_user_champ_access(user_id: int, champ_nos: list[str]) -> bool:
     """Met à jour les accès aux champs pour un utilisateur."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return False
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute("DELETE FROM user_champ_access WHERE user_id = %s;", (user_id,))
             if champ_nos:
                 psycopg2.extras.execute_values(
@@ -350,10 +350,10 @@ def update_user_champ_access(user_id: int, champ_nos: list[str]) -> bool:
                     "INSERT INTO user_champ_access (user_id, champ_no) VALUES %s;",
                     [(user_id, c) for c in champ_nos],
                 )
-            db.commit()
+            db_conn.commit()
             return True
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO update_user_champ_access pour user {user_id}: {e}"
         )
@@ -362,16 +362,16 @@ def update_user_champ_access(user_id: int, champ_nos: list[str]) -> bool:
 
 def delete_user_data(user_id: int) -> bool:
     """Supprime un utilisateur."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return False
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute("DELETE FROM Users WHERE id = %s;", (user_id,))
-            db.commit()
+            db_conn.commit()
             return cur.rowcount > 0
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(f"Erreur DAO delete_user_data pour user {user_id}: {e}")
         return False
 
@@ -381,11 +381,11 @@ def delete_user_data(user_id: int) -> bool:
 
 def get_all_champs() -> list[dict[str, Any]]:
     """Récupère tous les champs, triés par leur numéro."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute("SELECT ChampNo, ChampNom FROM Champs ORDER BY ChampNo;")
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
@@ -395,11 +395,11 @@ def get_all_champs() -> list[dict[str, Any]]:
 
 def get_champ_details(champ_no: str, annee_id: int) -> dict[str, Any] | None:
     """Récupère les détails d'un champ et ses statuts pour une année donnée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT
@@ -433,12 +433,12 @@ def get_all_champ_statuses_for_year(annee_id: int) -> dict[str, dict[str, bool]]
         Un dictionnaire mappant champ_no à un dictionnaire de ses statuts.
         Ex: {"10A": {"est_verrouille": True, "est_confirme": False}, ...}
     """
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return {}
     statuses = {}
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT champ_no, est_verrouille, est_confirme
@@ -477,8 +477,8 @@ def _toggle_champ_annee_status(
     Returns:
         Le nouvel état du statut (bool) ou None en cas d'erreur.
     """
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     if status_column not in ("est_verrouille", "est_confirme"):
         current_app.logger.error(
@@ -487,7 +487,7 @@ def _toggle_champ_annee_status(
         return None
 
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             query = psycopg2.sql.SQL(
                 """
                 INSERT INTO champ_annee_statuts (champ_no, annee_id, {col})
@@ -500,10 +500,10 @@ def _toggle_champ_annee_status(
 
             cur.execute(query, (champ_no, annee_id))
             result = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return result[status_column] if result else None
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             "Erreur DAO _toggle_champ_annee_status pour "
             f"{champ_no}, annee {annee_id}: {e}"
@@ -536,11 +536,11 @@ def get_total_periodes_disponibles_par_champ(annee_id: int) -> dict[str, float]:
     Returns:
         Un dictionnaire mappant le ChampNo au total des périodes disponibles.
     """
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return {}
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT ChampNo, SUM(NbPeriodes * NbGroupeInitial) as total_disponible
@@ -567,11 +567,11 @@ def get_enseignants_par_champ(
     champ_no: str, annee_id: int
 ) -> list[dict[str, Any]]:
     """Récupère les enseignants d'un champ pour une année donnée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT EnseignantID, NomComplet, Nom, Prenom, EstTempsPlein,
@@ -593,11 +593,11 @@ def get_enseignants_par_champ(
 
 def get_all_enseignants_avec_details(annee_id: int) -> list[dict[str, Any]]:
     """Récupère tous les enseignants d'une année avec des détails enrichis, y compris les statuts du champ."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT
@@ -647,11 +647,11 @@ def get_cours_disponibles_par_champ(
     champ_no: str, annee_id: int
 ) -> list[dict[str, Any]]:
     """Récupère les cours d'un champ pour une année, avec le nb de groupes restants."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT
@@ -679,11 +679,11 @@ def get_cours_disponibles_par_champ(
 
 def get_attributions_enseignant(enseignant_id: int) -> list[dict[str, Any]]:
     """Récupère les attributions d'un enseignant (l'ID est unique à une année)."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT ac.AttributionID, ac.CodeCours, ac.NbGroupesPris,
@@ -707,11 +707,11 @@ def get_attributions_enseignant(enseignant_id: int) -> list[dict[str, Any]]:
 
 def get_toutes_les_attributions(annee_id: int) -> list[dict[str, Any]]:
     """Récupère toutes les attributions pour une année scolaire donnée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT ac.AttributionID, ac.EnseignantID, ac.CodeCours, ac.NbGroupesPris,
@@ -762,11 +762,11 @@ def calculer_periodes_enseignant(enseignant_id: int) -> dict[str, float]:
 
 def get_groupes_restants_pour_cours(code_cours: str, annee_id: int) -> int:
     """Calcule les groupes restants pour un cours d'une année donnée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return 0
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0))
@@ -790,11 +790,11 @@ def get_groupes_restants_pour_cours(code_cours: str, annee_id: int) -> int:
 
 def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
     """Récupère tous les cours d'une année, regroupés par champ."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return {}
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT c.CodeCours, c.CoursDescriptif, c.NbPeriodes,
@@ -824,11 +824,11 @@ def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
 
 def get_verrou_info_enseignant(enseignant_id: int) -> dict[str, Any] | None:
     """Récupère le statut de verrouillage (spécifique à l'année), fictif et le champno pour un enseignant."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT
@@ -855,11 +855,11 @@ def add_attribution(
     enseignant_id: int, code_cours: str, annee_id_cours: int
 ) -> int | None:
     """Ajoute une attribution de cours à un enseignant pour une année donnée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "INSERT INTO AttributionsCours (EnseignantID, CodeCours, "
                 "annee_id_cours, NbGroupesPris) VALUES (%s, %s, %s, 1) "
@@ -867,10 +867,10 @@ def add_attribution(
                 (enseignant_id, code_cours, annee_id_cours),
             )
             new_id = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return new_id["attributionid"] if new_id else None
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             "Erreur DAO add_attribution pour enseignant "
             f"{enseignant_id}, cours {code_cours}: {e}"
@@ -880,11 +880,11 @@ def add_attribution(
 
 def get_attribution_info(attribution_id: int) -> dict[str, Any] | None:
     """Récupère les informations détaillées d'une attribution, y compris le statut de verrouillage du champ pour l'année concernée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT
@@ -909,19 +909,19 @@ def get_attribution_info(attribution_id: int) -> dict[str, Any] | None:
 
 def delete_attribution(attribution_id: int) -> bool:
     """Supprime une attribution de cours."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return False
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM AttributionsCours WHERE AttributionID = %s;",
                 (attribution_id,),
             )
-            db.commit()
+            db_conn.commit()
             return cur.rowcount > 0
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO delete_attribution pour attribution {attribution_id}: {e}"
         )
@@ -930,15 +930,16 @@ def delete_attribution(attribution_id: int) -> bool:
 
 def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | None:
     """Crée un enseignant fictif pour une année donnée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            # Les % wildcards pour LIKE sont échappés en %% pour psycopg2
             cur.execute(
                 "SELECT NomComplet FROM Enseignants WHERE ChampNo = %s AND "
                 "EstFictif = TRUE AND NomComplet LIKE %s AND annee_id = %s;",
-                (champ_no, f"{champ_no}-Tâche restante-%", annee_id),
+                (champ_no, f"{champ_no}-Tâche restante-%%", annee_id),
             )
             numeros = [
                 int(r["nomcomplet"].split("-")[-1])
@@ -959,10 +960,10 @@ def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | N
                 (nom_tache, champ_no, annee_id),
             )
             new_fictif_data = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return dict(new_fictif_data) if new_fictif_data else None
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             "Erreur DAO create_fictif_enseignant pour champ "
             f"{champ_no}, annee {annee_id}: {e}"
@@ -972,11 +973,11 @@ def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | N
 
 def get_affected_cours_for_enseignant(enseignant_id: int) -> list[dict[str, Any]]:
     """Récupère les cours affectés à un enseignant (code et année)."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT DISTINCT CodeCours, annee_id_cours FROM AttributionsCours "
                 "WHERE EnseignantID = %s;",
@@ -993,18 +994,18 @@ def get_affected_cours_for_enseignant(enseignant_id: int) -> list[dict[str, Any]
 
 def delete_enseignant(enseignant_id: int) -> bool:
     """Supprime un enseignant (et ses attributions par CASCADE)."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return False
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,)
             )
-            db.commit()
+            db_conn.commit()
             return cur.rowcount > 0
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO delete_enseignant pour enseignant {enseignant_id}: {e}"
         )
@@ -1015,11 +1016,11 @@ def reassign_cours_to_champ(
     code_cours: str, annee_id: int, nouveau_champ_no: str
 ) -> dict[str, Any] | None:
     """Réassigne un cours à un nouveau champ pour une année donnée."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT ChampNom FROM Champs WHERE ChampNo = %s;", (nouveau_champ_no,)
             )
@@ -1032,16 +1033,16 @@ def reassign_cours_to_champ(
                 (nouveau_champ_no, code_cours, annee_id),
             )
             if cur.rowcount == 0:
-                db.rollback()
+                db_conn.rollback()
                 return None  # Cours non trouvé pour cette année
 
-            db.commit()
+            db_conn.commit()
             return {
                 "nouveau_champ_no": nouveau_champ_no,
                 "nouveau_champ_nom": new_champ["champnom"],
             }
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             "Erreur DAO reassign_cours_to_champ pour cours "
             f"{code_cours}, annee {annee_id}: {e}"
@@ -1054,8 +1055,8 @@ def reassign_cours_to_champ(
 
 def create_cours(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
     """Crée un nouveau cours pour une année donnée, en gérant la logique pour 'clientele'."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
 
     # Applique la logique métier pour 'clientele' avant l'insertion.
@@ -1066,7 +1067,7 @@ def create_cours(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
         data["clientele"] = data.get("clientele") or "R"
 
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 INSERT INTO Cours (CodeCours, annee_id, ChampNo, CoursDescriptif,
@@ -1079,20 +1080,20 @@ def create_cours(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
                 {**data, "annee_id": annee_id},
             )
             new_cours = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return dict(new_cours) if new_cours else None
     except psycopg2.Error:
-        db.rollback()
+        db_conn.rollback()
         raise
 
 
 def get_cours_details(code_cours: str, annee_id: int) -> dict[str, Any] | None:
     """Récupère les détails d'un cours spécifique pour une année."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT * FROM Cours WHERE CodeCours = %s AND annee_id = %s;",
                 (code_cours, annee_id),
@@ -1109,8 +1110,8 @@ def update_cours(
     code_cours: str, annee_id: int, data: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Met à jour un cours pour une année, en gérant la logique pour 'clientele'."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
 
     # Applique la logique métier pour 'clientele' avant la mise à jour.
@@ -1121,7 +1122,7 @@ def update_cours(
         data["clientele"] = None
 
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 UPDATE Cours
@@ -1135,34 +1136,34 @@ def update_cours(
                 {**data, "original_codecours": code_cours, "annee_id": annee_id},
             )
             updated_cours = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return dict(updated_cours) if updated_cours else None
     except psycopg2.Error:
-        db.rollback()
+        db_conn.rollback()
         raise
 
 
 def delete_cours(code_cours: str, annee_id: int) -> tuple[bool, str]:
     """Supprime un cours pour une année."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return False, "Erreur de connexion."
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM Cours WHERE CodeCours = %s AND annee_id = %s;",
                 (code_cours, annee_id),
             )
-            db.commit()
+            db_conn.commit()
             if cur.rowcount > 0:
                 return True, "Cours supprimé."
             return False, "Cours non trouvé."
     except psycopg2.errors.ForeignKeyViolation:
-        db.rollback()
+        db_conn.rollback()
         msg = "Impossible de supprimer: cours attribué à un ou plusieurs enseignants."
         return False, msg
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO delete_cours pour {code_cours}, annee {annee_id}: {e}"
         )
@@ -1171,11 +1172,11 @@ def delete_cours(code_cours: str, annee_id: int) -> tuple[bool, str]:
 
 def create_enseignant(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
     """Crée un nouvel enseignant pour une année."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
             cur.execute(
                 """
@@ -1188,20 +1189,20 @@ def create_enseignant(data: dict[str, Any], annee_id: int) -> dict[str, Any] | N
                 {**data, "annee_id": annee_id},
             )
             new_enseignant = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return dict(new_enseignant) if new_enseignant else None
     except psycopg2.Error:
-        db.rollback()
+        db_conn.rollback()
         raise
 
 
 def get_enseignant_details(enseignant_id: int) -> dict[str, Any] | None:
     """Récupère les détails d'un enseignant par son ID unique."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 "SELECT * FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,)
             )
@@ -1217,11 +1218,11 @@ def update_enseignant(
     enseignant_id: int, data: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Met à jour un enseignant (cible par ID unique)."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return None
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
             cur.execute(
                 """
@@ -1234,20 +1235,20 @@ def update_enseignant(
                 {**data, "enseignantid": enseignant_id},
             )
             updated_enseignant = cur.fetchone()
-            db.commit()
+            db_conn.commit()
             return dict(updated_enseignant) if updated_enseignant else None
     except psycopg2.Error:
-        db.rollback()
+        db_conn.rollback()
         raise
 
 
 def get_all_enseignants_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
     """Récupère tous les enseignants d'une année, regroupés par champ."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return {}
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT e.EnseignantID, e.NomComplet, e.EstTempsPlein,
@@ -1278,11 +1279,11 @@ def get_all_enseignants_grouped_by_champ(annee_id: int) -> dict[str, dict[str, A
 
 def delete_all_attributions_for_year(annee_id: int) -> int:
     """Supprime TOUTES les attributions pour une année donnée. Retourne le nombre de lignes supprimées."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return 0
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             # On joint sur enseignants pour être sûr de ne supprimer que les attributions de l'année
             cur.execute(
                 """
@@ -1295,7 +1296,7 @@ def delete_all_attributions_for_year(annee_id: int) -> int:
             # Pas de commit ici si la fonction est utilisée dans une transaction plus large
             return deleted_count
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO delete_all_attributions_for_year pour annee {annee_id}: {e}"
         )
@@ -1304,17 +1305,17 @@ def delete_all_attributions_for_year(annee_id: int) -> int:
 
 def delete_all_cours_for_year(annee_id: int) -> int:
     """Supprime TOUS les cours pour une année donnée. Retourne le nombre de lignes supprimées."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return 0
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute("DELETE FROM Cours WHERE annee_id = %s;", (annee_id,))
             deleted_count = cur.rowcount
             # Pas de commit ici si la fonction est utilisée dans une transaction plus large
             return deleted_count
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO delete_all_cours_for_year pour annee {annee_id}: {e}"
         )
@@ -1323,17 +1324,17 @@ def delete_all_cours_for_year(annee_id: int) -> int:
 
 def delete_all_enseignants_for_year(annee_id: int) -> int:
     """Supprime TOUS les enseignants pour une année donnée. Retourne le nombre de lignes supprimées."""
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return 0
     try:
-        with db.cursor() as cur:
+        with db_conn.cursor() as cur:
             cur.execute("DELETE FROM Enseignants WHERE annee_id = %s;", (annee_id,))
             deleted_count = cur.rowcount
             # Pas de commit ici si la fonction est utilisée dans une transaction plus large
             return deleted_count
     except psycopg2.Error as e:
-        db.rollback()
+        db_conn.rollback()
         current_app.logger.error(
             f"Erreur DAO delete_all_enseignants_for_year pour annee {annee_id}: {e}"
         )
@@ -1355,11 +1356,11 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
         Une liste de dictionnaires, chaque dictionnaire représentant une ligne
         de données agrégées pour le fichier Excel.
     """
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 SELECT
@@ -1401,7 +1402,8 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
 
     La fonction utilise `generate_series` pour "exploser" les décomptes de
     groupes en plusieurs lignes. Le tri final place les tâches "Non attribuées"
-    après les tâches fictives nommées.
+    après les tâches fictives nommées, qui sont elles-mêmes triées numériquement.
+    Les % wildcards pour LIKE sont échappés en %%.
 
     Args:
         annee_id: L'ID de l'année scolaire.
@@ -1410,11 +1412,11 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
         Une liste de dictionnaires où chaque dictionnaire représente un seul
         groupe de cours restant, trié pour l'affichage.
     """
-    db = get_db()
-    if not db:
+    db_conn = get_db()
+    if not db_conn:
         return []
     try:
-        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
                 WITH remaining_groups_aggregated AS (
@@ -1458,6 +1460,12 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
                 ORDER BY
                     r.ChampNo,
                     CASE WHEN r.tache_restante = 'Non attribuées' THEN 1 ELSE 0 END,
+                    -- Tri numérique pour les tâches comme "ChampNo-Tâche restante-X"
+                    -- Le wildcard % pour LIKE doit être %% dans la chaîne de requête Python
+                    -- Mais ici, substring est une fonction SQL, donc le % est pour son propre pattern.
+                    -- Toutefois, si tache_restante est construite avec LIKE, le problème serait en amont.
+                    -- Ici, c'est un nom exact, donc pas de % à gérer dans substring directement.
+                    CAST(substring(r.tache_restante from '-(\\d+)$') AS INTEGER),
                     r.tache_restante,
                     r.CodeCours;
                 """,
@@ -1467,6 +1475,139 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
     except psycopg2.Error as e:
         current_app.logger.error(
             "Erreur DAO get_periodes_restantes_for_export pour annee "
+            f"{annee_id}: {e}",
+            exc_info=True,
+        )
+        return []
+
+
+def get_data_for_org_scolaire_export(annee_id: int) -> list[dict[str, Any]]:
+    """
+    Récupère les données pour l'export "Organisation Scolaire".
+
+    Combine les attributions des enseignants (réels et fictifs) avec les
+    périodes non attribuées, en pivotant les périodes par type de clientèle et
+    par type de cours spécifique (Soutien, Ressource).
+    Le NomComplet des tâches fictives est nettoyé de son préfixe de champ.
+    Un tri numérique est appliqué sur le suffixe des tâches fictives.
+    Les % wildcards pour LIKE sont échappés en %%.
+
+    Args:
+        annee_id: L'ID de l'année scolaire.
+
+    Returns:
+        Une liste de dictionnaires formatée pour l'export.
+    """
+    db_conn = get_db()
+    if not db_conn:
+        return []
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            # Les % wildcards pour LIKE doivent être échappés en %% dans la chaîne de requête Python
+            # pour ne pas être interprétés comme des placeholders psycopg2.
+            # Le placeholder pour la variable annee_id est %(annee_id)s.
+            query_sql = """
+                WITH all_tasks AS (
+                    -- Part 1: Attributions existantes (enseignants réels et fictifs)
+                    SELECT
+                        e.annee_id,
+                        ch.ChampNo,
+                        ch.ChampNom,
+                        e.Nom,
+                        e.Prenom,
+                        CASE
+                            WHEN e.EstFictif = TRUE AND e.NomComplet LIKE ch.ChampNo || '-Tâche restante-%%'
+                            THEN regexp_replace(e.NomComplet, '^' || ch.ChampNo || '[-\s]*', '')
+                            ELSE e.NomComplet
+                        END AS NomComplet,
+                        e.EstFictif,
+                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele = 'R' AND NOT c.EstCoursAutre) AS periodes_r,
+                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele = 'A' AND NOT c.EstCoursAutre) AS periodes_a,
+                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele = 'SE' AND NOT c.EstCoursAutre) AS periodes_ci_se,
+                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'SOU%%') AS periodes_soutien_se,
+                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESSA%%') AS periodes_ressource_autre,
+                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A') AS periodes_enseignant_ressource,
+                        SUM(c.NbPeriodes * ac.NbGroupesPris) FILTER (
+                            WHERE c.clientele IS NULL AND c.EstCoursAutre
+                              AND NOT (
+                                  c.CodeCours LIKE 'SOU%%' OR
+                                  c.CodeCours LIKE 'RESSA%%' OR
+                                  (c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A')
+                              )
+                        ) AS periodes_autres
+                    FROM AttributionsCours AS ac
+                    JOIN Enseignants AS e ON ac.EnseignantID = e.EnseignantID
+                    JOIN Cours AS c ON ac.CodeCours = c.CodeCours AND ac.annee_id_cours = c.annee_id
+                    JOIN Champs AS ch ON e.ChampNo = ch.ChampNo
+                    WHERE e.annee_id = %(annee_id)s
+                    GROUP BY e.annee_id, ch.ChampNo, ch.ChampNom, e.EnseignantID, e.Nom, e.Prenom, e.NomComplet, e.EstFictif
+
+                    UNION ALL
+
+                    -- Part 2: Cours non attribués
+                    SELECT
+                        c.annee_id,
+                        ch.ChampNo,
+                        ch.ChampNom,
+                        'Non attribué' AS Nom,
+                        NULL AS Prenom,
+                        'Non attribué' AS NomComplet,
+                        TRUE AS EstFictif,
+                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele = 'R' AND NOT c.EstCoursAutre) AS periodes_r,
+                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele = 'A' AND NOT c.EstCoursAutre) AS periodes_a,
+                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele = 'SE' AND NOT c.EstCoursAutre) AS periodes_ci_se,
+                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'SOU%%') AS periodes_soutien_se,
+                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESSA%%') AS periodes_ressource_autre,
+                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (WHERE c.clientele IS NULL AND c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A') AS periodes_enseignant_ressource,
+                        SUM(c.NbPeriodes * (c.NbGroupeInitial - COALESCE(ta.total_pris, 0))) FILTER (
+                            WHERE c.clientele IS NULL AND c.EstCoursAutre
+                              AND NOT (
+                                  c.CodeCours LIKE 'SOU%%' OR
+                                  c.CodeCours LIKE 'RESSA%%' OR
+                                  (c.CodeCours LIKE 'RESS_%%' AND SUBSTRING(c.CodeCours FROM 5 FOR 1) <> 'A')
+                              )
+                        ) AS periodes_autres
+                    FROM Cours AS c
+                    JOIN Champs AS ch ON c.ChampNo = ch.ChampNo
+                    LEFT JOIN (
+                        SELECT CodeCours, annee_id_cours, SUM(NbGroupesPris) AS total_pris
+                        FROM AttributionsCours
+                        GROUP BY CodeCours, annee_id_cours
+                    ) AS ta ON c.CodeCours = ta.CodeCours AND c.annee_id = ta.annee_id_cours
+                    WHERE c.annee_id = %(annee_id)s AND (c.NbGroupeInitial - COALESCE(ta.total_pris, 0)) > 0
+                    GROUP BY c.annee_id, ch.ChampNo, ch.ChampNom
+                )
+                SELECT
+                    ChampNo, ChampNom, Nom, Prenom, NomComplet, EstFictif,
+                    COALESCE(periodes_r, 0) AS periodes_r,
+                    COALESCE(periodes_a, 0) AS periodes_a,
+                    COALESCE(periodes_ci_se, 0) AS periodes_ci_se,
+                    COALESCE(periodes_soutien_se, 0) AS periodes_soutien_se,
+                    COALESCE(periodes_ressource_autre, 0) AS periodes_ressource_autre,
+                    COALESCE(periodes_enseignant_ressource, 0) AS periodes_enseignant_ressource,
+                    COALESCE(periodes_autres, 0) AS periodes_autres
+                FROM all_tasks
+                ORDER BY
+                    ChampNo,
+                    CASE
+                        WHEN EstFictif = FALSE THEN 0
+                        WHEN NomComplet LIKE 'Tâche restante-%%' THEN 1
+                        WHEN NomComplet = 'Non attribué' THEN 2
+                        ELSE 3
+                    END,
+                    CASE
+                        WHEN EstFictif = TRUE AND NomComplet LIKE 'Tâche restante-%%'
+                        THEN CAST(substring(NomComplet FROM '-(\\d+)$') AS INTEGER)
+                        ELSE NULL
+                    END,
+                    Nom,
+                    Prenom;
+            """
+            cur.execute(query_sql, {"annee_id": annee_id})
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(
+            "Erreur DAO get_data_for_org_scolaire_export pour annee "
             f"{annee_id}: {e}",
             exc_info=True,
         )

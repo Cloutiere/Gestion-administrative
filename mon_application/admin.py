@@ -862,7 +862,7 @@ def api_importer_enseignants_excel() -> Any:
         workbook = openpyxl.load_workbook(file.stream)
         sheet = cast(Worksheet, workbook.active)
         if sheet.max_row <= 1:
-            raise ValueError("Fichier Excel vide ou ne contient que l'en-tête.")
+            raise ValueError("Fichier Excel vide ou ne contenant que l'en-tête.")
 
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
@@ -1006,6 +1006,43 @@ def exporter_periodes_restantes_excel() -> Any:
 
     mem_file = exports.generer_export_periodes_restantes(periodes_par_champ)
     filename = f"export_periodes_restantes_{annee_libelle}.xlsx"
+    current_app.logger.info(f"Génération de l'export '{filename}'.")
+
+    return Response(
+        mem_file,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@bp.route("/exporter_org_scolaire_excel")
+@admin_required
+def exporter_org_scolaire_excel() -> Any:
+    """Exporte les données pour l'organisation scolaire pour l'année active."""
+    if not g.annee_active:
+        flash("Exportation impossible : aucune année scolaire n'est active.", "error")
+        return redirect(url_for("admin.page_sommaire"))
+
+    annee_id = g.annee_active["annee_id"]
+    annee_libelle = g.annee_active["libelle_annee"]
+    donnees_raw = db.get_data_for_org_scolaire_export(annee_id)
+
+    if not donnees_raw:
+        flash(f"Aucune donnée à exporter pour '{annee_libelle}'.", "warning")
+        return redirect(url_for("admin.page_sommaire"))
+
+    donnees_par_champ: dict[str, dict[str, Any]] = {}
+    for item in donnees_raw:
+        champ_no = item["champno"]
+        if champ_no not in donnees_par_champ:
+            donnees_par_champ[champ_no] = {
+                "nom": item["champnom"],
+                "donnees": [],
+            }
+        donnees_par_champ[champ_no]["donnees"].append(item)
+
+    mem_file = exports.generer_export_org_scolaire(donnees_par_champ)
+    filename = f"export_org_scolaire_{annee_libelle}.xlsx"
     current_app.logger.info(f"Génération de l'export '{filename}'.")
 
     return Response(

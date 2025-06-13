@@ -7,6 +7,7 @@
     --color-primary: #007bff;
     --color-primary-hover: #0056b3;
     --color-secondary: #6c757d;
+    --color-secondary-hover: #545b62;
     --color-success: #28a745;
     --color-success-hover: #218838;
     --color-danger: #dc3545;
@@ -36,6 +37,7 @@ html.theme-dark {
     --color-primary: #4dabf7;
     --color-primary-hover: #74c0fc;
     --color-secondary: #adb5bd;
+    --color-secondary-hover: #c1c9d1;
     --color-success: #40c057;
     --color-danger: #f06565;
     --color-info: #3bc9db;
@@ -351,7 +353,7 @@ button:disabled,
     color: var(--color-text-on-primary);
 }
 .btn-secondary:hover:not(:disabled) {
-    background-color: var(--color-primary-hover);
+    background-color: var(--color-secondary-hover);
 }
 /* Modificateur pour des boutons plus petits, idéal pour les tableaux */
 .btn-sm {
