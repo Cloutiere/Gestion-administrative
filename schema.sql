@@ -407,7 +407,7 @@ CREATE INDEX idx_enseignants_champno ON public.enseignants USING btree (champno)
 -- Name: idx_enseignants_nom_prenom; Type: INDEX; Schema: public; Owner: neondb_owner
 --
 
-CREATE INDEX idx_enseignants_nom_prenom ON public.enseignants USING btree (nom, prenom);
+CREATE INDEX idx_enseignants_nom_prenom ON public.enseignants USING btree (nom COLLATE "fr-CA-x-icu", prenom COLLATE "fr-CA-x-icu");
 
 
 --

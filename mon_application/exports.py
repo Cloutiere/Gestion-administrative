@@ -459,15 +459,16 @@ def generer_export_periodes_restantes(
 
 
 def generer_export_org_scolaire(
-    donnees_par_champ: dict[str, dict[str, Any]],
-    headers_financement: list[tuple[str, str]],
+    donnees_par_champ: dict[str, dict[str, Any]]
 ) -> io.BytesIO:
     """
-    Génère un fichier Excel pour l'organisation scolaire avec des colonnes dynamiques.
+    Génère un fichier Excel pour l'organisation scolaire avec des colonnes
+    spécifiques, une largeur fixe et un formatage adapté.
 
     Args:
-        donnees_par_champ: Dictionnaire des données pivotées groupées par champ.
-        headers_financement: Liste de tuples (code, libelle) pour les financements.
+        donnees_par_champ: Dictionnaire des données pivotées groupées par champ,
+                           où les clés pour les périodes correspondent
+                           exactement aux en-têtes de colonnes.
 
     Returns:
         Un objet io.BytesIO contenant le fichier Excel (.xlsx) en mémoire.
@@ -475,16 +476,37 @@ def generer_export_org_scolaire(
     workbook = openpyxl.Workbook()
     workbook.remove(cast(Worksheet, workbook.active))
 
-    # Style pour la ligne de total
+    # --- Définition des styles ---
     total_font = Font(bold=True, name="Calibri", size=11)
     header_font_org = Font(bold=True, name="Calibri", size=11)
-
-    # Création des en-têtes dynamiques en majuscules
-    headers = ["NOM", "PRÉNOM"]
-    headers.extend([f"PÉRIODES {libelle.upper()}" for _code, libelle in headers_financement])
-    headers.extend(
-        ["PÉRIODES SOUTIEN SE", "RESSOURCE AUTRE", "ENSEIGNANT RESSOURCE", "PÉRIODES AUTRES"]
+    # Style d'en-tête avec retour à la ligne
+    header_align = Alignment(
+        wrap_text=True, horizontal="center", vertical="center"
     )
+
+    # --- Définition des en-têtes de colonnes fixes ---
+    HEADERS = [
+        "NOM, PRÉNOM",
+        "PÉRIODES RÉGULIER",
+        "PÉRIODES ADAPTATION SCOLAIRE",
+        "PÉRIODES SPORT-ÉTUDES",
+        "PÉRIODES ENSEIGNANT RESSOURCE",
+        "PÉRIODES AIDESEC",
+        "PÉRIODES DIPLÔMA",
+        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
+        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
+        "PÉRIODES MESURE SEUIL (POUR FABLAB)",
+        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
+        "PÉRIODES ALTERNE",
+        "PÉRIODES FORMANUM",
+        "PÉRIODES MENTORAT",
+        "PÉRIODES COORDINATION SPORT-ÉTUDES",
+        "PÉRIODES SOUTIEN SPORT-ÉTUDES",
+    ]
+
+    # Largeur de colonne approximant 165 pixels.
+    # La conversion exacte dépend de la police et du système, 22 est une bonne approximation.
+    COLUMN_WIDTH = 22
 
     for champ_no, champ_data in donnees_par_champ.items():
         champ_nom = champ_data["nom"]
@@ -495,57 +517,72 @@ def generer_export_org_scolaire(
         ).strip()[:31]
         sheet = workbook.create_sheet(title=safe_sheet_title)
 
-        # Appliquer les en-têtes
-        for col_idx, header_text in enumerate(headers, start=1):
+        # Appliquer les en-têtes et leur style
+        for col_idx, header_text in enumerate(HEADERS, start=1):
             cell = sheet.cell(row=1, column=col_idx, value=header_text)
             cell.font = header_font_org
+            cell.alignment = header_align
 
         # Initialisation des totaux
-        totals = {h: 0.0 for h in headers if h not in ["NOM", "PRÉNOM"]}
+        totals = {h: 0.0 for h in HEADERS if h != "NOM, PRÉNOM"}
 
         # Remplir les données
         for item in donnees:
-            row_data = [
-                item["nomcomplet"] if item["estfictif"] else item["nom"],
-                item["prenom"],
-            ]
-            # Ajouter les périodes pour chaque type de financement
-            for code, libelle in headers_financement:
-                val = item["periodes"].get(code, 0.0)
-                row_data.append(val)
-                # Utiliser la même clé en majuscules pour les totaux
-                totals[f"PÉRIODES {libelle.upper()}"] += val
+            row_data = []
 
-            # Ajouter les périodes pour les catégories spéciales
-            special_categories = {
-                "PÉRIODES SOUTIEN SE": item.get("soutien_se", 0.0),
-                "RESSOURCE AUTRE": item.get("ressource_autre", 0.0),
-                "ENSEIGNANT RESSOURCE": item.get("enseignant_ressource", 0.0),
-                "PÉRIODES AUTRES": item.get("autres", 0.0),
-            }
-            for cat_header, cat_value in special_categories.items():
-                row_data.append(cat_value)
-                totals[cat_header] += cat_value
+            # Colonne 1: Nom, Prénom ou NomComplet pour les tâches fictives
+            if item["estfictif"]:
+                row_data.append(item["nomcomplet"])
+            else:
+                row_data.append(f"{item['nom']}, {item['prenom']}")
+
+            # Colonnes de périodes
+            for header in HEADERS[1:]:  # On saute la colonne "NOM, PRÉNOM"
+                # Utilise .get() pour récupérer la valeur, avec 0.0 par défaut si la clé n'existe pas
+                period_value = item.get(header, 0.0)
+                row_data.append(period_value)
+                totals[header] += period_value
 
             sheet.append(row_data)
 
-        # Ajouter la ligne de total
-        total_row_idx = sheet.max_row + 1
-        sheet.cell(row=total_row_idx, column=1, value="TOTAL").font = total_font
-        # Colonnes C et suivantes pour les totaux
-        for col_idx, header_text in enumerate(headers, start=1):
-            if header_text not in ["NOM", "PRÉNOM"]:
-                cell = sheet.cell(row=total_row_idx, column=col_idx)
-                cell.value = totals.get(header_text, 0.0)
-                cell.font = total_font
+        # Ajouter la ligne de total par colonne
+        if donnees:
+            total_row_idx = sheet.max_row + 1
+            total_cell = sheet.cell(row=total_row_idx, column=1, value="TOTAL")
+            total_cell.font = total_font
 
-        # Ajustement des largeurs de colonnes
-        sheet.column_dimensions["A"].width = 25
-        sheet.column_dimensions["B"].width = 20
-        for i, header_text in enumerate(headers, start=1):
-            if i > 2:  # Pour les colonnes de périodes
-                letter = openpyxl.utils.get_column_letter(i)
-                sheet.column_dimensions[letter].width = max(15, len(header_text) + 2)
+            for col_idx, header_text in enumerate(HEADERS, start=1):
+                if header_text in totals:
+                    cell = sheet.cell(row=total_row_idx, column=col_idx)
+                    cell.value = totals[header_text]
+                    cell.font = total_font
+
+            # Ajouter une ligne vide pour la séparation
+            grand_total_row_idx = total_row_idx + 2
+
+            # Calculer le grand total de toutes les périodes pour le champ
+            grand_total_periodes_champ = sum(totals.values())
+
+            # Écrire le libellé pour le grand total
+            label_cell = sheet.cell(
+                row=grand_total_row_idx,
+                column=1,
+                value="TOTAL PÉRIODES DU CHAMP",
+            )
+            label_cell.font = total_font
+
+            # Écrire la valeur du grand total
+            value_cell = sheet.cell(
+                row=grand_total_row_idx,
+                column=2,
+                value=grand_total_periodes_champ,
+            )
+            value_cell.font = total_font
+
+        # Ajustement des largeurs de toutes les colonnes
+        for i in range(1, len(HEADERS) + 1):
+            letter = openpyxl.utils.get_column_letter(i)
+            sheet.column_dimensions[letter].width = COLUMN_WIDTH
 
     mem_file = io.BytesIO()
     workbook.save(mem_file)

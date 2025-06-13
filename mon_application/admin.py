@@ -1028,10 +1028,20 @@ def exporter_org_scolaire_excel() -> Any:
     annee_id = g.annee_active["annee_id"]
     annee_libelle = g.annee_active["libelle_annee"]
 
-    # Étape 1: Récupérer les types de financement pour les en-têtes
+    # Étape 1: Mapper le libellé du financement à l'en-tête de colonne Excel.
+    # C'est ici que l'on s'assure que "Soutien en Sport-études" correspond bien
+    # à "PÉRIODES SOUTIEN SPORT-ÉTUDES".
     tous_les_financements = db.get_all_financements()
-    headers_financement = [(f["code"], f["libelle"]) for f in tous_les_financements]
-    codes_financement_valides = {code for code, _libelle in headers_financement}
+    libelle_to_header_map = {
+        f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}"
+        for f in tous_les_financements
+    }
+    # Cas spécial si le libellé contient des variations
+    # On peut forcer une correspondance si nécessaire
+    libelle_to_header_map["SOUTIEN EN SPORT-ÉTUDES"] = "PÉRIODES SOUTIEN SPORT-ÉTUDES"
+
+    # Récupérer tous les codes de financement pour le mappage
+    code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
 
     # Étape 2: Récupérer les données brutes
     donnees_raw = db.get_data_for_org_scolaire_export(annee_id)
@@ -1039,60 +1049,61 @@ def exporter_org_scolaire_excel() -> Any:
         flash(f"Aucune donnée à exporter pour '{annee_libelle}'.", "warning")
         return redirect(url_for("admin.page_sommaire"))
 
-    # Étape 3: Pivoter les données en Python
+    # Étape 3: Pivoter les données
     pivot_data: dict[str, dict[str, Any]] = {}
+    ALL_HEADERS = [
+        "PÉRIODES RÉGULIER", "PÉRIODES ADAPTATION SCOLAIRE", "PÉRIODES SPORT-ÉTUDES",
+        "PÉRIODES ENSEIGNANT RESSOURCE", "PÉRIODES AIDESEC", "PÉRIODES DIPLÔMA",
+        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
+        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
+        "PÉRIODES MESURE SEUIL (POUR FABLAB)", "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
+        "PÉRIODES ALTERNE", "PÉRIODES FORMANUM", "PÉRIODES MENTORAT",
+        "PÉRIODES COORDINATION SPORT-ÉTUDES", "PÉRIODES SOUTIEN SPORT-ÉTUDES",
+    ]
 
     for item in donnees_raw:
         champ_no = item["champno"]
-        # Clé unique pour chaque enseignant/tâche au sein d'un champ
         enseignant_key = (
             f"fictif-{item['nomcomplet']}"
             if item["estfictif"]
             else f"reel-{item['nom']}-{item['prenom']}"
         )
 
-        if champ_no not in pivot_data:
-            pivot_data[champ_no] = {}
-        if enseignant_key not in pivot_data[champ_no]:
+        if enseignant_key not in pivot_data.setdefault(champ_no, {}):
             pivot_data[champ_no][enseignant_key] = {
-                "nom": item["nom"],
-                "prenom": item["prenom"],
-                "nomcomplet": item["nomcomplet"],
-                "estfictif": item["estfictif"],
+                "nom": item["nom"], "prenom": item["prenom"],
+                "nomcomplet": item["nomcomplet"], "estfictif": item["estfictif"],
                 "champnom": item["champnom"],
-                "periodes": {code: 0.0 for code, _libelle in headers_financement},
-                "soutien_se": 0.0,
-                "ressource_autre": 0.0,
-                "enseignant_ressource": 0.0,
-                "autres": 0.0,
+                **{header: 0.0 for header in ALL_HEADERS},
             }
 
-        # Distribution des périodes dans les bonnes "colonnes"
         total_p = float(item["total_periodes"] or 0.0)
-        code_cours = item["codecours"]
-        if item["financement_code"] in codes_financement_valides:
-            pivot_data[champ_no][enseignant_key]["periodes"][item["financement_code"]] += total_p
-        elif code_cours and code_cours.startswith("SOU"):
-            pivot_data[champ_no][enseignant_key]["soutien_se"] += total_p
-        elif code_cours and code_cours.startswith("RESSA"):
-            pivot_data[champ_no][enseignant_key]["ressource_autre"] += total_p
-        elif code_cours and code_cours.startswith("RESS_"):
-            pivot_data[champ_no][enseignant_key]["enseignant_ressource"] += total_p
-        else:
-            pivot_data[champ_no][enseignant_key]["autres"] += total_p
+        financement_code = item["financement_code"]
+        target_col = "PÉRIODES RÉGULIER"  # Colonne par défaut
 
-    # Conversion de la structure pivotée vers le format attendu par la fonction d'export
+        if financement_code and financement_code in code_to_libelle_map:
+            libelle_upper = code_to_libelle_map[financement_code]
+            if libelle_upper in libelle_to_header_map:
+                target_col = libelle_to_header_map[libelle_upper]
+
+        if target_col in pivot_data[champ_no][enseignant_key]:
+            pivot_data[champ_no][enseignant_key][target_col] += total_p
+        else:
+            current_app.logger.warning(
+                f"L'en-tête de colonne '{target_col}' n'a pas été trouvé. "
+                f"Les périodes pour le code '{financement_code}' sont ignorées."
+            )
+
+    # Conversion finale pour la fonction d'export
     donnees_par_champ: dict[str, dict[str, Any]] = {}
     for champ_no, enseignants in pivot_data.items():
-        if champ_no not in donnees_par_champ:
-            donnees_par_champ[champ_no] = {
-                "nom": next(iter(enseignants.values()))["champnom"],
-                "donnees": [],
-            }
-        donnees_par_champ[champ_no]["donnees"] = list(enseignants.values())
+        donnees_par_champ[champ_no] = {
+            "nom": next(iter(enseignants.values()))["champnom"],
+            "donnees": list(enseignants.values()),
+        }
 
     # Étape 4: Générer le fichier Excel
-    mem_file = exports.generer_export_org_scolaire(donnees_par_champ, headers_financement)
+    mem_file = exports.generer_export_org_scolaire(donnees_par_champ)
     filename = f"export_org_scolaire_{annee_libelle}.xlsx"
     current_app.logger.info(f"Génération de l'export '{filename}'.")
 

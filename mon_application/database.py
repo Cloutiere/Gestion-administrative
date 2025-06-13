@@ -655,7 +655,9 @@ def get_enseignants_par_champ(
                        EstFictif, PeutChoisirHorsChampPrincipal
                 FROM Enseignants
                 WHERE ChampNo = %s AND annee_id = %s
-                ORDER BY EstFictif, Nom, Prenom;
+                ORDER BY EstFictif,
+                         Nom COLLATE "fr-CA-x-icu",
+                         Prenom COLLATE "fr-CA-x-icu";
                 """,
                 (champ_no, annee_id),
             )
@@ -688,7 +690,10 @@ def get_all_enseignants_avec_details(annee_id: int) -> list[dict[str, Any]]:
                 LEFT JOIN champ_annee_statuts cas
                     ON e.ChampNo = cas.champ_no AND e.annee_id = cas.annee_id
                 WHERE e.annee_id = %s
-                ORDER BY e.ChampNo, e.EstFictif, e.Nom, e.Prenom;
+                ORDER BY e.ChampNo,
+                         e.EstFictif,
+                         e.Nom COLLATE "fr-CA-x-icu",
+                         e.Prenom COLLATE "fr-CA-x-icu";
                 """,
                 (annee_id,),
             )
@@ -1016,7 +1021,7 @@ def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | N
             cur.execute(
                 "SELECT NomComplet FROM Enseignants WHERE ChampNo = %s AND "
                 "EstFictif = TRUE AND NomComplet LIKE %s AND annee_id = %s;",
-                (champ_no, f"{champ_no}-Tâche restante-%%", annee_id),
+                (champ_no, f"{champ_no}-Tâche restante-%", annee_id),
             )
             numeros = [
                 int(r["nomcomplet"].split("-")[-1])
@@ -1353,7 +1358,9 @@ def get_all_enseignants_grouped_by_champ(annee_id: int) -> dict[str, dict[str, A
                 FROM Enseignants e
                 JOIN Champs ch ON e.ChampNo = ch.ChampNo
                 WHERE e.EstFictif = FALSE AND e.annee_id = %s
-                ORDER BY ch.ChampNo, e.Nom, e.Prenom;
+                ORDER BY ch.ChampNo,
+                         e.Nom COLLATE "fr-CA-x-icu",
+                         e.Prenom COLLATE "fr-CA-x-icu";
                 """,
                 (annee_id,),
             )
@@ -1475,7 +1482,10 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
                     ch.ChampNo, ch.ChampNom, e.Nom, e.Prenom, c.CodeCours,
                     c.CoursDescriptif, c.EstCoursAutre, c.financement_code, c.NbPeriodes
                 ORDER BY
-                    ch.ChampNo ASC, e.Nom ASC, e.Prenom ASC, c.CodeCours ASC;
+                    ch.ChampNo ASC,
+                    e.Nom COLLATE "fr-CA-x-icu" ASC,
+                    e.Prenom COLLATE "fr-CA-x-icu" ASC,
+                    c.CodeCours ASC;
                 """,
                 (annee_id,),
             )
@@ -1556,8 +1566,11 @@ def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
                 ORDER BY
                     r.ChampNo,
                     CASE WHEN r.tache_restante = 'Non attribuées' THEN 1 ELSE 0 END,
-                    CAST(substring(r.tache_restante from '-(\\d+)$') AS INTEGER),
-                    r.tache_restante,
+                    CASE
+                        WHEN r.tache_restante LIKE '%%-Tâche restante-%%'
+                        THEN CAST(substring(r.tache_restante FROM '-(\\d+)$') AS INTEGER)
+                        ELSE NULL
+                    END,
                     r.CodeCours;
                 """,
                 {"annee_id": annee_id},
@@ -1662,17 +1675,17 @@ def get_data_for_org_scolaire_export(annee_id: int) -> list[dict[str, Any]]:
                     ChampNo,
                     CASE
                         WHEN EstFictif = FALSE THEN 0
-                        WHEN NomComplet LIKE 'Tâche restante-%%' THEN 1
+                        WHEN NomComplet LIKE '%%-Tâche restante-%%' THEN 1
                         WHEN NomComplet = 'Non attribué' THEN 2
                         ELSE 3
                     END,
                     CASE
-                        WHEN EstFictif = TRUE AND NomComplet LIKE 'Tâche restante-%%'
+                        WHEN EstFictif = TRUE AND NomComplet LIKE '%%-Tâche restante-%%'
                         THEN CAST(substring(NomComplet FROM '-(\\d+)$') AS INTEGER)
                         ELSE NULL
                     END,
-                    Nom,
-                    Prenom;
+                    Nom COLLATE "fr-CA-x-icu",
+                    Prenom COLLATE "fr-CA-x-icu";
             """
             cur.execute(query_sql, {"annee_id": annee_id})
             return [dict(row) for row in cur.fetchall()]
