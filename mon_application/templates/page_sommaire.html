@@ -136,6 +136,7 @@
                     <div class="details-link-container no-print">
                         <a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches</a>
                         <a href="{{ url_for('admin.exporter_taches_excel') }}" class="export-button">Exporter les tâches (Excel)</a>
+                        <a href="{{ url_for('admin.exporter_periodes_restantes_excel') }}" class="export-button">Exporter les périodes restantes (Excel)</a>
                     </div>
 
                     {% if moyennes_par_champ %}
@@ -430,7 +431,7 @@
                 });
             }
 
-            // Retourne le total calculé pour que la fonction appelante puisse l'utiliser.
+            // Retourne le total calculé pour que la fonction appelante puisse l'utiliser. 
             return totalPeriodesMagiquesConfirmees;
         }
     </script>

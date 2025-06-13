@@ -10,6 +10,7 @@ dans le contexte de l'application Flask, ainsi que toutes les fonctions DAO
 """
 
 import os
+from collections import defaultdict
 from typing import Any
 
 import psycopg2
@@ -38,7 +39,9 @@ def get_db_connection_string() -> str:
 
     if current_app:
         # Log l'environnement utilisé pour la clarté lors du débogage
-        current_app.logger.info(f"Configuration de la base de données pour l'environnement : {app_env.upper()}")
+        current_app.logger.info(
+            f"Configuration de la base de données pour l'environnement : {app_env.upper()}"
+        )
 
     db_host = os.environ.get(f"{prefix}PGHOST")
     db_name = os.environ.get(f"{prefix}PGDATABASE")
@@ -108,7 +111,9 @@ def get_all_annees() -> list[dict[str, Any]]:
         return []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires ORDER BY libelle_annee DESC;")
+            cur.execute(
+                "SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires ORDER BY libelle_annee DESC;"
+            )
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_all_annees: {e}")
@@ -122,7 +127,9 @@ def get_annee_courante() -> dict[str, Any] | None:
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires WHERE est_courante = TRUE;")
+            cur.execute(
+                "SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires WHERE est_courante = TRUE;"
+            )
             return dict(row) if (row := cur.fetchone()) else None
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_annee_courante: {e}")
@@ -145,7 +152,9 @@ def create_annee_scolaire(libelle: str) -> dict[str, Any] | None:
             return dict(new_annee) if new_annee else None
     except psycopg2.errors.UniqueViolation:
         db.rollback()
-        current_app.logger.warning(f"Tentative de création d'une année scolaire existante: {libelle}")
+        current_app.logger.warning(
+            f"Tentative de création d'une année scolaire existante: {libelle}"
+        )
         return None
     except psycopg2.Error as e:
         db.rollback()
@@ -162,12 +171,17 @@ def set_annee_courante(annee_id: int) -> bool:
         with db.cursor() as cur:
             # Transaction pour assurer l'atomicité
             cur.execute("UPDATE anneesscolaires SET est_courante = FALSE;")
-            cur.execute("UPDATE anneesscolaires SET est_courante = TRUE WHERE annee_id = %s;", (annee_id,))
+            cur.execute(
+                "UPDATE anneesscolaires SET est_courante = TRUE WHERE annee_id = %s;",
+                (annee_id,),
+            )
             db.commit()
             return cur.rowcount > 0
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO set_annee_courante pour annee_id {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO set_annee_courante pour annee_id {annee_id}: {e}"
+        )
         return False
 
 
@@ -211,11 +225,16 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT id, username, password_hash, is_admin FROM Users WHERE username = %s;", (username,))
+            cur.execute(
+                "SELECT id, username, password_hash, is_admin FROM Users WHERE username = %s;",
+                (username,),
+            )
             user_data = cur.fetchone()
             return dict(user_data) if user_data else None
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_user_by_username pour {username}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_user_by_username pour {username}: {e}"
+        )
         return None
 
 
@@ -249,7 +268,9 @@ def get_admin_count() -> int:
         return 0
 
 
-def create_user(username: str, password_hash: str, is_admin: bool = False) -> dict[str, Any] | None:
+def create_user(
+    username: str, password_hash: str, is_admin: bool = False
+) -> dict[str, Any] | None:
     """Crée un nouvel utilisateur."""
     db = get_db()
     if not db:
@@ -310,12 +331,18 @@ def update_user_champ_access(user_id: int, champ_nos: list[str]) -> bool:
         with db.cursor() as cur:
             cur.execute("DELETE FROM user_champ_access WHERE user_id = %s;", (user_id,))
             if champ_nos:
-                psycopg2.extras.execute_values(cur, "INSERT INTO user_champ_access (user_id, champ_no) VALUES %s;", [(user_id, c) for c in champ_nos])
+                psycopg2.extras.execute_values(
+                    cur,
+                    "INSERT INTO user_champ_access (user_id, champ_no) VALUES %s;",
+                    [(user_id, c) for c in champ_nos],
+                )
             db.commit()
             return True
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO update_user_champ_access pour user {user_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO update_user_champ_access pour user {user_id}: {e}"
+        )
         return False
 
 
@@ -375,7 +402,9 @@ def get_champ_details(champ_no: str, annee_id: int) -> dict[str, Any] | None:
             )
             return dict(row) if (row := cur.fetchone()) else None
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_champ_details pour {champ_no}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_champ_details pour {champ_no}, annee {annee_id}: {e}"
+        )
         return None
 
 
@@ -405,14 +434,21 @@ def get_all_champ_statuses_for_year(annee_id: int) -> dict[str, dict[str, bool]]
                 (annee_id,),
             )
             for row in cur.fetchall():
-                statuses[row["champ_no"]] = {"est_verrouille": row["est_verrouille"], "est_confirme": row["est_confirme"]}
+                statuses[row["champ_no"]] = {
+                    "est_verrouille": row["est_verrouille"],
+                    "est_confirme": row["est_confirme"],
+                }
         return statuses
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_champ_statuses_for_year pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_all_champ_statuses_for_year pour annee {annee_id}: {e}"
+        )
         return {}
 
 
-def _toggle_champ_annee_status(champ_no: str, annee_id: int, status_column: str) -> bool | None:
+def _toggle_champ_annee_status(
+    champ_no: str, annee_id: int, status_column: str
+) -> bool | None:
     """
     Fonction utilitaire pour basculer un statut booléen pour un champ/année.
     Crée l'entrée dans champ_annee_statuts si elle n'existe pas (UPSERT).
@@ -429,7 +465,9 @@ def _toggle_champ_annee_status(champ_no: str, annee_id: int, status_column: str)
     if not db:
         return None
     if status_column not in ("est_verrouille", "est_confirme"):
-        current_app.logger.error(f"Tentative de basculer une colonne de statut invalide: {status_column}")
+        current_app.logger.error(
+            f"Tentative de basculer une colonne de statut invalide: {status_column}"
+        )
         return None
 
     try:
@@ -450,7 +488,9 @@ def _toggle_champ_annee_status(champ_no: str, annee_id: int, status_column: str)
             return result[status_column] if result else None
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO _toggle_champ_annee_status pour {champ_no}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO _toggle_champ_annee_status pour {champ_no}, annee {annee_id}: {e}"
+        )
         return None
 
 
@@ -494,13 +534,20 @@ def get_total_periodes_disponibles_par_champ(annee_id: int) -> dict[str, float]:
                 (annee_id,),
             )
             # COALESCE est utilisé pour s'assurer que si la somme est NULL (aucun cours), on retourne 0.
-            return {row["champno"]: float(row["total_disponible"] or 0.0) for row in cur.fetchall()}
+            return {
+                row["champno"]: float(row["total_disponible"] or 0.0)
+                for row in cur.fetchall()
+            }
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_total_periodes_disponibles_par_champ pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_total_periodes_disponibles_par_champ pour annee {annee_id}: {e}"
+        )
         return {}
 
 
-def get_enseignants_par_champ(champ_no: str, annee_id: int) -> list[dict[str, Any]]:
+def get_enseignants_par_champ(
+    champ_no: str, annee_id: int
+) -> list[dict[str, Any]]:
     """Récupère les enseignants d'un champ pour une année donnée."""
     db = get_db()
     if not db:
@@ -516,7 +563,9 @@ def get_enseignants_par_champ(champ_no: str, annee_id: int) -> list[dict[str, An
             )
             return [dict(e) for e in cur.fetchall()]
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_enseignants_par_champ pour champ {champ_no}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_enseignants_par_champ pour champ {champ_no}, annee {annee_id}: {e}"
+        )
         return []
 
 
@@ -547,21 +596,33 @@ def get_all_enseignants_avec_details(annee_id: int) -> list[dict[str, Any]]:
         toutes_les_attributions = get_toutes_les_attributions(annee_id)
         attributions_par_enseignant: dict[int, list] = {}
         for attr in toutes_les_attributions:
-            attributions_par_enseignant.setdefault(attr["enseignantid"], []).append(attr)
+            attributions_par_enseignant.setdefault(attr["enseignantid"], []).append(
+                attr
+            )
 
         enseignants_complets = []
         for ens_brut in enseignants_bruts:
-            attributions = attributions_par_enseignant.get(ens_brut["enseignantid"], [])
+            attributions = attributions_par_enseignant.get(
+                ens_brut["enseignantid"], []
+            )
             periodes = calculer_periodes_pour_attributions(attributions)
-            compte_pour_moyenne = ens_brut["esttempsplein"] and not ens_brut["estfictif"]
-            enseignants_complets.append({**ens_brut, **periodes, "compte_pour_moyenne_champ": compte_pour_moyenne})
+            compte_pour_moyenne = (
+                ens_brut["esttempsplein"] and not ens_brut["estfictif"]
+            )
+            enseignants_complets.append(
+                {**ens_brut, **periodes, "compte_pour_moyenne_champ": compte_pour_moyenne}
+            )
         return enseignants_complets
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_enseignants_avec_details pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_all_enseignants_avec_details pour annee {annee_id}: {e}"
+        )
         return []
 
 
-def get_cours_disponibles_par_champ(champ_no: str, annee_id: int) -> list[dict[str, Any]]:
+def get_cours_disponibles_par_champ(
+    champ_no: str, annee_id: int
+) -> list[dict[str, Any]]:
     """Récupère les cours d'un champ pour une année, avec le nb de groupes restants."""
     db = get_db()
     if not db:
@@ -583,7 +644,9 @@ def get_cours_disponibles_par_champ(champ_no: str, annee_id: int) -> list[dict[s
             )
             return [dict(cr) for cr in cur.fetchall()]
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_cours_disponibles_par_champ pour champ {champ_no}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_cours_disponibles_par_champ pour champ {champ_no}, annee {annee_id}: {e}"
+        )
         return []
 
 
@@ -607,7 +670,9 @@ def get_attributions_enseignant(enseignant_id: int) -> list[dict[str, Any]]:
             )
             return [dict(a) for a in cur.fetchall()]
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_attributions_enseignant pour {enseignant_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_attributions_enseignant pour {enseignant_id}: {e}"
+        )
         return []
 
 
@@ -632,14 +697,26 @@ def get_toutes_les_attributions(annee_id: int) -> list[dict[str, Any]]:
             )
             return [dict(a) for a in cur.fetchall()]
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_toutes_les_attributions pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_toutes_les_attributions pour annee {annee_id}: {e}"
+        )
         return []
 
 
-def calculer_periodes_pour_attributions(attributions: list[dict[str, Any]]) -> dict[str, float]:
+def calculer_periodes_pour_attributions(
+    attributions: list[dict[str, Any]]
+) -> dict[str, float]:
     """Calcule les totaux de périodes à partir d'une liste d'attributions."""
-    periodes_cours = sum(float(a["nbperiodes"]) * a["nbgroupespris"] for a in attributions if not a["estcoursautre"])
-    periodes_autres = sum(float(a["nbperiodes"]) * a["nbgroupespris"] for a in attributions if a["estcoursautre"])
+    periodes_cours = sum(
+        float(a["nbperiodes"]) * a["nbgroupespris"]
+        for a in attributions
+        if not a["estcoursautre"]
+    )
+    periodes_autres = sum(
+        float(a["nbperiodes"]) * a["nbgroupespris"]
+        for a in attributions
+        if a["estcoursautre"]
+    )
     return {
         "periodes_cours": periodes_cours,
         "periodes_autres": periodes_autres,
@@ -673,7 +750,9 @@ def get_groupes_restants_pour_cours(code_cours: str, annee_id: int) -> int:
             result = cur.fetchone()
             return int(result[0]) if result and result[0] is not None else 0
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_groupes_restants_pour_cours pour {code_cours}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_groupes_restants_pour_cours pour {code_cours}, annee {annee_id}: {e}"
+        )
         return 0
 
 
@@ -698,11 +777,16 @@ def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
             for row in cur.fetchall():
                 champ_no = row["champno"]
                 if champ_no not in cours_par_champ:
-                    cours_par_champ[champ_no] = {"champ_nom": row["champnom"], "cours": []}
+                    cours_par_champ[champ_no] = {
+                        "champ_nom": row["champnom"],
+                        "cours": [],
+                    }
                 cours_par_champ[champ_no]["cours"].append(dict(row))
             return cours_par_champ
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_cours_grouped_by_champ pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_all_cours_grouped_by_champ pour annee {annee_id}: {e}"
+        )
         return {}
 
 
@@ -728,11 +812,15 @@ def get_verrou_info_enseignant(enseignant_id: int) -> dict[str, Any] | None:
             )
             return dict(row) if (row := cur.fetchone()) else None
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_verrou_info_enseignant pour {enseignant_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_verrou_info_enseignant pour {enseignant_id}: {e}"
+        )
         return None
 
 
-def add_attribution(enseignant_id: int, code_cours: str, annee_id_cours: int) -> int | None:
+def add_attribution(
+    enseignant_id: int, code_cours: str, annee_id_cours: int
+) -> int | None:
     """Ajoute une attribution de cours à un enseignant pour une année donnée."""
     db = get_db()
     if not db:
@@ -749,7 +837,9 @@ def add_attribution(enseignant_id: int, code_cours: str, annee_id_cours: int) ->
             return new_id["attributionid"] if new_id else None
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO add_attribution pour enseignant {enseignant_id}, cours {code_cours}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO add_attribution pour enseignant {enseignant_id}, cours {code_cours}: {e}"
+        )
         return None
 
 
@@ -774,7 +864,9 @@ def get_attribution_info(attribution_id: int) -> dict[str, Any] | None:
             )
             return dict(row) if (row := cur.fetchone()) else None
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_attribution_info pour attribution {attribution_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_attribution_info pour attribution {attribution_id}: {e}"
+        )
         return None
 
 
@@ -785,12 +877,17 @@ def delete_attribution(attribution_id: int) -> bool:
         return False
     try:
         with db.cursor() as cur:
-            cur.execute("DELETE FROM AttributionsCours WHERE AttributionID = %s;", (attribution_id,))
+            cur.execute(
+                "DELETE FROM AttributionsCours WHERE AttributionID = %s;",
+                (attribution_id,),
+            )
             db.commit()
             return cur.rowcount > 0
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO delete_attribution pour attribution {attribution_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO delete_attribution pour attribution {attribution_id}: {e}"
+        )
         return False
 
 
@@ -805,7 +902,11 @@ def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | N
                 "SELECT NomComplet FROM Enseignants WHERE ChampNo = %s AND EstFictif = TRUE AND NomComplet LIKE %s AND annee_id = %s;",
                 (champ_no, f"{champ_no}-Tâche restante-%", annee_id),
             )
-            numeros = [int(r["nomcomplet"].split("-")[-1]) for r in cur.fetchall() if r["nomcomplet"].split("-")[-1].isdigit()]
+            numeros = [
+                int(r["nomcomplet"].split("-")[-1])
+                for r in cur.fetchall()
+                if r["nomcomplet"].split("-")[-1].isdigit()
+            ]
             next_num = max(numeros) + 1 if numeros else 1
             nom_tache = f"{champ_no}-Tâche restante-{next_num}"
 
@@ -821,7 +922,9 @@ def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | N
             return dict(new_fictif_data) if new_fictif_data else None
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO create_fictif_enseignant pour champ {champ_no}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO create_fictif_enseignant pour champ {champ_no}, annee {annee_id}: {e}"
+        )
         return None
 
 
@@ -832,10 +935,15 @@ def get_affected_cours_for_enseignant(enseignant_id: int) -> list[dict[str, Any]
         return []
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT DISTINCT CodeCours, annee_id_cours FROM AttributionsCours WHERE EnseignantID = %s;", (enseignant_id,))
+            cur.execute(
+                "SELECT DISTINCT CodeCours, annee_id_cours FROM AttributionsCours WHERE EnseignantID = %s;",
+                (enseignant_id,),
+            )
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_affected_cours_for_enseignant pour enseignant {enseignant_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_affected_cours_for_enseignant pour enseignant {enseignant_id}: {e}"
+        )
         return []
 
 
@@ -846,16 +954,22 @@ def delete_enseignant(enseignant_id: int) -> bool:
         return False
     try:
         with db.cursor() as cur:
-            cur.execute("DELETE FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
+            cur.execute(
+                "DELETE FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,)
+            )
             db.commit()
             return cur.rowcount > 0
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO delete_enseignant pour enseignant {enseignant_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO delete_enseignant pour enseignant {enseignant_id}: {e}"
+        )
         return False
 
 
-def reassign_cours_to_champ(code_cours: str, annee_id: int, nouveau_champ_no: str) -> dict[str, Any] | None:
+def reassign_cours_to_champ(
+    code_cours: str, annee_id: int, nouveau_champ_no: str
+) -> dict[str, Any] | None:
     """Réassigne un cours à un nouveau champ pour une année donnée."""
     db = get_db()
     if not db:
@@ -875,10 +989,15 @@ def reassign_cours_to_champ(code_cours: str, annee_id: int, nouveau_champ_no: st
                 return None  # Cours non trouvé pour cette année
 
             db.commit()
-            return {"nouveau_champ_no": nouveau_champ_no, "nouveau_champ_nom": new_champ["champnom"]}
+            return {
+                "nouveau_champ_no": nouveau_champ_no,
+                "nouveau_champ_nom": new_champ["champnom"],
+            }
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO reassign_cours_to_champ pour cours {code_cours}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO reassign_cours_to_champ pour cours {code_cours}, annee {annee_id}: {e}"
+        )
         return None
 
 
@@ -915,14 +1034,21 @@ def get_cours_details(code_cours: str, annee_id: int) -> dict[str, Any] | None:
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT * FROM Cours WHERE CodeCours = %s AND annee_id = %s;", (code_cours, annee_id))
+            cur.execute(
+                "SELECT * FROM Cours WHERE CodeCours = %s AND annee_id = %s;",
+                (code_cours, annee_id),
+            )
             return dict(row) if (row := cur.fetchone()) else None
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_cours_details pour {code_cours}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_cours_details pour {code_cours}, annee {annee_id}: {e}"
+        )
         return None
 
 
-def update_cours(code_cours: str, annee_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
+def update_cours(
+    code_cours: str, annee_id: int, data: dict[str, Any]
+) -> dict[str, Any] | None:
     """Met à jour un cours pour une année."""
     db = get_db()
     if not db:
@@ -955,7 +1081,10 @@ def delete_cours(code_cours: str, annee_id: int) -> tuple[bool, str]:
         return False, "Erreur de connexion."
     try:
         with db.cursor() as cur:
-            cur.execute("DELETE FROM Cours WHERE CodeCours = %s AND annee_id = %s;", (code_cours, annee_id))
+            cur.execute(
+                "DELETE FROM Cours WHERE CodeCours = %s AND annee_id = %s;",
+                (code_cours, annee_id),
+            )
             db.commit()
             if cur.rowcount > 0:
                 return True, "Cours supprimé."
@@ -966,7 +1095,9 @@ def delete_cours(code_cours: str, annee_id: int) -> tuple[bool, str]:
         return False, msg
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO delete_cours pour {code_cours}, annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO delete_cours pour {code_cours}, annee {annee_id}: {e}"
+        )
         return False, "Erreur base de données."
 
 
@@ -1001,14 +1132,20 @@ def get_enseignant_details(enseignant_id: int) -> dict[str, Any] | None:
         return None
     try:
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT * FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
+            cur.execute(
+                "SELECT * FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,)
+            )
             return dict(row) if (row := cur.fetchone()) else None
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_enseignant_details pour {enseignant_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_enseignant_details pour {enseignant_id}: {e}"
+        )
         return None
 
 
-def update_enseignant(enseignant_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
+def update_enseignant(
+    enseignant_id: int, data: dict[str, Any]
+) -> dict[str, Any] | None:
     """Met à jour un enseignant (cible par ID unique)."""
     db = get_db()
     if not db:
@@ -1056,11 +1193,16 @@ def get_all_enseignants_grouped_by_champ(annee_id: int) -> dict[str, dict[str, A
             for row in cur.fetchall():
                 champ_no = row["champno"]
                 if champ_no not in enseignants_par_champ:
-                    enseignants_par_champ[champ_no] = {"champ_nom": row["champnom"], "enseignants": []}
+                    enseignants_par_champ[champ_no] = {
+                        "champ_nom": row["champnom"],
+                        "enseignants": [],
+                    }
                 enseignants_par_champ[champ_no]["enseignants"].append(dict(row))
             return enseignants_par_champ
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_enseignants_grouped_by_champ pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_all_enseignants_grouped_by_champ pour annee {annee_id}: {e}"
+        )
         return {}
 
 
@@ -1084,7 +1226,9 @@ def delete_all_attributions_for_year(annee_id: int) -> int:
             return deleted_count
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO delete_all_attributions_for_year pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO delete_all_attributions_for_year pour annee {annee_id}: {e}"
+        )
         raise
 
 
@@ -1101,7 +1245,9 @@ def delete_all_cours_for_year(annee_id: int) -> int:
             return deleted_count
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO delete_all_cours_for_year pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO delete_all_cours_for_year pour annee {annee_id}: {e}"
+        )
         raise
 
 
@@ -1118,7 +1264,9 @@ def delete_all_enseignants_for_year(annee_id: int) -> int:
             return deleted_count
     except psycopg2.Error as e:
         db.rollback()
-        current_app.logger.error(f"Erreur DAO delete_all_enseignants_for_year pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO delete_all_enseignants_for_year pour annee {annee_id}: {e}"
+        )
         raise
 
 
@@ -1177,5 +1325,87 @@ def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
             )
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_attributions_for_export pour annee {annee_id}: {e}")
+        current_app.logger.error(
+            f"Erreur DAO get_all_attributions_for_export pour annee {annee_id}: {e}"
+        )
+        return []
+
+
+def get_periodes_restantes_for_export(annee_id: int) -> list[dict[str, Any]]:
+    """
+    Récupère les périodes restantes en "dégroupant" chaque groupe sur une ligne
+    et en appliquant un tri spécifique pour le rapport.
+
+    Combine deux sources de "tâches restantes" pour une année donnée :
+    1. Les cours/groupes assignés à des enseignants marqués comme "fictifs".
+    2. Les groupes de cours qui ne sont assignés à aucun enseignant.
+
+    La fonction utilise `generate_series` pour "exploser" les décomptes de
+    groupes en plusieurs lignes. Le tri final place les tâches "Non attribuées"
+    après les tâches fictives nommées.
+
+    Args:
+        annee_id: L'ID de l'année scolaire.
+
+    Returns:
+        Une liste de dictionnaires où chaque dictionnaire représente un seul
+        groupe de cours restant, trié pour l'affichage.
+    """
+    db = get_db()
+    if not db:
+        return []
+    try:
+        with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                WITH remaining_groups_aggregated AS (
+                    WITH total_assigned AS (
+                        SELECT
+                            CodeCours,
+                            annee_id_cours,
+                            SUM(NbGroupesPris) as total_pris
+                        FROM AttributionsCours
+                        GROUP BY CodeCours, annee_id_cours
+                    )
+                    SELECT
+                        ch.ChampNo, ch.ChampNom, e.NomComplet AS tache_restante, c.CodeCours,
+                        c.CoursDescriptif, c.EstCoursAutre, c.NbPeriodes, SUM(ac.NbGroupesPris) AS nb_groupes_total
+                    FROM AttributionsCours AS ac
+                    JOIN Enseignants AS e ON ac.EnseignantID = e.EnseignantID
+                    JOIN Cours AS c ON ac.CodeCours = c.CodeCours AND ac.annee_id_cours = c.annee_id
+                    JOIN Champs AS ch ON c.ChampNo = ch.ChampNo
+                    WHERE e.annee_id = %(annee_id)s AND e.EstFictif = TRUE
+                    GROUP BY ch.ChampNo, ch.ChampNom, e.NomComplet, c.CodeCours, c.CoursDescriptif, c.EstCoursAutre, c.NbPeriodes
+                    UNION ALL
+                    SELECT
+                        ch.ChampNo, ch.ChampNom, 'Non attribuées' AS tache_restante, c.CodeCours,
+                        c.CoursDescriptif, c.EstCoursAutre, c.NbPeriodes, (c.NbGroupeInitial - COALESCE(ta.total_pris, 0)) AS nb_groupes_total
+                    FROM Cours AS c
+                    JOIN Champs AS ch ON c.ChampNo = ch.ChampNo
+                    LEFT JOIN total_assigned AS ta ON c.CodeCours = ta.CodeCours AND c.annee_id = ta.annee_id_cours
+                    WHERE c.annee_id = %(annee_id)s AND (c.NbGroupeInitial - COALESCE(ta.total_pris, 0)) > 0
+                )
+                SELECT
+                    r.ChampNo, r.ChampNom, r.tache_restante, r.CodeCours,
+                    r.CoursDescriptif, r.EstCoursAutre, r.NbPeriodes, 1 AS nb_groupes
+                FROM
+                    remaining_groups_aggregated r,
+                    generate_series(1, r.nb_groupes_total)
+                ORDER BY
+                    r.ChampNo,
+                    -- Trier pour que "Non attribuées" apparaisse en dernier
+                    CASE WHEN r.tache_restante = 'Non attribuées' THEN 1 ELSE 0 END,
+                    -- Ensuite trier par le nom de la tâche restante
+                    r.tache_restante,
+                    -- Finalement par le code du cours
+                    r.CodeCours;
+                """,
+                {"annee_id": annee_id},
+            )
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(
+            f"Erreur DAO get_periodes_restantes_for_export pour annee {annee_id}: {e}",
+            exc_info=True,
+        )
         return []
