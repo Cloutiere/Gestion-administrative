@@ -108,18 +108,20 @@
                                     <th>Pér.</th>
                                     <th>Grp.Init.</th>
                                     <th>Autre</th>
+                                    <th>Clientèle</th>
                                     <th style="min-width: 350px;">Réassigner à</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                             {% for cours in data.cours|sort(attribute='codecours') %}
-                                <tr id="cours-row-{{ cours.codecours|replace('.', '-')|replace('/', '-') }}">
+                                <tr id="cours-row-{{ cours.codecours|replace('.', '-')|replace('/', '-') }}" data-champno="{{ cours.champno }}">
                                     <td>{{ cours.codecours }}</td>
                                     <td>{{ cours.coursdescriptif }}</td>
                                     <td>{{ "%.2f"|format(cours.nbperiodes|float) }}</td>
                                     <td>{{ cours.nbgroupeinitial }}</td>
                                     <td>{{ 'Oui' if cours.estcoursautre else 'Non' }}</td>
+                                    <td>{{ cours.clientele or 'N/A' }}</td>
                                     <td>
                                         <div class="action-buttons">
                                             <select id="select-champ-{{ cours.codecours|replace('.', '-')|replace('/', '-') }}" style="flex-grow: 1;">
@@ -180,7 +182,7 @@
                             </thead>
                             <tbody>
                             {% for enseignant in data.enseignants %}
-                                <tr id="enseignant-row-{{ enseignant.enseignantid }}">
+                                <tr id="enseignant-row-{{ enseignant.enseignantid }}" data-champno="{{ enseignant.champno }}">
                                     <td>{{ enseignant.nomcomplet }}</td>
                                     <td>{{ 'Temps plein' if enseignant.esttempsplein else 'Temps partiel' }}</td>
                                     <td class="col-actions">
@@ -253,8 +255,9 @@
             </div>
             <form id="cours-form">
                 <div class="modal-body">
-                    <input type="hidden" id="cours-mode" value="add"> <!-- Pas d'attribut name ici, lu par JS via ID -->
-                    <input type="hidden" id="original-codecours" value=""> <!-- Pas d'attribut name ici, lu par JS via ID -->
+                    <input type="hidden" id="cours-mode" value="add">
+                    <input type="hidden" id="original-codecours" value="">
+                    <input type="hidden" id="original-champno-cours" value="">
                     <div class="form-group">
                         <label for="form-codecours">Code du Cours</label>
                         <input type="text" id="form-codecours" name="codecours" required>
@@ -285,6 +288,14 @@
                         <input type="checkbox" id="form-estcoursautre" name="estcoursautre">
                         <label for="form-estcoursautre">Est une "autre tâche" (non un cours régulier)</label>
                     </div>
+                    <div class="form-group" id="clientele-form-group">
+                        <label for="form-clientele">Clientèle</label>
+                        <select id="form-clientele" name="clientele">
+                            <option value="R">Régulière (R)</option>
+                            <option value="SE">Sport-Études (SE)</option>
+                            <option value="A">Adaptation (A)</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <div class="button-group">
@@ -305,8 +316,9 @@
             </div>
             <form id="enseignant-form">
                 <div class="modal-body">
-                    <input type="hidden" id="enseignant-mode" value="add"> <!-- Pas d'attribut name ici, lu par JS via ID -->
-                    <input type="hidden" id="enseignant-id" value=""> <!-- Pas d'attribut name ici, lu par JS via ID -->
+                    <input type="hidden" id="enseignant-mode" value="add">
+                    <input type="hidden" id="enseignant-id" value="">
+                    <input type="hidden" id="original-champno-enseignant" value="">
                     <div class="form-group">
                         <label for="form-prenom">Prénom</label>
                         <input type="text" id="form-prenom" name="prenom" required>
@@ -376,9 +388,8 @@
 
         // --- Logique de gestion des années scolaires ---
         const gestionAnneesContainer = document.getElementById('gestion-annees-container');
-        const formCreerAnnee = document.getElementById('form-creer-annee');
-
-        if (formCreerAnnee) {
+        if (gestionAnneesContainer) {
+            const formCreerAnnee = document.getElementById('form-creer-annee');
             formCreerAnnee.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const input = document.getElementById('input-libelle-annee');
@@ -391,14 +402,12 @@
                 });
                 const data = await response.json();
                 if (data.success) {
-                    location.reload(); // Recharger pour voir la nouvelle année et potentiellement l'activer
+                    location.reload();
                 } else {
                     displayApiMessage(data.message, 'error');
                 }
             });
-        }
 
-        if (gestionAnneesContainer) {
             gestionAnneesContainer.addEventListener('click', async (e) => {
                 let url = '';
                 let anneeId = null;
@@ -418,7 +427,7 @@
                     });
                     const data = await response.json();
                     if (data.success) {
-                        location.reload(); // Recharger pour que les changements (session, badge) soient pris en compte
+                        location.reload();
                     } else {
                         displayApiMessage(data.message, 'error');
                     }
@@ -426,24 +435,74 @@
             });
         }
 
-        // --- Logique CRUD pour les COURS (adaptée pour utiliser encodeURIComponent) ---
+        // --- FONCTIONS DE MISE À JOUR DE L'UI ---
+        /**
+         * Met à jour le contenu d'une ligne de tableau de cours avec de nouvelles données.
+         * @param {object} cours - L'objet cours mis à jour, venant de l'API.
+         */
+        function updateCourseRowUI(cours) {
+            const sanitizedId = cours.codecours.replace(/\./g, '-').replace(/\//g, '-');
+            const row = document.getElementById(`cours-row-${sanitizedId}`);
+            if (!row) return;
+
+            // Mettre à jour les cellules de la ligne avec les nouvelles données
+            row.cells[0].textContent = cours.codecours;
+            row.cells[1].textContent = cours.coursdescriptif;
+            row.cells[2].textContent = parseFloat(cours.nbperiodes).toFixed(2);
+            row.cells[3].textContent = cours.nbgroupeinitial;
+            row.cells[4].textContent = cours.estcoursautre ? 'Oui' : 'Non';
+            row.cells[5].textContent = cours.clientele || 'N/A';
+            row.dataset.champno = cours.champno; // Mettre à jour le data-attribute
+        }
+
+        /**
+         * Met à jour le contenu d'une ligne de tableau d'enseignant avec de nouvelles données.
+         * @param {object} enseignant - L'objet enseignant mis à jour, venant de l'API.
+         */
+        function updateTeacherRowUI(enseignant) {
+            const row = document.getElementById(`enseignant-row-${enseignant.enseignantid}`);
+            if (!row) return;
+
+            // Mettre à jour les cellules de la ligne avec les nouvelles données
+            row.cells[0].textContent = enseignant.nomcomplet;
+            row.cells[1].textContent = enseignant.esttempsplein ? 'Temps plein' : 'Temps partiel';
+            row.dataset.champno = enseignant.champno; // Mettre à jour le data-attribute
+        }
+
+
+        // --- Logique CRUD pour les COURS ---
         const coursAccordionContainer = document.getElementById('cours-accordion-container');
         const coursModal = document.getElementById('cours-modal-backdrop');
         const coursForm = document.getElementById('cours-form');
-        const coursModalTitle = document.getElementById('cours-modal-title');
-        const btnOpenAddCoursModal = document.getElementById('btn-open-add-cours-modal');
-        if (btnOpenAddCoursModal) {
+        if (coursAccordionContainer && coursModal && coursForm) {
+            const coursModalTitle = document.getElementById('cours-modal-title');
+            const btnOpenAddCoursModal = document.getElementById('btn-open-add-cours-modal');
+            const chkEstCoursAutre = document.getElementById('form-estcoursautre');
+            const clienteleGroup = document.getElementById('clientele-form-group');
+            const clienteleSelect = document.getElementById('form-clientele');
+
+            if (chkEstCoursAutre && clienteleGroup) {
+                chkEstCoursAutre.addEventListener('change', () => {
+                    clienteleGroup.style.display = chkEstCoursAutre.checked ? 'none' : 'block';
+                    clienteleSelect.required = !chkEstCoursAutre.checked;
+                    if (chkEstCoursAutre.checked) clienteleSelect.value = '';
+                });
+            }
+
             btnOpenAddCoursModal.addEventListener('click', () => {
                 coursForm.reset();
                 coursModalTitle.textContent = 'Ajouter un nouveau cours';
                 coursForm.querySelector('#cours-mode').value = 'add';
-                coursForm.querySelector('#original-codecours').value = ''; // Important pour le mode ajout
+                coursForm.querySelector('#original-codecours').value = '';
+                coursForm.querySelector('#original-champno-cours').value = '';
                 coursForm.querySelector('#form-codecours').readOnly = false;
+                chkEstCoursAutre.checked = false;
+                clienteleGroup.style.display = 'block';
+                clienteleSelect.value = 'R';
+                clienteleSelect.required = true;
                 openModal(coursModal);
             });
-        }
 
-        if (coursAccordionContainer) {
             coursAccordionContainer.addEventListener('click', async (e) => {
                 if (e.target.classList.contains('btn-edit-cours')) {
                     const codeCours = e.target.dataset.codecours;
@@ -455,66 +514,74 @@
                         coursForm.reset();
                         coursModalTitle.textContent = `Modifier le cours : ${cours.codecours}`;
                         coursForm.querySelector('#cours-mode').value = 'edit';
-                        coursForm.querySelector('#original-codecours').value = cours.codecours; // Champ hidden pour l'identifiant original
-                        coursForm.querySelector('#form-codecours').value = cours.codecours; // Champ visible
-                        coursForm.querySelector('#form-codecours').readOnly = true; // Empêcher la modification de la PK
+                        coursForm.querySelector('#original-codecours').value = cours.codecours;
+                        coursForm.querySelector('#original-champno-cours').value = cours.champno;
+                        coursForm.querySelector('#form-codecours').value = cours.codecours;
+                        coursForm.querySelector('#form-codecours').readOnly = true;
                         coursForm.querySelector('#form-coursdescriptif').value = cours.coursdescriptif;
                         coursForm.querySelector('#form-champno-cours').value = cours.champno;
                         coursForm.querySelector('#form-nbperiodes').value = cours.nbperiodes;
                         coursForm.querySelector('#form-nbgroupeinitial').value = cours.nbgroupeinitial;
-                        coursForm.querySelector('#form-estcoursautre').checked = cours.estcoursautre;
+                        chkEstCoursAutre.checked = cours.estcoursautre;
+
+                        clienteleGroup.style.display = cours.estcoursautre ? 'none' : 'block';
+                        clienteleSelect.required = !cours.estcoursautre;
+                        clienteleSelect.value = cours.estcoursautre ? '' : (cours.clientele || 'R');
+
                         openModal(coursModal);
-                    } else {
-                        displayApiMessage(data.message, 'error');
-                    }
+                    } else { displayApiMessage(data.message, 'error'); }
                 }
                 if (e.target.classList.contains('btn-delete-cours')) {
                     const codeCours = e.target.dataset.codecours;
-                    if (confirm(`Êtes-vous sûr de vouloir supprimer le cours "${codeCours}" pour l'année active ?`)) {
+                    if (confirm(`Êtes-vous sûr de vouloir supprimer le cours "${codeCours}" ?`)) {
                         const response = await fetch(`/admin/api/cours/${encodeURIComponent(codeCours)}/supprimer`, { method: 'POST' });
                         const data = await response.json();
                         if (data.success) {
                             const sanitizedId = codeCours.replace(/\./g, '-').replace(/\//g, '-');
-                            const rowToRemove = document.getElementById(`cours-row-${sanitizedId}`);
-                            if (rowToRemove) rowToRemove.remove();
+                            document.getElementById(`cours-row-${sanitizedId}`)?.remove();
                             displayApiMessage(data.message, 'success');
-                        } else {
-                            displayApiMessage(data.message, 'error');
-                        }
+                        } else { displayApiMessage(data.message, 'error'); }
                     }
                 }
             });
-        }
 
-        if (coursForm) {
             coursForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const formData = new FormData(coursForm);
-                const data = Object.fromEntries(formData.entries()); // Contient les champs avec 'name'
+                const data = Object.fromEntries(formData.entries());
 
-                // Conversion des types et lecture des champs sans 'name'
                 data.nbperiodes = parseFloat(data.nbperiodes);
                 data.nbgroupeinitial = parseInt(data.nbgroupeinitial, 10);
-                data.estcoursautre = coursForm.querySelector('#form-estcoursautre').checked;
+                data.estcoursautre = chkEstCoursAutre.checked;
+                if (data.estcoursautre) delete data.clientele;
+
                 const mode = coursForm.querySelector('#cours-mode').value;
                 const originalCodeCours = coursForm.querySelector('#original-codecours').value;
+                const originalChampNo = coursForm.querySelector('#original-champno-cours').value;
 
                 let url = (mode === 'add') ? '/admin/api/cours/creer' : `/admin/api/cours/${encodeURIComponent(originalCodeCours)}/modifier`;
 
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data), // 'data' contient les valeurs à mettre à jour/créer
+                    body: JSON.stringify(data),
                 });
                 const result = await response.json();
 
                 if (result.success) {
                     closeModal(coursModal);
                     displayApiMessage(result.message, 'success');
-                    location.reload(); // Recharger pour voir les modifications
+                    // Si le champ a changé, recharger la page pour déplacer la ligne.
+                    // Sinon, mettre à jour la ligne dynamiquement.
+                    if (mode === 'edit' && result.cours.champno !== originalChampNo) {
+                        location.reload();
+                    } else if (mode === 'edit') {
+                        updateCourseRowUI(result.cours);
+                    } else { // mode 'add'
+                        location.reload();
+                    }
                 } else {
-                    // Afficher l'erreur dans la modale ou via displayApiMessage
-                    alert(`Erreur: ${result.message}`); // Ou une meilleure gestion de l'erreur dans la modale
+                    alert(`Erreur: ${result.message}`);
                 }
             });
         }
@@ -524,85 +591,87 @@
         const enseignantsAccordionContainer = document.getElementById('enseignants-accordion-container');
         const enseignantModal = document.getElementById('enseignant-modal-backdrop');
         const enseignantForm = document.getElementById('enseignant-form');
-        const enseignantModalTitle = document.getElementById('enseignant-modal-title');
-        const btnOpenAddEnseignantModal = document.getElementById('btn-open-add-enseignant-modal');
+        if (enseignantsAccordionContainer && enseignantModal && enseignantForm) {
+            const enseignantModalTitle = document.getElementById('enseignant-modal-title');
+            const btnOpenAddEnseignantModal = document.getElementById('btn-open-add-enseignant-modal');
 
-        if (btnOpenAddEnseignantModal) {
             btnOpenAddEnseignantModal.addEventListener('click', () => {
                 enseignantForm.reset();
                 enseignantModalTitle.textContent = 'Ajouter un nouvel enseignant';
                 enseignantForm.querySelector('#enseignant-mode').value = 'add';
-                enseignantForm.querySelector('#enseignant-id').value = ''; // Important pour le mode ajout
+                enseignantForm.querySelector('#enseignant-id').value = '';
+                enseignantForm.querySelector('#original-champno-enseignant').value = '';
                 openModal(enseignantModal);
             });
-        }
 
-        if (enseignantsAccordionContainer) {
             enseignantsAccordionContainer.addEventListener('click', async (e) => {
                 if (e.target.classList.contains('btn-edit-enseignant')) {
-                    const enseignantIdVal = e.target.dataset.enseignantid;
-                    const response = await fetch(`/admin/api/enseignants/${enseignantIdVal}`);
+                    const enseignantId = e.target.dataset.enseignantid;
+                    const response = await fetch(`/admin/api/enseignants/${enseignantId}`);
                     const data = await response.json();
-
                     if (data.success) {
                         const enseignant = data.enseignant;
                         enseignantForm.reset();
                         enseignantModalTitle.textContent = `Modifier: ${enseignant.nomcomplet}`;
                         enseignantForm.querySelector('#enseignant-mode').value = 'edit';
-                        enseignantForm.querySelector('#enseignant-id').value = enseignant.enseignantid; // Champ hidden pour l'ID
+                        enseignantForm.querySelector('#enseignant-id').value = enseignant.enseignantid;
+                        enseignantForm.querySelector('#original-champno-enseignant').value = enseignant.champno;
                         enseignantForm.querySelector('#form-nom').value = enseignant.nom;
                         enseignantForm.querySelector('#form-prenom').value = enseignant.prenom;
                         enseignantForm.querySelector('#form-champno-enseignant').value = enseignant.champno;
                         enseignantForm.querySelector('#form-esttempsplein').checked = enseignant.esttempsplein;
                         openModal(enseignantModal);
-                    } else {
-                        displayApiMessage(data.message, 'error');
-                    }
+                    } else { displayApiMessage(data.message, 'error'); }
                 }
                 if (e.target.classList.contains('btn-delete-enseignant')) {
-                    const enseignantIdVal = e.target.dataset.enseignantid;
-                    if (confirm(`Êtes-vous sûr de vouloir supprimer cet enseignant pour l'année active ? Toutes ses attributions seront également supprimées.`)) {
-                        const response = await fetch(`/admin/api/enseignants/${enseignantIdVal}/supprimer`, { method: 'POST' });
+                    const enseignantId = e.target.dataset.enseignantid;
+                    if (confirm(`Êtes-vous sûr de vouloir supprimer cet enseignant ?`)) {
+                        const response = await fetch(`/admin/api/enseignants/${enseignantId}/supprimer`, { method: 'POST' });
                         const data = await response.json();
                          if (data.success) {
-                            const rowToRemove = document.getElementById(`enseignant-row-${enseignantIdVal}`);
-                            if (rowToRemove) rowToRemove.remove();
+                            document.getElementById(`enseignant-row-${enseignantId}`)?.remove();
                             displayApiMessage(data.message, 'success');
-                        } else {
-                            displayApiMessage(data.message, 'error');
-                        }
+                        } else { displayApiMessage(data.message, 'error'); }
                     }
                 }
             });
-        }
 
-        if (enseignantForm) {
             enseignantForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const formData = new FormData(enseignantForm);
-                const data = Object.fromEntries(formData.entries()); // Contient les champs avec 'name'
+                const data = Object.fromEntries(formData.entries());
                 data.esttempsplein = enseignantForm.querySelector('#form-esttempsplein').checked;
                 const mode = enseignantForm.querySelector('#enseignant-mode').value;
                 const enseignantId = enseignantForm.querySelector('#enseignant-id').value;
+                const originalChampNo = enseignantForm.querySelector('#original-champno-enseignant').value;
 
                 let url = (mode === 'add') ? '/admin/api/enseignants/creer' : `/admin/api/enseignants/${enseignantId}/modifier`;
 
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data), // 'data' contient les valeurs à mettre à jour/créer
+                    body: JSON.stringify(data),
                 });
                 const result = await response.json();
 
                 if (result.success) {
                     closeModal(enseignantModal);
                     displayApiMessage(result.message, 'success');
-                    location.reload(); // Recharger pour voir les modifications
+                     // Si le champ a changé, recharger la page pour déplacer la ligne.
+                    // Sinon, mettre à jour la ligne dynamiquement.
+                    if (mode === 'edit' && result.enseignant.champno !== originalChampNo) {
+                        location.reload();
+                    } else if (mode === 'edit') {
+                        updateTeacherRowUI(result.enseignant);
+                    } else { // mode 'add'
+                        location.reload();
+                    }
                 } else {
-                    alert(`Erreur: ${result.message}`); // Ou une meilleure gestion de l'erreur dans la modale
+                    alert(`Erreur: ${result.message}`);
                 }
             });
         }
+
 
         // --- Logique de réassignation de cours ---
         if (coursAccordionContainer) {
@@ -616,10 +685,10 @@
                 const nouveauChampNo = selectElement.value;
 
                 if (!nouveauChampNo) {
-                    displayApiMessage('Veuillez sélectionner un nouveau champ de destination.', 'error');
+                    displayApiMessage('Veuillez sélectionner un champ de destination.', 'error');
                     return;
                 }
-                if (!confirm(`Êtes-vous sûr de vouloir réassigner le cours "${codeCours}" au champ ${nouveauChampNo} ?`)) return;
+                if (!confirm(`Réassigner le cours "${codeCours}" au champ ${nouveauChampNo} ?`)) return;
 
                 button.disabled = true;
                 fetch("{{ url_for('admin.api_reassigner_cours_champ') }}", {
@@ -631,18 +700,16 @@
                 .then(data => {
                     if (data.success) {
                         displayApiMessage(data.message, 'success');
-                        location.reload(); // Recharger pour voir le cours dans le nouveau champ
+                        location.reload();
                     } else {
-                        displayApiMessage(data.message || 'Une erreur est survenue.', 'error');
+                        displayApiMessage(data.message || 'Erreur.', 'error');
                     }
                 })
-                .catch(error => {
-                    console.error('Erreur de réassignation:', error);
-                    displayApiMessage('Erreur de communication avec le serveur.', 'error');
-                })
+                .catch(error => displayApiMessage('Erreur serveur.', 'error'))
                 .finally(() => { button.disabled = false; });
             });
         }
+
 
         // --- Initialisation du thème ---
         const themeSwitcher = document.querySelector('.theme-switcher');
@@ -653,8 +720,7 @@
             function applyThemeUI(theme) {
                 document.documentElement.className = `theme-${theme}`;
                 themeButtons.forEach(btn => btn.classList.remove('active'));
-                const activeButton = document.getElementById(`theme-btn-${theme}`);
-                if (activeButton) activeButton.classList.add('active');
+                document.getElementById(`theme-btn-${theme}`)?.classList.add('active');
             }
 
             themeSwitcher.addEventListener('click', function(event) {

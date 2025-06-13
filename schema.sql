@@ -135,8 +135,14 @@ CREATE TABLE public.cours (
     nbperiodes numeric(5, 2) NOT NULL,
     nbgroupeinitial integer NOT NULL,
     estcoursautre boolean DEFAULT false NOT NULL,
+    clientele text, -- Nouvelle colonne pour le type de clientèle ('SE', 'R', 'A')
     CONSTRAINT cours_nbgroupeinitial_check CHECK ((nbgroupeinitial >= 0)),
-    CONSTRAINT cours_nbperiodes_check CHECK ((nbperiodes >= 0))
+    CONSTRAINT cours_nbperiodes_check CHECK ((nbperiodes >= 0)),
+    -- Contrainte de validation pour la nouvelle colonne 'clientele'
+    CONSTRAINT cours_clientele_validation_check CHECK (
+        (estcoursautre = TRUE AND clientele IS NULL) OR
+        (estcoursautre = FALSE AND (clientele IS NULL OR clientele IN ('SE', 'R', 'A')))
+    )
 );
 
 

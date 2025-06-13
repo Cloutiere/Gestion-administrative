@@ -48,14 +48,13 @@ def calculer_donnees_sommaire(
     """
     Calcule les données agrégées pour la page sommaire globale pour une année donnée.
 
-    Cette fonction adopte une approche "centrée sur le champ" :
-    1. Récupère tous les champs définis dans l'établissement.
-    2. Initialise une structure de données pour chaque champ avec des statistiques à zéro.
-    3. Met à jour ces statistiques en parcourant les enseignants de l'année active.
-    Cela garantit que tous les champs sont présents dans le résultat, même ceux
-    sans enseignant assigné pour l'année en cours.
+    Cette fonction adopte une approche "centrée sur le champ" pour garantir que tous
+    les champs sont listés, même ceux sans enseignant pour l'année active.
 
-    Retourne:
+    Args:
+        annee_id: L'ID de l'année scolaire pour laquelle calculer les données.
+
+    Returns:
         Un tuple contenant :
         - La liste des enseignants groupés par champ (pour la page de détail).
         - Un dictionnaire des moyennes et totaux par champ, incluant les statuts.
@@ -63,13 +62,12 @@ def calculer_donnees_sommaire(
         - La moyenne "Préliminaire confirmée" (enseignants TP des champs confirmés).
         - Un dictionnaire contenant les totaux globaux pour le pied de tableau.
     """
-    # Étape 1 : Récupérer toutes les données brutes nécessaires de la base de données.
+    # Étape 1 : Récupérer toutes les données brutes nécessaires.
     tous_les_champs = db.get_all_champs()
     statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
     tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
 
     # Étape 2 : Initialiser les structures de données en se basant sur TOUS les champs.
-    # C'est le cœur de la correction pour garantir que chaque champ soit listé.
     moyennes_par_champ_calculees: dict[str, Any] = {}
     for champ in tous_les_champs:
         champ_no = str(champ["champno"])
@@ -86,7 +84,6 @@ def calculer_donnees_sommaire(
             "periodes_magiques": 0.0,
         }
 
-    # Structure pour la page de détail des tâches (doit aussi inclure tous les champs).
     enseignants_par_champ_temp: dict[str, Any] = {
         str(champ["champno"]): {
             "champno": str(champ["champno"]),
@@ -108,7 +105,6 @@ def calculer_donnees_sommaire(
         if champ_no in enseignants_par_champ_temp:
             enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
 
-        # Mettre à jour les statistiques uniquement pour les enseignants pertinents.
         if ens["compte_pour_moyenne_champ"] and champ_no in moyennes_par_champ_calculees:
             moyennes_par_champ_calculees[champ_no]["nb_enseignants_tp"] += 1
             moyennes_par_champ_calculees[champ_no]["periodes_choisies_tp"] += ens[
@@ -124,22 +120,17 @@ def calculer_donnees_sommaire(
     total_periodes_choisies_tp_etablissement = 0.0
     total_periodes_magiques_etablissement = 0.0
 
-    # Cette boucle s'exécute maintenant sur TOUS les champs.
     for data in moyennes_par_champ_calculees.values():
         nb_ens_tp = data["nb_enseignants_tp"]
         periodes_choisies_tp = data["periodes_choisies_tp"]
 
-        data["moyenne"] = (
-            (periodes_choisies_tp / nb_ens_tp) if nb_ens_tp > 0 else 0.0
-        )
+        data["moyenne"] = (periodes_choisies_tp / nb_ens_tp) if nb_ens_tp > 0 else 0.0
         data["periodes_magiques"] = periodes_choisies_tp - (nb_ens_tp * 24)
 
-        # Agrégation pour les totaux du tableau
         total_enseignants_tp_etablissement += nb_ens_tp
         total_periodes_choisies_tp_etablissement += periodes_choisies_tp
         total_periodes_magiques_etablissement += data["periodes_magiques"]
 
-        # Agrégation pour les moyennes générales
         if nb_ens_tp > 0:
             total_periodes_global_tp += periodes_choisies_tp
             nb_enseignants_tp_global += nb_ens_tp
@@ -182,7 +173,8 @@ def page_sommaire() -> str:
     """Affiche la page du sommaire global des moyennes pour l'année active."""
     if not g.annee_active:
         flash(
-            "Aucune année scolaire n'est disponible. Veuillez en créer une dans la section 'Données'.",
+            "Aucune année scolaire n'est disponible. Veuillez en créer une "
+            "dans la section 'Données'.",
             "warning",
         )
         return render_template(
@@ -198,7 +190,6 @@ def page_sommaire() -> str:
         )
 
     annee_id = g.annee_active["annee_id"]
-    # La liste des enseignants n'est plus directement utilisée par ce template, mais est calculée pour d'autres usages.
     _, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = (
         calculer_donnees_sommaire(annee_id)
     )
@@ -218,7 +209,8 @@ def page_detail_taches() -> str:
     """Affiche la page de détail des tâches par enseignant pour l'année active."""
     if not g.annee_active:
         flash(
-            "Aucune année scolaire n'est disponible. Les détails ne peuvent être affichés.",
+            "Aucune année scolaire n'est disponible. Les détails ne peuvent "
+            "être affichés.",
             "warning",
         )
         return render_template("detail_taches.html", enseignants_par_champ=[])
@@ -292,7 +284,9 @@ def api_creer_annee() -> Any:
             f"Année scolaire '{libelle}' créée avec ID {new_annee['annee_id']}."
         )
         return (
-            jsonify({"success": True, "message": f"Année '{libelle}' créée.", "annee": new_annee}),
+            jsonify(
+                {"success": True, "message": f"Année '{libelle}' créée.", "annee": new_annee}
+            ),
             201,
         )
 
@@ -317,7 +311,8 @@ def api_changer_annee_active() -> Any:
     )
     if annee_selectionnee:
         current_app.logger.info(
-            f"Année de travail changée pour l'admin '{current_user.username}' : '{annee_selectionnee['libelle_annee']}'."
+            f"Année de travail changée pour l'admin '{current_user.username}' : "
+            f"'{annee_selectionnee['libelle_annee']}'."
         )
     return jsonify({"success": True, "message": "Année de travail changée."})
 
@@ -337,7 +332,8 @@ def api_set_annee_courante() -> Any:
         )
         if annee_maj:
             current_app.logger.info(
-                f"Année courante de l'application définie sur : '{annee_maj['libelle_annee']}'."
+                "Année courante de l'application définie sur : "
+                f"'{annee_maj['libelle_annee']}'."
             )
         return jsonify({"success": True, "message": "Nouvelle année courante définie."})
 
@@ -416,7 +412,8 @@ def api_basculer_verrou_champ(champ_no: str) -> Any:
             500,
         )
 
-    message = f"Le champ {champ_no} a été {'verrouillé' if nouveau_statut else 'déverrouillé'} pour l'année en cours."
+    verrou_text = "verrouillé" if nouveau_statut else "déverrouillé"
+    message = f"Le champ {champ_no} a été {verrou_text} pour l'année en cours."
     current_app.logger.info(message)
     return jsonify(
         {"success": True, "message": message, "est_verrouille": nouveau_statut}
@@ -452,7 +449,10 @@ def api_basculer_confirmation_champ(champ_no: str) -> Any:
             500,
         )
 
-    message = f"Le champ {champ_no} a été marqué comme {'confirmé' if nouveau_statut else 'non confirmé'} pour l'année en cours."
+    conf_text = "confirmé" if nouveau_statut else "non confirmé"
+    message = (
+        f"Le champ {champ_no} a été marqué comme {conf_text} pour l'année en cours."
+    )
     current_app.logger.info(message)
     return jsonify(
         {"success": True, "message": message, "est_confirme": nouveau_statut}
@@ -474,15 +474,20 @@ def api_create_cours() -> Any:
             "coursdescriptif",
             "nbperiodes",
             "nbgroupeinitial",
+            "estcoursautre",
         ]
     ):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
     try:
         new_cours = db.create_cours(data, g.annee_active["annee_id"])
         current_app.logger.info(
-            f"Cours '{data['codecours']}' créé pour l'année ID {g.annee_active['annee_id']}."
+            f"Cours '{data['codecours']}' créé pour l'année "
+            f"ID {g.annee_active['annee_id']}."
         )
-        return jsonify({"success": True, "message": "Cours créé.", "cours": new_cours}), 201
+        return (
+            jsonify({"success": True, "message": "Cours créé.", "cours": new_cours}),
+            201,
+        )
     except psycopg2.errors.UniqueViolation:
         return (
             jsonify(
@@ -495,7 +500,10 @@ def api_create_cours() -> Any:
         )
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DB création cours: {e}")
-        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+        return (
+            jsonify({"success": False, "message": f"Erreur de base de données: {e}"}),
+            500,
+        )
 
 
 @bp.route("/api/cours/<path:code_cours>", methods=["GET"])
@@ -522,13 +530,17 @@ def api_update_cours(code_cours: str) -> Any:
     data = request.get_json()
     if not data or not all(
         k in data
-        for k in ["champno", "coursdescriptif", "nbperiodes", "nbgroupeinitial"]
+        for k in [
+            "champno",
+            "coursdescriptif",
+            "nbperiodes",
+            "nbgroupeinitial",
+            "estcoursautre",
+        ]
     ):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
     try:
-        updated_cours = db.update_cours(
-            code_cours, g.annee_active["annee_id"], data
-        )
+        updated_cours = db.update_cours(code_cours, g.annee_active["annee_id"], data)
         if not updated_cours:
             return (
                 jsonify(
@@ -537,14 +549,18 @@ def api_update_cours(code_cours: str) -> Any:
                 404,
             )
         current_app.logger.info(
-            f"Cours '{code_cours}' modifié pour l'année ID {g.annee_active['annee_id']}."
+            f"Cours '{code_cours}' modifié pour l'année "
+            f"ID {g.annee_active['annee_id']}."
         )
         return jsonify(
             {"success": True, "message": "Cours mis à jour.", "cours": updated_cours}
         )
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DB modification cours: {e}")
-        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+        return (
+            jsonify({"success": False, "message": f"Erreur de base de données: {e}"}),
+            500,
+        )
 
 
 @bp.route("/api/cours/<path:code_cours>/supprimer", methods=["POST"])
@@ -557,7 +573,8 @@ def api_delete_cours(code_cours: str) -> Any:
     status_code = 200 if success else 400
     if success:
         current_app.logger.info(
-            f"Cours '{code_cours}' supprimé pour l'année ID {g.annee_active['annee_id']}."
+            f"Cours '{code_cours}' supprimé pour l'année "
+            f"ID {g.annee_active['annee_id']}."
         )
     return jsonify({"success": success, "message": message}), status_code
 
@@ -576,7 +593,8 @@ def api_create_enseignant() -> Any:
     try:
         new_enseignant = db.create_enseignant(data, g.annee_active["annee_id"])
         current_app.logger.info(
-            f"Enseignant '{data['nom']}' créé pour l'année ID {g.annee_active['annee_id']}."
+            f"Enseignant '{data['nom']}' créé pour l'année "
+            f"ID {g.annee_active['annee_id']}."
         )
         return (
             jsonify(
@@ -600,7 +618,10 @@ def api_create_enseignant() -> Any:
         )
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DB création enseignant: {e}")
-        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+        return (
+            jsonify({"success": False, "message": f"Erreur de base de données: {e}"}),
+            500,
+        )
 
 
 @bp.route("/api/enseignants/<int:enseignant_id>", methods=["GET"])
@@ -608,7 +629,7 @@ def api_create_enseignant() -> Any:
 def api_get_enseignant_details(enseignant_id: int) -> Any:
     """API pour récupérer les détails d'un enseignant (ID est unique globalement)."""
     enseignant = db.get_enseignant_details(enseignant_id)
-    # Les enseignants fictifs ne sont pas gérés via cette interface de modification standard
+    # Les enseignants fictifs ne sont pas gérés via cette interface de modification
     if not enseignant or enseignant["estfictif"]:
         return (
             jsonify(
@@ -635,7 +656,7 @@ def api_update_enseignant(enseignant_id: int) -> Any:
                 jsonify(
                     {
                         "success": False,
-                        "message": "Enseignant non trouvé ou non modifiable (ex: fictif).",
+                        "message": "Enseignant non trouvé ou non modifiable.",
                     }
                 ),
                 404,
@@ -653,14 +674,20 @@ def api_update_enseignant(enseignant_id: int) -> Any:
             jsonify(
                 {
                     "success": False,
-                    "message": "Un enseignant avec ce nom/prénom existe déjà pour l'année de cet enseignant.",
+                    "message": "Un enseignant avec ce nom/prénom existe déjà "
+                    "pour l'année de cet enseignant.",
                 }
             ),
             409,
         )
     except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DB modification enseignant {enseignant_id}: {e}")
-        return jsonify({"success": False, "message": f"Erreur de base de données: {e}"}), 500
+        current_app.logger.error(
+            f"Erreur DB modification enseignant {enseignant_id}: {e}"
+        )
+        return (
+            jsonify({"success": False, "message": f"Erreur de base de données: {e}"}),
+            500,
+        )
 
 
 @bp.route("/api/enseignants/<int:enseignant_id>/supprimer", methods=["POST"])
@@ -675,7 +702,7 @@ def api_delete_enseignant(enseignant_id: int) -> Any:
             jsonify(
                 {
                     "success": False,
-                    "message": "Impossible de supprimer un enseignant fictif via cette interface.",
+                    "message": "Impossible de supprimer un enseignant fictif.",
                 }
             ),
             403,
@@ -692,7 +719,7 @@ def api_delete_enseignant(enseignant_id: int) -> Any:
 @bp.route("/importer_cours_excel", methods=["POST"])
 @admin_required
 def api_importer_cours_excel() -> Any:
-    """Importe les cours depuis Excel pour l'année active, en écrasant les données existantes pour cette année."""
+    """Importe les cours depuis Excel pour l'année active, en écrasant les données."""
     if not g.annee_active:
         flash("Importation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
@@ -706,14 +733,11 @@ def api_importer_cours_excel() -> Any:
 
     file = request.files["fichier_cours"]
     if not file or not file.filename:
-        flash("Aucun fichier valide sélectionné ou nom de fichier manquant.", "warning")
+        flash("Aucun fichier valide sélectionné.", "warning")
         return redirect(url_for("admin.page_administration_donnees"))
 
     if not file.filename.endswith((".xlsx", ".xls")):
-        flash(
-            "Format de fichier invalide. Veuillez utiliser un fichier Excel (.xlsx ou .xls).",
-            "error",
-        )
+        flash("Format de fichier invalide. Utilisez un fichier .xlsx.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
     nouveaux_cours = []
@@ -721,67 +745,49 @@ def api_importer_cours_excel() -> Any:
         workbook = openpyxl.load_workbook(file.stream)
         sheet = cast(Worksheet, workbook.active)
         if sheet.max_row <= 1:
-            raise ValueError("Fichier Excel vide ou ne contient que l'en-tête.")
+            raise ValueError("Fichier Excel vide ou ne contenant que l'en-tête.")
 
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
             if not any(v is not None and str(v).strip() != "" for v in values[:6]):
-                current_app.logger.debug(
-                    f"Ligne {row_idx} ignorée (vide ou non pertinente)."
-                )
                 continue
 
-            champ_no_raw = values[0]
-            code_cours_raw = values[1]
-            desc_raw = values[3]
-            nb_grp_raw = values[4]
-            nb_per_raw = values[5]
+            champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw = (
+                values[0],
+                values[1],
+                values[3],
+                values[4],
+                values[5],
+            )
             est_autre_raw = values[7] if len(values) > 7 else None
 
-            if not all(
-                [
-                    champ_no_raw,
-                    code_cours_raw,
-                    desc_raw,
-                    nb_grp_raw is not None,
-                    nb_per_raw is not None,
-                ]
-            ):
-                flash(
-                    f"Ligne {row_idx}: Données manquantes. Vérifiez ChampNo, CodeCours, Descriptif, NbGroupes, NbPériodes.",
-                    "warning",
-                )
+            if not all([champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw]):
+                flash(f"Ligne {row_idx}: Données manquantes.", "warning")
                 continue
 
             try:
-                champ_no = str(champ_no_raw).strip()
-                code_cours = str(code_cours_raw).strip()
-                desc = str(desc_raw).strip()
-                nb_grp = int(float(str(nb_grp_raw).replace(",", ".")))
-                nb_per = float(str(nb_per_raw).replace(",", "."))
-                est_autre = (
-                    str(est_autre_raw).strip().upper()
-                    in ("VRAI", "TRUE", "OUI", "YES", "1")
-                    if est_autre_raw is not None
-                    else False
+                est_autre = str(est_autre_raw).strip().upper() in (
+                    "VRAI",
+                    "TRUE",
+                    "OUI",
+                    "YES",
+                    "1",
+                )
+                clientele = None if est_autre else "R"
+                nouveaux_cours.append(
+                    {
+                        "codecours": str(code_cours_raw).strip(),
+                        "champno": str(champ_no_raw).strip(),
+                        "coursdescriptif": str(desc_raw).strip(),
+                        "nbperiodes": float(str(nb_per_raw).replace(",", ".")),
+                        "nbgroupeinitial": int(float(str(nb_grp_raw).replace(",", "."))),
+                        "estcoursautre": est_autre,
+                        "clientele": clientele,
+                    }
                 )
             except (ValueError, TypeError) as ve:
-                flash(
-                    f"Ligne {row_idx}: Erreur de type de données ({ve}). Vérifiez les nombres et le format 'VRAI/FAUX'.",
-                    "warning",
-                )
+                flash(f"Ligne {row_idx}: Erreur de type de données ({ve}).", "warning")
                 continue
-
-            nouveaux_cours.append(
-                {
-                    "codecours": code_cours,
-                    "champno": champ_no,
-                    "coursdescriptif": desc,
-                    "nbperiodes": nb_per,
-                    "nbgroupeinitial": nb_grp,
-                    "estcoursautre": est_autre,
-                }
-            )
 
     except InvalidFileException:
         flash("Fichier Excel corrompu ou invalide.", "error")
@@ -793,63 +799,36 @@ def api_importer_cours_excel() -> Any:
         current_app.logger.error(
             f"Erreur imprévue lecture Excel cours: {e_gen}", exc_info=True
         )
-        flash(
-            f"Erreur inattendue lors de la lecture du fichier Excel : {e_gen}", "error"
-        )
+        flash(f"Erreur inattendue: {e_gen}", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
     if not nouveaux_cours:
-        flash(
-            "Aucun cours valide trouvé dans le fichier après traitement. Vérifiez le contenu et les messages d'avertissement.",
-            "warning",
-        )
+        flash("Aucun cours valide trouvé dans le fichier.", "warning")
         return redirect(url_for("admin.page_administration_donnees"))
 
-    conn = cast(connection, db.get_db())
+    conn = cast(connection | None, db.get_db())
     if not conn:
         flash("Erreur de connexion à la base de données.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
     try:
-        with conn.cursor() as cur:
-            current_app.logger.info(
-                f"Début transaction importation cours pour l'année ID {annee_id}."
-            )
+        with conn.cursor():
             nb_attr_supp = db.delete_all_attributions_for_year(annee_id)
-            current_app.logger.info(f"{nb_attr_supp} attributions supprimées.")
-
             nb_cours_supp = db.delete_all_cours_for_year(annee_id)
-            current_app.logger.info(f"{nb_cours_supp} cours supprimés.")
-
-            current_app.logger.info(
-                f"Insertion de {len(nouveaux_cours)} nouveaux cours..."
-            )
             for cours in nouveaux_cours:
-                cur.execute(
-                    """INSERT INTO Cours (annee_id, CodeCours, ChampNo, CoursDescriptif, NbPeriodes, NbGroupeInitial, EstCoursAutre)
-                       VALUES (%(annee_id)s, %(codecours)s, %(champno)s, %(coursdescriptif)s, %(nbperiodes)s, %(nbgroupeinitial)s,
-                       %(estcoursautre)s);""",
-                    {**cours, "annee_id": annee_id},
-                )
+                # La création se fait via la fonction DAO pour centraliser la logique
+                db.create_cours(cours, annee_id)
             conn.commit()
         flash(
-            f"{len(nouveaux_cours)} cours importés pour l'année '{annee_libelle}'. "
-            f"Anciens cours ({nb_cours_supp}) et attributions ({nb_attr_supp}) de cette année supprimés.",
+            f"{len(nouveaux_cours)} cours importés pour '{annee_libelle}'. "
+            f"Anciens cours ({nb_cours_supp}) et attributions ({nb_attr_supp}) "
+            "supprimés.",
             "success",
         )
     except psycopg2.Error as e_db:
         conn.rollback()
         current_app.logger.error(f"Erreur DB importation cours: {e_db}", exc_info=True)
-        flash(
-            f"Erreur base de données: {e_db}. L'importation a été annulée.", "error"
-        )
-    except Exception as e_final:
-        conn.rollback()
-        current_app.logger.error(
-            f"Erreur inconnue durant transaction d'importation cours: {e_final}",
-            exc_info=True,
-        )
-        flash(f"Erreur inconnue: {e_final}. L'importation a été annulée.", "error")
+        flash(f"Erreur base de données: {e_db}. Importation annulée.", "error")
 
     return redirect(url_for("admin.page_administration_donnees"))
 
@@ -857,7 +836,7 @@ def api_importer_cours_excel() -> Any:
 @bp.route("/importer_enseignants_excel", methods=["POST"])
 @admin_required
 def api_importer_enseignants_excel() -> Any:
-    """Importe les enseignants depuis Excel pour l'année active, en écrasant les données existantes pour cette année."""
+    """Importe les enseignants depuis Excel pour l'année active, en écrasant les données."""
     if not g.annee_active:
         flash("Importation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
@@ -871,14 +850,11 @@ def api_importer_enseignants_excel() -> Any:
 
     file = request.files["fichier_enseignants"]
     if not file or not file.filename:
-        flash("Aucun fichier valide sélectionné ou nom de fichier manquant.", "warning")
+        flash("Aucun fichier valide sélectionné.", "warning")
         return redirect(url_for("admin.page_administration_donnees"))
 
     if not file.filename.endswith((".xlsx", ".xls")):
-        flash(
-            "Format de fichier invalide. Veuillez utiliser un fichier Excel (.xlsx ou .xls).",
-            "error",
-        )
+        flash("Format de fichier invalide. Utilisez un fichier .xlsx.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
     nouveaux_enseignants = []
@@ -891,7 +867,6 @@ def api_importer_enseignants_excel() -> Any:
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
             if not any(v is not None and str(v).strip() != "" for v in values[:4]):
-                current_app.logger.debug(f"Ligne enseignant {row_idx} ignorée (vide).")
                 continue
 
             champ_no_raw, nom_raw, prenom_raw, temps_plein_raw = (
@@ -902,46 +877,26 @@ def api_importer_enseignants_excel() -> Any:
             )
 
             if not all([champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]):
-                flash(
-                    f"Ligne enseignant {row_idx}: Données manquantes. Vérifiez ChampNo, Nom, Prénom, EstTempsPlein.",
-                    "warning",
-                )
+                flash(f"Ligne enseignant {row_idx}: Données manquantes.", "warning")
                 continue
 
             try:
-                champ_no = str(champ_no_raw).strip()
-                nom_clean = str(nom_raw).strip()
-                prenom_clean = str(prenom_raw).strip()
-                est_temps_plein = str(temps_plein_raw).strip().upper() in (
-                    "VRAI",
-                    "TRUE",
-                    "OUI",
-                    "YES",
-                    "1",
+                nom_clean, prenom_clean = str(nom_raw).strip(), str(prenom_raw).strip()
+                if not nom_clean or not prenom_clean:
+                    continue
+                nouveaux_enseignants.append(
+                    {
+                        "nomcomplet": f"{prenom_clean} {nom_clean}",
+                        "nom": nom_clean,
+                        "prenom": prenom_clean,
+                        "champno": str(champ_no_raw).strip(),
+                        "esttempsplein": str(temps_plein_raw).strip().upper()
+                        in ("VRAI", "TRUE", "OUI", "YES", "1"),
+                    }
                 )
             except (ValueError, TypeError) as ve_ens:
-                flash(
-                    f"Ligne enseignant {row_idx}: Erreur de conversion de données ({ve_ens}).",
-                    "warning",
-                )
+                flash(f"Ligne {row_idx}: Erreur de conversion ({ve_ens}).", "warning")
                 continue
-
-            if not nom_clean or not prenom_clean:
-                flash(
-                    f"Ligne enseignant {row_idx}: Nom ou Prénom vide après nettoyage.",
-                    "warning",
-                )
-                continue
-
-            nouveaux_enseignants.append(
-                {
-                    "nomcomplet": f"{prenom_clean} {nom_clean}",
-                    "nom": nom_clean,
-                    "prenom": prenom_clean,
-                    "champno": champ_no,
-                    "esttempsplein": est_temps_plein,
-                }
-            )
 
     except InvalidFileException:
         flash("Fichier Excel des enseignants corrompu ou invalide.", "error")
@@ -950,51 +905,30 @@ def api_importer_enseignants_excel() -> Any:
         flash(str(e_val_ens), "error")
         return redirect(url_for("admin.page_administration_donnees"))
     except Exception as e_gen_ens:
-        current_app.logger.error(
-            f"Erreur imprévue lecture Excel enseignants: {e_gen_ens}", exc_info=True
-        )
-        flash(
-            f"Erreur inattendue lors de la lecture du fichier Excel des enseignants : {e_gen_ens}",
-            "error",
-        )
+        current_app.logger.error(f"Erreur lecture Excel: {e_gen_ens}", exc_info=True)
+        flash(f"Erreur inattendue: {e_gen_ens}", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
     if not nouveaux_enseignants:
-        flash(
-            "Aucun enseignant valide trouvé dans le fichier après traitement. Vérifiez le contenu et les messages d'avertissement.",
-            "warning",
-        )
+        flash("Aucun enseignant valide trouvé dans le fichier.", "warning")
         return redirect(url_for("admin.page_administration_donnees"))
 
-    conn = cast(connection, db.get_db())
+    conn = cast(connection | None, db.get_db())
     if not conn:
         flash("Erreur de connexion à la base de données.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
     try:
-        with conn.cursor() as cur:
-            current_app.logger.info(
-                f"Début transaction importation enseignants pour l'année ID {annee_id}."
-            )
+        with conn.cursor():
             nb_attr_supp_ens = db.delete_all_attributions_for_year(annee_id)
-            current_app.logger.info(f"{nb_attr_supp_ens} attributions supprimées.")
-
             nb_ens_supp = db.delete_all_enseignants_for_year(annee_id)
-            current_app.logger.info(f"{nb_ens_supp} enseignants supprimés.")
-
-            current_app.logger.info(
-                f"Insertion de {len(nouveaux_enseignants)} nouveaux enseignants..."
-            )
             for ens in nouveaux_enseignants:
-                cur.execute(
-                    """INSERT INTO Enseignants (annee_id, NomComplet, Nom, Prenom, ChampNo, EstTempsPlein, EstFictif, PeutChoisirHorsChampPrincipal)
-                       VALUES (%(annee_id)s, %(nomcomplet)s, %(nom)s, %(prenom)s, %(champno)s, %(esttempsplein)s, FALSE, FALSE);""",
-                    {**ens, "annee_id": annee_id},
-                )
+                db.create_enseignant(ens, annee_id)
             conn.commit()
         flash(
-            f"{len(nouveaux_enseignants)} enseignants importés pour l'année '{annee_libelle}'. "
-            f"Anciens enseignants ({nb_ens_supp}) et attributions ({nb_attr_supp_ens}) de cette année supprimés.",
+            f"{len(nouveaux_enseignants)} enseignants importés pour '{annee_libelle}'. "
+            f"Anciens enseignants ({nb_ens_supp}) et attributions ({nb_attr_supp_ens}) "
+            "supprimés.",
             "success",
         )
     except psycopg2.Error as e_db_ens:
@@ -1002,17 +936,7 @@ def api_importer_enseignants_excel() -> Any:
         current_app.logger.error(
             f"Erreur DB importation enseignants: {e_db_ens}", exc_info=True
         )
-        flash(
-            f"Erreur base de données: {e_db_ens}. L'importation a été annulée.",
-            "error",
-        )
-    except Exception as e_final_ens:
-        conn.rollback()
-        current_app.logger.error(
-            f"Erreur inconnue durant transaction d'importation enseignants: {e_final_ens}",
-            exc_info=True,
-        )
-        flash(f"Erreur inconnue: {e_final_ens}. L'importation a été annulée.", "error")
+        flash(f"Erreur base de données: {e_db_ens}. Importation annulée.", "error")
 
     return redirect(url_for("admin.page_administration_donnees"))
 
@@ -1020,27 +944,19 @@ def api_importer_enseignants_excel() -> Any:
 @bp.route("/exporter_taches_excel")
 @admin_required
 def exporter_taches_excel() -> Any:
-    """
-    Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel
-    avec une feuille par champ et des totaux.
-    """
+    """Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel."""
     if not g.annee_active:
         flash("Exportation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("admin.page_sommaire"))
 
     annee_id = g.annee_active["annee_id"]
     annee_libelle = g.annee_active["libelle_annee"]
-
     attributions_raw = db.get_all_attributions_for_export(annee_id)
 
     if not attributions_raw:
-        flash(
-            f"Aucune tâche attribuée à exporter pour l'année '{annee_libelle}'.",
-            "warning",
-        )
+        flash(f"Aucune tâche attribuée pour '{annee_libelle}'.", "warning")
         return redirect(url_for("admin.page_sommaire"))
 
-    # Transformer la liste plate en un dictionnaire groupé par champ
     attributions_par_champ: dict[str, dict[str, Any]] = {}
     for attr in attributions_raw:
         champ_no = attr["champno"]
@@ -1051,13 +967,9 @@ def exporter_taches_excel() -> Any:
             }
         attributions_par_champ[champ_no]["attributions"].append(attr)
 
-    # Appel de la fonction de génération (qui sera modifiée) avec les données structurées
     mem_file = exports.generer_export_taches(attributions_par_champ)
-
     filename = f"export_taches_{annee_libelle}.xlsx"
-    current_app.logger.info(
-        f"Génération du fichier d'export formaté et agrégé '{filename}' pour l'année ID {annee_id}."
-    )
+    current_app.logger.info(f"Génération du fichier d'export '{filename}'.")
 
     return Response(
         mem_file,
@@ -1069,49 +981,32 @@ def exporter_taches_excel() -> Any:
 @bp.route("/exporter_periodes_restantes_excel")
 @admin_required
 def exporter_periodes_restantes_excel() -> Any:
-    """
-    Exporte les périodes non attribuées (restantes) pour l'année active.
-
-    Récupère les données des périodes restantes, les transforme au format attendu,
-    puis appelle le module d'export pour générer un fichier Excel avec une
-    feuille par champ.
-    """
+    """Exporte les périodes non attribuées (restantes) pour l'année active."""
     if not g.annee_active:
         flash("Exportation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("admin.page_sommaire"))
 
     annee_id = g.annee_active["annee_id"]
     annee_libelle = g.annee_active["libelle_annee"]
-
-    # 1. Récupérer les données brutes (probablement une liste de dictionnaires)
     periodes_restantes_raw = db.get_periodes_restantes_for_export(annee_id)
 
     if not periodes_restantes_raw:
-        flash(
-            f"Aucune période restante à exporter pour l'année '{annee_libelle}'.",
-            "warning",
-        )
+        flash(f"Aucune période restante pour '{annee_libelle}'.", "warning")
         return redirect(url_for("admin.page_sommaire"))
 
-    # 2. Transformer les données dans la structure attendue par la fonction d'export
-    #    Ceci corrige l'incompatibilité de format qui causait l'erreur.
-    periodes_par_champ_transformees: dict[str, dict[str, Any]] = {}
+    periodes_par_champ: dict[str, dict[str, Any]] = {}
     for periode in periodes_restantes_raw:
         champ_no = periode["champno"]
-        if champ_no not in periodes_par_champ_transformees:
-            periodes_par_champ_transformees[champ_no] = {
+        if champ_no not in periodes_par_champ:
+            periodes_par_champ[champ_no] = {
                 "nom": periode["champnom"],
                 "periodes": [],
             }
-        periodes_par_champ_transformees[champ_no]["periodes"].append(periode)
+        periodes_par_champ[champ_no]["periodes"].append(periode)
 
-    # 3. Appel de la fonction de génération avec les données correctement formatées
-    mem_file = exports.generer_export_periodes_restantes(periodes_par_champ_transformees)
-
+    mem_file = exports.generer_export_periodes_restantes(periodes_par_champ)
     filename = f"export_periodes_restantes_{annee_libelle}.xlsx"
-    current_app.logger.info(
-        f"Génération du fichier d'export des périodes restantes '{filename}' pour l'année ID {annee_id}."
-    )
+    current_app.logger.info(f"Génération de l'export '{filename}'.")
 
     return Response(
         mem_file,
@@ -1124,7 +1019,7 @@ def exporter_periodes_restantes_excel() -> Any:
 @bp.route("/api/utilisateurs", methods=["GET"])
 @admin_api_required
 def api_get_all_users() -> Any:
-    """Récupère tous les utilisateurs avec des informations sur leur nombre (admin/total)."""
+    """Récupère tous les utilisateurs avec des informations sur leur nombre."""
     return jsonify(
         users=db.get_all_users_with_access_info(), admin_count=db.get_admin_count()
     )
@@ -1142,25 +1037,21 @@ def api_create_user() -> Any:
     ):
         return (
             jsonify(
-                {"success": False, "message": "Nom d'utilisateur et mot de passe requis."}
+                {"success": False, "message": "Nom d'utilisateur et mdp requis."}
             ),
             400,
         )
     if len(password) < 6:
         return (
             jsonify(
-                {
-                    "success": False,
-                    "message": "Le mot de passe doit faire au moins 6 caractères.",
-                }
+                {"success": False, "message": "Le mdp doit faire >= 6 caractères."}
             ),
             400,
         )
 
     is_admin = data.get("is_admin", False)
     allowed_champs = data.get("allowed_champs", [])
-    hashed_pwd = generate_password_hash(password)
-    user = db.create_user(username, hashed_pwd, is_admin)
+    user = db.create_user(username, generate_password_hash(password), is_admin)
 
     if not user:
         return (
@@ -1171,16 +1062,9 @@ def api_create_user() -> Any:
     if not is_admin and allowed_champs:
         if not db.update_user_champ_access(user["id"], allowed_champs):
             db.delete_user_data(user["id"])
-            current_app.logger.error(
-                f"Échec de l'attribution des droits pour le nouvel utilisateur {username}, création annulée."
-            )
+            current_app.logger.error(f"Échec droits pour nouvel user {username}.")
             return (
-                jsonify(
-                    {
-                        "success": False,
-                        "message": "Erreur lors de l'attribution des accès aux champs.",
-                    }
-                ),
+                jsonify({"success": False, "message": "Erreur d'attribution des accès."}),
                 500,
             )
 
@@ -1199,42 +1083,23 @@ def api_update_user_access(user_id: int) -> Any:
     """Met à jour les accès aux champs pour un utilisateur non-admin."""
     data = request.get_json()
     if not data or not isinstance(champ_nos := data.get("champ_nos"), list):
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Données invalides (champ_nos doit être une liste).",
-                }
-            ),
-            400,
-        )
+        return jsonify({"success": False, "message": "Données invalides."}), 400
 
     target_user = db.get_user_by_id(user_id)
     if not target_user:
         return jsonify({"success": False, "message": "Utilisateur non trouvé."}), 404
     if target_user["is_admin"]:
         return (
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Les accès d'un administrateur ne peuvent pas être modifiés via cette interface.",
-                }
-            ),
+            jsonify({"success": False, "message": "Accès admin non modifiables ici."}),
             403,
         )
 
     if db.update_user_champ_access(user_id, champ_nos):
-        current_app.logger.info(
-            f"Accès aux champs mis à jour pour l'utilisateur ID {user_id}."
-        )
+        current_app.logger.info(f"Accès mis à jour pour l'utilisateur ID {user_id}.")
         return jsonify({"success": True, "message": "Accès mis à jour."})
-    current_app.logger.error(
-        f"Échec de la mise à jour des accès pour l'utilisateur ID {user_id}."
-    )
-    return (
-        jsonify({"success": False, "message": "Erreur lors de la mise à jour des accès."}),
-        500,
-    )
+
+    current_app.logger.error(f"Échec MAJ accès pour l'utilisateur ID {user_id}.")
+    return jsonify({"success": False, "message": "Erreur lors de la mise à jour."}), 500
 
 
 @bp.route("/api/utilisateurs/<int:user_id>/delete", methods=["POST"])
@@ -1243,7 +1108,7 @@ def api_delete_user(user_id: int) -> Any:
     """Supprime un utilisateur."""
     if user_id == current_user.id:
         return (
-            jsonify({"success": False, "message": "Vous ne pouvez pas supprimer votre propre compte."}),
+            jsonify({"success": False, "message": "Vous ne pouvez pas vous supprimer."}),
             403,
         )
 
@@ -1254,24 +1119,19 @@ def api_delete_user(user_id: int) -> Any:
     if target_user["is_admin"] and db.get_admin_count() <= 1:
         return (
             jsonify(
-                {"success": False, "message": "Impossible de supprimer le dernier administrateur."}
+                {"success": False, "message": "Impossible de supprimer le dernier admin."}
             ),
             403,
         )
 
     if db.delete_user_data(user_id):
         current_app.logger.info(
-            f"Utilisateur ID {user_id} ('{target_user['username']}') supprimé par '{current_user.username}'."
+            f"User ID {user_id} ('{target_user['username']}') supprimé par '{current_user.username}'."
         )
         return jsonify({"success": True, "message": "Utilisateur supprimé."})
 
-    current_app.logger.error(
-        f"Échec de la suppression de l'utilisateur ID {user_id} ('{target_user['username']}')."
-    )
-    return (
-        jsonify({"success": False, "message": "Échec de la suppression de l'utilisateur."}),
-        500,
-    )
+    current_app.logger.error(f"Échec suppression user ID {user_id}.")
+    return jsonify({"success": False, "message": "Échec de la suppression."}), 500
 
 
 @bp.route("/api/cours/reassigner_champ", methods=["POST"])
@@ -1287,22 +1147,15 @@ def api_reassigner_cours_champ() -> Any:
         or not (code_cours := data.get("code_cours"))
         or not (nouveau_champ_no := data.get("nouveau_champ_no"))
     ):
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Données manquantes : 'code_cours' et 'nouveau_champ_no' requis.",
-                }
-            ),
-            400,
-        )
+        return jsonify({"success": False, "message": "Données manquantes."}), 400
 
     result = db.reassign_cours_to_champ(
         code_cours, g.annee_active["annee_id"], nouveau_champ_no
     )
     if result:
         current_app.logger.info(
-            f"Cours '{code_cours}' réassigné au champ '{nouveau_champ_no}' pour l'année ID {g.annee_active['annee_id']}."
+            f"Cours '{code_cours}' réassigné au champ '{nouveau_champ_no}' "
+            f"pour l'année ID {g.annee_active['annee_id']}."
         )
         return jsonify(
             success=True,
@@ -1311,14 +1164,9 @@ def api_reassigner_cours_champ() -> Any:
         )
 
     current_app.logger.warning(
-        f"Échec de la réassignation du cours '{code_cours}' au champ '{nouveau_champ_no}' pour l'année ID {g.annee_active['annee_id']}."
+        f"Échec réassignation cours '{code_cours}' vers champ '{nouveau_champ_no}'."
     )
     return (
-        jsonify(
-            {
-                "success": False,
-                "message": "Impossible de réassigner le cours. Vérifiez que le cours et le nouveau champ existent pour cette année scolaire.",
-            }
-        ),
+        jsonify({"success": False, "message": "Impossible de réassigner le cours."}),
         500,
     )
