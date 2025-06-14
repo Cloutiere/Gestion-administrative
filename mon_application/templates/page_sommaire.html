@@ -33,27 +33,7 @@
             margin-bottom: 1rem;
             flex-wrap: wrap; /* Permet aux boutons de passer à la ligne sur petits écrans */
         }
-        .details-link-container a {
-            padding: 0.5rem 1rem;
-            background-color: var(--color-primary);
-            color: var(--color-text-on-primary); /* Texte blanc/clair pour le contraste */
-            text-decoration: none;
-            border-radius: 4px;
-            font-weight: bold;
-            display: inline-block; /* Assure que les liens se comportent comme des blocs pour le padding */
-            transition: background-color var(--transition-speed);
-        }
-        .details-link-container a:hover {
-            background-color: var(--color-primary-hover);
-            color: var(--color-text-on-primary); /* Garde la couleur du texte au survol */
-        }
-        /* Style spécifique pour le bouton d'export */
-        .details-link-container a.export-button {
-            background-color: var(--color-secondary);
-        }
-        .details-link-container a.export-button:hover {
-            background-color: var(--color-secondary-hover);
-        }
+        
         /* Styles pour le solde final */
         .solde-positif {
             color: green;
@@ -151,12 +131,12 @@
                 <div>
                     <h2>Moyennes par champ (temps plein)</h2>
 
-                    <!-- Liens d'action -->
+                    <!-- Liens d'action avec les classes de bouton standardisées -->
                     <div class="details-link-container no-print">
-                        <a href="{{ url_for('admin.page_detail_taches') }}">Voir le détail des tâches</a>
-                        <a href="{{ url_for('admin.exporter_taches_excel') }}" class="export-button">Exporter les tâches (Excel)</a>
-                        <a href="{{ url_for('admin.exporter_periodes_restantes_excel') }}" class="export-button">Exporter les périodes restantes (Excel)</a>
-                        <a href="{{ url_for('admin.exporter_org_scolaire_excel') }}" class="export-button">Exporter pour org. scolaire (Excel)</a>
+                        <a href="{{ url_for('admin.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
+                        <a href="{{ url_for('admin.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
+                        <a href="{{ url_for('admin.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
+                        <a href="{{ url_for('admin.exporter_org_scolaire_excel') }}" class="btn btn-export-excel">Exporter pour org. scolaire (Excel)</a>
                     </div>
 
                     {% if moyennes_par_champ %}

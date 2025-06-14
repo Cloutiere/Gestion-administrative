@@ -18,7 +18,7 @@ class User(UserMixin):
     is_active, etc.). Elle gère trois types de rôles :
     - Administrateur (`is_admin` = True) : Accès complet.
     - Observateur de Tableau de Bord (`is_dashboard_only` = True) : Accès en lecture
-      seule aux pages de sommaire global.
+      seule aux pages de sommaire global et aux pages de détail des champs.
     - Utilisateur Standard : Accès limité à des champs spécifiques via `allowed_champs`.
     """
 
@@ -38,9 +38,9 @@ class User(UserMixin):
             username (str): Le nom d'utilisateur.
             is_admin (bool): Si True, l'utilisateur a des privilèges d'administrateur.
                              Ce rôle prime sur les autres.
-            is_dashboard_only (bool): Si True, l'utilisateur a un accès limité
-                                      aux tableaux de bord globaux. Ce rôle est
-                                      exclusif avec `is_admin`.
+            is_dashboard_only (bool): Si True, l'utilisateur a un accès en lecture
+                                      aux tableaux de bord et aux détails des champs.
+                                      Ce rôle est exclusif avec `is_admin`.
             allowed_champs (list[str] | None): Liste des numéros de champ (ChampNo)
                                               auxquels un utilisateur standard a
                                               accès. Ignoré pour les admins et les
@@ -72,14 +72,15 @@ class User(UserMixin):
             champ_no (str): Le numéro du champ à vérifier.
 
         Returns:
-            bool: True si l'utilisateur est admin ou si le champ est dans sa liste
-                  d'accès explicite (pour les utilisateurs standards). Les
-                  utilisateurs avec `is_dashboard_only` n'ont pas d'accès par champ.
+            bool: True si l'utilisateur est admin, un observateur de tableau de bord,
+                  ou si le champ est dans sa liste d'accès explicite (pour les
+                  utilisateurs standards).
         """
-        if self.is_admin:
+        # CORRECTION : Les admins ET les observateurs de tableau de bord ont maintenant
+        # accès à toutes les pages de détail des champs.
+        if self.is_admin or self.is_dashboard_only:
             return True
-        # Seuls les utilisateurs standards (ni admin, ni dashboard_only)
-        # utilisent la liste allowed_champs pour l'accès.
-        if self.is_dashboard_only:
-            return False
+
+        # Pour les utilisateurs standards (ni admin, ni dashboard_only), l'accès
+        # est déterminé par la liste `allowed_champs`.
         return champ_no in self.allowed_champs

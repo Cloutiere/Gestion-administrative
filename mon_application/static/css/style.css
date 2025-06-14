@@ -355,6 +355,17 @@ button:disabled,
 .btn-secondary:hover:not(:disabled) {
     background-color: var(--color-secondary-hover);
 }
+
+/* NOUVELLE RÈGLE AJOUTÉE ICI */
+/* Nouvelle classe spécifique pour les boutons d'export Excel */
+.btn-export-excel {
+    background-color: #1D6F42; /* Un vert foncé classique d'Excel */
+    color: var(--color-text-on-primary);
+}
+.btn-export-excel:hover:not(:disabled) {
+    background-color: #185E38; /* Une teinte légèrement plus foncée pour le survol */
+    color: var(--color-text-on-primary);
+}
 /* Modificateur pour des boutons plus petits, idéal pour les tableaux */
 .btn-sm {
     padding: 0.25rem 0.6rem;

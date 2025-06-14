@@ -118,7 +118,7 @@ def generer_export_taches(
                 sheet.cell(
                     row=current_row_num,
                     column=2,  # Colonne B
-                    value=f"Total pour {previous_teacher_fullname} :",
+                    value=f"Total pour {previous_teacher_fullname} ",
                 )
                 sheet.cell(
                     row=current_row_num, column=8, value=subtotal_periodes_enseignant  # Colonne H
@@ -179,7 +179,7 @@ def generer_export_taches(
             sheet.cell(
                 row=current_row_num,
                 column=2,  # Colonne B
-                value=f"Total pour {previous_teacher_fullname} :",
+                value=f"Total pour {previous_teacher_fullname} ",
             )
             sheet.cell(
                 row=current_row_num, column=8, value=subtotal_periodes_enseignant  # Colonne H
@@ -231,7 +231,7 @@ def generer_export_taches(
         column_widths = {
             "A": 3,  # Marge
             "B": 30,  # Enseignant
-            "C": 15,  # Code cours
+            "C": 11,  # Code cours
             "D": 43,  # Description
             "E": 12,  # Cours autre
             "F": 10,  # Nb. grp.
@@ -337,7 +337,7 @@ def generer_export_periodes_restantes(
                 sheet.cell(
                     row=current_row_num,
                     column=2,  # Colonne B
-                    value=f"Total pour {previous_tache_display} :",
+                    value=f"Total pour {previous_tache_display} ",
                 )
                 sheet.cell(row=current_row_num, column=7, value=subtotal_periodes)  # Colonne G
                 sheet.merge_cells(
@@ -393,7 +393,7 @@ def generer_export_periodes_restantes(
             sheet.cell(
                 row=current_row_num,
                 column=2,  # Colonne B
-                value=f"Total pour {previous_tache_display} :",
+                value=f"Total pour {previous_tache_display} ",
             )
             sheet.cell(row=current_row_num, column=7, value=subtotal_periodes)  # Colonne G
             sheet.merge_cells(
@@ -442,9 +442,9 @@ def generer_export_periodes_restantes(
         column_widths = {
             "A": 3,  # Marge
             "B": 35,  # Champ
-            "C": 15,  # Tâche restantes
-            "D": 40,  # Code cours
-            "E": 12,  # Description
+            "C": 16,  # Tâche restantes
+            "D": 11,  # Code cours
+            "E": 43,  # Description
             "F": 12,  # Cours autre
             "G": 12,  # Pér./ groupe
         }
