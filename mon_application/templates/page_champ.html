@@ -1,195 +1,150 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tâches - Champ {{ champ.champnom }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% extends "_layout.html" %}
 
-    <!-- Script pour appliquer le thème instantanément et éviter le FOUC -->
-    <script>
-        (function() {
-            const savedTheme = localStorage.getItem('appTheme') || 'light';
-            document.documentElement.className = `theme-${savedTheme}`;
-        })();
-    </script>
-</head>
-<body class="theme-light {{ 'champ-verrouille' if champ.estverrouille else '' }}">
-    <header class="no-print">
-        <h1>
-            Gestion du Champ {{ champ.champno }} - {{ champ.champnom }}
-            {% if annee_active %}
-                <span class="annee-active-header">({{ annee_active.libelle_annee }})</span>
-            {% endif %}
-            {% if champ.estverrouille %}
-                <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées.">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
-                    Verrouillé
-                </span>
-            {% endif %}
-        </h1>
-        <nav>
-            <ul>
-                {% if current_user.is_authenticated %}
-                    {% if current_user.is_admin %}
-                        <li><a href="{{ url_for('admin.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
-                        <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
-                        <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
-                    {% else %}
-                        <!-- Pour un utilisateur non-admin, le sommaire est la page principale -->
-                        <li><a href="{{ url_for('admin.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
-                    {% endif %}
-                    <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
-                {% else %}
-                    <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
-                {% endif %}
-            </ul>
-        </nav>
+{% block title %}Tâches - Champ {{ champ.champnom }}{% endblock %}
 
-        <div class="theme-switcher no-print">
-            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
-            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
-        </div>
+{% block body_class %}{{ 'champ-verrouille' if champ.estverrouille else '' }}{% endblock %}
 
-        <div class="button-group no-print">
-            <button id="btn-imprimer-champ" class="btn btn-info">Imprimer ce champ</button>
-            <button id="btn-imprimer-taches-restantes" class="btn btn-secondary">Imprimer tâches restantes</button>
-        </div>
-    </header>
-
-    <div id="print-summary-page" class="print-only"></div>
-
-    <main>
+{% block header_content %}
+<h1>
+    Gestion du Champ {{ champ.champno }} - {{ champ.champnom }}
     {% if annee_active %}
-        <div class="page-champ-container">
-            <!-- Colonne de gauche: Liste des enseignants -->
-            <section class="enseignants-section">
-                <h2 class="section-title no-print">Choix de tâche des enseignants</h2>
-                {% for enseignant in enseignants_data %}
-                <div class="enseignant-card {% if enseignant.estfictif %}enseignant-fictif{% endif %}" id="enseignant-card-{{ enseignant.enseignantid }}">
-                    <div class="entete-enseignant">
-                        <h3 class="titre-enseignant-bascule nom-enseignant-texte">
-                            {{ enseignant.nomcomplet }}
-                            {% if not enseignant.estfictif and not enseignant.esttempsplein %}<small>(Temps Partiel)</small>{% endif %}
-                            {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
-                        </h3>
-                        <div class="arrow-indicator no-print"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg></div>
-                    </div>
-                    <div class="action-enseignant-fictif no-print">
-                        {% if enseignant.estfictif %}<button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer tâche</button>{% endif %}
-                    </div>
-                    <div class="cours-attribues">
-                        <table id="table-attributions-{{ enseignant.enseignantid }}">
-                            <thead><tr><th>Code</th><th>Cours choisi</th><th>Nb. grp.</th><th>Pér.</th><th>Pér. total</th><th class="no-print">Action</th></tr></thead>
-                            <tbody id="tbody-attributions-{{ enseignant.enseignantid }}"></tbody>
-                        </table>
-                    </div>
-                    <div class="signature-line">Signature de l'enseignant : {{ enseignant.nomcomplet }}</div>
-                    <div class="contenu-selection-cours no-print">
-                        <div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div>
-                        <div class="cours-selection"><h4>Autres tâches disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div>
-                    </div>
-                </div>
-                {% endfor %}
-                {% if not enseignants_data %}<p>Aucun enseignant dans ce champ pour cette année scolaire.</p>{% endif %}
-                <button id="btn-creer-tache-restante" class="btn btn-success no-print" style="margin-top:15px;">Créer une Tâche Restante</button>
-            </section>
-
-            <!-- Colonne du centre: Cours restants -->
-            <section class="cours-restants-section no-print">
-                <h2 class="section-title">Périodes restantes dans ce champ</h2>
-                <table id="tableau-cours-restants">
-                    <thead><tr><th>Code</th><th>Cours disponibles</th><th>Grp. rest.</th><th>Pér.</th><th>Pér. restantes</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </section>
-
-            <!-- Colonne de droite: Sommaire du champ -->
-            <section class="sommaire-champ-section no-print">
-                <h2 class="section-title">Tâches du champ : {{ champ.champno }}</h2>
-                <table id="tableau-sommaire-champ">
-                    <thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead>
-                    <tbody>
-                        {% for enseignant in enseignants_data %}
-                        <tr data-enseignant-id="{{ enseignant.enseignantid }}" class="{{ 'enseignant-fictif-sommaire' if enseignant.estfictif else ('enseignant-temps-partiel-sommaire' if not enseignant.esttempsplein else 'enseignant-temps-plein-sommaire') }}">
-                            <td>{{ enseignant.nomcomplet }}</td>
-                            <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours | format_periodes }}</td>
-                            <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres | format_periodes }}</td>
-                            <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes | format_periodes }}</td>
-                            <td>{% if enseignant.estfictif %}Tâche Restante{% elif not enseignant.esttempsplein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td id="moyenne-champ-val">{{ moyenne_champ_initiale | format_periodes }}</td><td></td></tr></tfoot>
-                </table>
-                {% if not enseignants_data %}<p>Aucun enseignant à afficher dans le sommaire.</p>{% endif %}
-            </section>
-        </div>
-    {% else %}
-        <div class="flash-messages">
-            <li class="error">Aucune année scolaire active. Impossible d'afficher les données du champ.</li>
-        </div>
+        <span class="annee-active-header">({{ annee_active.libelle_annee }})</span>
     {% endif %}
-    </main>
+    {% if champ.estverrouille %}
+        <span id="lock-status-indicator" title="Ce champ est verrouillé. Les modifications sont limitées.">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>
+            Verrouillé
+        </span>
+    {% endif %}
+</h1>
+<nav>
+    <ul>
+        {% if current_user.is_authenticated %}
+            {% if current_user.is_admin %}
+                <li><a href="{{ url_for('admin.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
+                <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
+                <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+            {% else %}
+                {# Pour un utilisateur non-admin, le sommaire est la page principale #}
+                <li><a href="{{ url_for('admin.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
+            {% endif %}
+            <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
+        {% else %}
+            <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
+        {% endif %}
+    </ul>
+</nav>
 
-    <footer class="no-print">
-        <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
-    </footer>
+<div class="button-group no-print">
+    <button id="btn-imprimer-champ" class="btn btn-info">Imprimer ce champ</button>
+    <button id="btn-imprimer-taches-restantes" class="btn btn-secondary">Imprimer tâches restantes</button>
+</div>
+{% endblock %}
 
-    <template id="enseignant-card-template">
-        <div class="enseignant-card enseignant-fictif" data-template-id="enseignant-card-ID">
-            <div class="entete-enseignant"><h3 class="titre-enseignant-bascule nom-enseignant-texte" data-template-nom="nom-enseignant"></h3><div class="arrow-indicator no-print"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg></div></div>
-            <div class="action-enseignant-fictif no-print"><button class="btn-supprimer-enseignant" data-template-id-btn="btn-supprimer-ID">Supprimer tâche</button></div>
-            <div class="cours-attribues"><table data-template-id-table="table-attributions-ID"><thead><tr><th>Code</th><th>Cours choisi</th><th>Nb. grp.</th><th>Pér.</th><th>Pér. totale</th><th class="no-print">Action</th></tr></thead><tbody data-template-id-tbody="tbody-attributions-ID"></tbody></table></div>
-            <div class="signature-line"></div>
-            <div class="contenu-selection-cours no-print"><div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div><div class="cours-selection"><h4>Autres tâches disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div></div>
+{% block content %}
+<div id="print-summary-page" class="print-only"></div>
+
+{% if annee_active %}
+<div class="page-champ-container">
+    <!-- Colonne de gauche: Liste des enseignants -->
+    <section class="enseignants-section">
+        <h2 class="section-title no-print">Choix de tâche des enseignants</h2>
+        {% for enseignant in enseignants_data %}
+        <div class="enseignant-card {% if enseignant.estfictif %}enseignant-fictif{% endif %}" id="enseignant-card-{{ enseignant.enseignantid }}">
+            <div class="entete-enseignant">
+                <h3 class="titre-enseignant-bascule nom-enseignant-texte">
+                    {{ enseignant.nomcomplet }}
+                    {% if not enseignant.estfictif and not enseignant.esttempsplein %}<small>(Temps Partiel)</small>{% endif %}
+                    {% if enseignant.peutchoisirhorschampprincipal %}<small>(Peut choisir hors champ)</small>{% endif %}
+                </h3>
+                <div class="arrow-indicator no-print"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg></div>
+            </div>
+            <div class="action-enseignant-fictif no-print">
+                {% if enseignant.estfictif %}<button class="btn-supprimer-enseignant" data-enseignant-id="{{ enseignant.enseignantid }}">Supprimer tâche</button>{% endif %}
+            </div>
+            <div class="cours-attribues">
+                <table id="table-attributions-{{ enseignant.enseignantid }}">
+                    <thead><tr><th>Code</th><th>Cours choisi</th><th>Nb. grp.</th><th>Pér.</th><th>Pér. total</th><th class="no-print">Action</th></tr></thead>
+                    <tbody id="tbody-attributions-{{ enseignant.enseignantid }}"></tbody>
+                </table>
+            </div>
+            <div class="signature-line">Signature de l'enseignant : {{ enseignant.nomcomplet }}</div>
+            <div class="contenu-selection-cours no-print">
+                <div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div>
+                <div class="cours-selection"><h4>Autres tâches disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div>
+            </div>
         </div>
-    </template>
+        {% endfor %}
+        {% if not enseignants_data %}<p>Aucun enseignant dans ce champ pour cette année scolaire.</p>{% endif %}
+        <button id="btn-creer-tache-restante" class="btn btn-success no-print" style="margin-top:15px;">Créer une Tâche Restante</button>
+    </section>
 
-    <!-- Étape 1: Initialisation des données critiques pour le JS via Jinja2 -->
-    <script>
-        const API_URLS = {
-            attribuerCours: "{{ url_for('api.api_ajouter_attribution') }}",
-            retirerCours: "{{ url_for('api.api_supprimer_attribution') }}",
-            creerTacheRestante: "{{ url_for('api.api_creer_tache_restante', champ_no=champ.champno) }}",
-            supprimerEnseignant: "{{ url_for('api.api_supprimer_enseignant', enseignant_id=999999999) }}"
-        };
-        // Données métiers
-        let G_COURS_ENSEIGNEMENT_CHAMP = {{ cours_enseignement_champ|tojson }};
-        let G_COURS_AUTRES_TACHES_CHAMP = {{ cours_autres_taches_champ|tojson }};
-        let G_ENSEIGNANTS_INITIAL_DATA = {{ enseignants_data|tojson }};
-        // Constantes
-        const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}";
-        const G_CHAMP_EST_VERROUILLE = {{ champ.estverrouille|default(false)|tojson }};
-        const G_ANNEE_ID_ACTIVE = {{ annee_active.annee_id|tojson if annee_active else 'null' }};
-    </script>
+    <!-- Colonne du centre: Cours restants -->
+    <section class="cours-restants-section no-print">
+        <h2 class="section-title">Périodes restantes dans ce champ</h2>
+        <table id="tableau-cours-restants">
+            <thead><tr><th>Code</th><th>Cours disponibles</th><th>Grp. rest.</th><th>Pér.</th><th>Pér. restantes</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </section>
 
-    <!-- Étape 2: Chargement du fichier de logique externe -->
-    <script src="{{ url_for('static', filename='js/page_champ.js') }}"></script>
+    <!-- Colonne de droite: Sommaire du champ -->
+    <section class="sommaire-champ-section no-print">
+        <h2 class="section-title">Tâches du champ : {{ champ.champno }}</h2>
+        <table id="tableau-sommaire-champ">
+            <thead><tr><th>Nom</th><th>Cours</th><th>Autres</th><th>Total</th><th>Statut</th></tr></thead>
+            <tbody>
+                {% for enseignant in enseignants_data %}
+                <tr data-enseignant-id="{{ enseignant.enseignantid }}" class="{{ 'enseignant-fictif-sommaire' if enseignant.estfictif else ('enseignant-temps-partiel-sommaire' if not enseignant.esttempsplein else 'enseignant-temps-plein-sommaire') }}">
+                    <td>{{ enseignant.nomcomplet }}</td>
+                    <td class="sum-cours-val">{{ enseignant.periodes_actuelles.periodes_cours | format_periodes }}</td>
+                    <td class="sum-autres-val">{{ enseignant.periodes_actuelles.periodes_autres | format_periodes }}</td>
+                    <td class="sum-total-val">{{ enseignant.periodes_actuelles.total_periodes | format_periodes }}</td>
+                    <td>{% if enseignant.estfictif %}Tâche Restante{% elif not enseignant.esttempsplein %}Temps Partiel{% else %}Temps Plein{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot><tr><td colspan="3" style="text-align:right;"><strong>Moyenne champ (temps plein):</strong></td><td id="moyenne-champ-val">{{ moyenne_champ_initiale | format_periodes }}</td><td></td></tr></tfoot>
+        </table>
+        {% if not enseignants_data %}<p>Aucun enseignant à afficher dans le sommaire.</p>{% endif %}
+    </section>
+</div>
+{% else %}
+    <div class="flash-messages">
+        <li class="error">Aucune année scolaire active. Impossible d'afficher les données du champ.</li>
+    </div>
+{% endif %}
 
-    <!-- Script de gestion du thème -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const themeSwitcher = document.querySelector('.theme-switcher');
-            if (themeSwitcher) {
-                const themeButtons = themeSwitcher.querySelectorAll('button');
-                function applyThemeUI(theme) {
-                    document.documentElement.className = `theme-${theme}`;
-                    themeButtons.forEach(btn => btn.classList.remove('active'));
-                    const activeButton = document.getElementById(`theme-btn-${theme}`);
-                    if (activeButton) activeButton.classList.add('active');
-                }
-                themeSwitcher.addEventListener('click', function(event) {
-                    if (event.target.tagName === 'BUTTON') {
-                        const theme = event.target.dataset.theme;
-                        localStorage.setItem('appTheme', theme);
-                        applyThemeUI(theme);
-                    }
-                });
-                const savedTheme = localStorage.getItem('appTheme') || 'light';
-                applyThemeUI(savedTheme);
-            }
-        });
-    </script>
-</body>
-</html>
+<template id="enseignant-card-template">
+    <div class="enseignant-card enseignant-fictif" data-template-id="enseignant-card-ID">
+        <div class="entete-enseignant"><h3 class="titre-enseignant-bascule nom-enseignant-texte" data-template-nom="nom-enseignant"></h3><div class="arrow-indicator no-print"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg></div></div>
+        <div class="action-enseignant-fictif no-print"><button class="btn-supprimer-enseignant" data-template-id-btn="btn-supprimer-ID">Supprimer tâche</button></div>
+        <div class="cours-attribues"><table data-template-id-table="table-attributions-ID"><thead><tr><th>Code</th><th>Cours choisi</th><th>Nb. grp.</th><th>Pér.</th><th>Pér. totale</th><th class="no-print">Action</th></tr></thead><tbody data-template-id-tbody="tbody-attributions-ID"></tbody></table></div>
+        <div class="signature-line"></div>
+        <div class="contenu-selection-cours no-print"><div class="cours-selection"><h4>Cours d'enseignement disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="enseignement"></ul></div><div class="cours-selection"><h4>Autres tâches disponibles :</h4><ul class="liste-cours-a-choisir" data-type-cours="autre"></ul></div></div>
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<!-- Étape 1: Initialisation des données critiques pour le JS via Jinja2 -->
+<script>
+    const API_URLS = {
+        attribuerCours: "{{ url_for('api.api_ajouter_attribution') }}",
+        retirerCours: "{{ url_for('api.api_supprimer_attribution') }}",
+        creerTacheRestante: "{{ url_for('api.api_creer_tache_restante', champ_no=champ.champno) }}",
+        supprimerEnseignant: "{{ url_for('api.api_supprimer_enseignant', enseignant_id=999999999) }}"
+    };
+    // Données métiers
+    let G_COURS_ENSEIGNEMENT_CHAMP = {{ cours_enseignement_champ|tojson }};
+    let G_COURS_AUTRES_TACHES_CHAMP = {{ cours_autres_taches_champ|tojson }};
+    let G_ENSEIGNANTS_INITIAL_DATA = {{ enseignants_data|tojson }};
+    // Constantes
+    const G_CHAMP_NO_ACTUEL = "{{ champ.champno }}";
+    const G_CHAMP_EST_VERROUILLE = {{ champ.estverrouille|default(false)|tojson }};
+    const G_ANNEE_ID_ACTIVE = {{ annee_active.annee_id|tojson if annee_active else 'null' }};
+</script>
+
+<!-- Étape 2: Chargement du fichier de logique externe -->
+<script src="{{ url_for('static', filename='js/page_champ.js') }}"></script>
+{% endblock %}

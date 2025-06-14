@@ -1,107 +1,44 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inscription - Gestion des Tâches Enseignants</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% extends "_layout.html" %}
 
-    <!-- Script pour appliquer le thème instantanément -->
-    <script>
-        (function() {
-            const savedTheme = localStorage.getItem('appTheme') || 'light';
-            document.documentElement.className = `theme-${savedTheme}`;
-        })();
-    </script>
-</head>
-<body class="theme-light">
-    <header>
-        <h1>Inscription</h1>
-        <nav>
-            <ul>
-                <!-- Le lien vers l'accueil a été retiré car la redirection se fait automatiquement -->
-            </ul>
-        </nav>
+{% block title %}Inscription{% endblock %}
 
-        <!-- Sélecteur de thème -->
-        <div class="theme-switcher no-print">
-            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
-            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+{% block header_content %}
+<h1>Inscription</h1>
+<nav>
+    <ul>
+        {# La navigation est vide ici, comme pour la page de connexion. #}
+    </ul>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="auth-form-container">
+    <h2>Créer un compte</h2>
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="username">Nom d'utilisateur :</label>
+            <input type="text" id="username" name="username" value="{{ username if username else '' }}" required autofocus>
         </div>
-    </header>
-
-    <main>
-        <div class="auth-form-container">
-            <h2>Créer un compte</h2>
-
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    <ul class="flash-messages">
-                    {% for category, message in messages %}
-                        <li class="{{ category }}">{{ message }}</li>
-                    {% endfor %}
-                    </ul>
-                {% endif %}
-            {% endwith %}
-
-            <form method="POST">
-                <div class="form-group">
-                    <label for="username">Nom d'utilisateur :</label>
-                    <input type="text" id="username" name="username" value="{{ username if username else '' }}" required autofocus>
-                </div>
-                <div class="form-group">
-                    <label for="password">Mot de passe :</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <div class="form-group">
-                    <label for="confirm_password">Confirmer le mot de passe :</label>
-                    <input type="password" id="confirm_password" name="confirm_password" required>
-                </div>
-
-                {% if not first_user %}
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="is_admin" name="is_admin" {{ 'checked' if is_admin_checked else '' }}>
-                        <label for="is_admin">Accès Administrateur</label>
-                    </div>
-                {% endif %}
-
-                <button type="submit">S'inscrire</button>
-            </form>
-
-            <p>Déjà un compte ? <a href="{{ url_for('auth.login') }}">Se connecter</a>.</p>
+        <div class="form-group">
+            <label for="password">Mot de passe :</label>
+            <input type="password" id="password" name="password" required>
         </div>
-    </main>
+        <div class="form-group">
+            <label for="confirm_password">Confirmer le mot de passe :</label>
+            <input type="password" id="confirm_password" name="confirm_password" required>
+        </div>
 
-    <footer>
-        <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
-    </footer>
+        {% if not first_user %}
+            <div class="checkbox-group">
+                <input type="checkbox" id="is_admin" name="is_admin" {{ 'checked' if is_admin_checked else '' }}>
+                <label for="is_admin">Accès Administrateur</label>
+            </div>
+        {% endif %}
 
-    <!-- Script de gestion du thème -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const themeSwitcher = document.querySelector('.theme-switcher');
-            if (themeSwitcher) {
-                const themeButtons = themeSwitcher.querySelectorAll('button');
+        <button type="submit">S'inscrire</button>
+    </form>
 
-                function applyThemeUI(theme) {
-                    document.documentElement.className = `theme-${theme}`;
-                    themeButtons.forEach(btn => btn.classList.remove('active'));
-                    const activeButton = document.getElementById(`theme-btn-${theme}`);
-                    if (activeButton) activeButton.classList.add('active');
-                }
-
-                themeSwitcher.addEventListener('click', function(event) {
-                    if (event.target.tagName === 'BUTTON') {
-                        const theme = event.target.dataset.theme;
-                        localStorage.setItem('appTheme', theme);
-                        applyThemeUI(theme);
-                    }
-                });
-
-                const savedTheme = localStorage.getItem('appTheme') || 'light';
-                applyThemeUI(savedTheme);
-            }
-        });
-    </script>
-</body>
-</html>
+    <p>Déjà un compte ? <a href="{{ url_for('auth.login') }}">Se connecter</a>.</p>
+</div>
+{% endblock %}

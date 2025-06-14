@@ -1,501 +1,441 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tableau de Bord Global</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% extends "_layout.html" %}
 
-    <!-- Style pour les éléments de la page -->
-    <style>
-        .champ-confirme {
-            font-weight: bold;
-        }
-        .lock-icon, .confirm-icon {
-            display: inline-block;
-            vertical-align: middle;
-            width: 24px;
-            height: 24px;
-        }
-        .lock-icon.admin-only, .confirm-icon.admin-only {
-            cursor: pointer;
-        }
-        .confirm-icon.confirmed path {
-            fill: green;
-        }
-        .confirm-icon.unconfirmed path {
-            fill: #ccc;
-        }
-        .details-link-container {
-            display: flex; /* Utilise flexbox pour aligner les éléments */
-            justify-content: flex-end; /* Aligne les éléments à droite */
-            gap: 1rem; /* Espace entre les boutons */
-            margin-bottom: 1rem;
-            flex-wrap: wrap; /* Permet aux boutons de passer à la ligne sur petits écrans */
-        }
-        
-        /* Styles pour le solde final */
-        .solde-positif {
-            color: green;
-            font-weight: bold;
-        }
-        .solde-negatif {
-            color: red;
-            font-weight: bold;
-        }
-    </style>
+{% block title %}Tableau de Bord Global{% endblock %}
 
-    <!-- Script pour appliquer le thème instantanément -->
-    <script>
-        (function() {
-            const savedTheme = localStorage.getItem('appTheme') || 'light';
-            document.documentElement.className = `theme-${savedTheme}`;
-        })();
-    </script>
-</head>
-<body class="theme-light">
-    <header>
-        <h1>
-            Tableau de Bord Global
-            {% if annee_active %}
-                <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
+{% block head_extra %}
+<style>
+    .champ-confirme {
+        font-weight: bold;
+    }
+    .lock-icon, .confirm-icon {
+        display: inline-block;
+        vertical-align: middle;
+        width: 24px;
+        height: 24px;
+    }
+    .lock-icon.admin-only, .confirm-icon.admin-only {
+        cursor: pointer;
+    }
+    .confirm-icon.confirmed path {
+        fill: green;
+    }
+    .confirm-icon.unconfirmed path {
+        fill: #ccc;
+    }
+    .details-link-container {
+        display: flex; /* Utilise flexbox pour aligner les éléments */
+        justify-content: flex-end; /* Aligne les éléments à droite */
+        gap: 1rem; /* Espace entre les boutons */
+        margin-bottom: 1rem;
+        flex-wrap: wrap; /* Permet aux boutons de passer à la ligne sur petits écrans */
+    }
+
+    /* Styles pour le solde final */
+    .solde-positif {
+        color: green;
+        font-weight: bold;
+    }
+    .solde-negatif {
+        color: red;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block header_content %}
+<h1>
+    Tableau de Bord Global
+    {% if annee_active %}
+        <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
+    {% endif %}
+</h1>
+<nav>
+    <ul>
+        {% if current_user.is_authenticated %}
+            {% if current_user.is_admin %}
+                <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+                {# La ligne "Navigation par champ" a été retirée car redondante pour l'admin #}
+                <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
+                <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+            {% elif current_user.is_dashboard_only %}
+                <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+                <li><a href="{{ url_for('admin.page_detail_taches') }}">Détail des Tâches</a></li>
+            {% else %}
+                 <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
             {% endif %}
-        </h1>
-        <nav>
-            <ul>
-                {% if current_user.is_authenticated %}
-                    {% if current_user.is_admin %}
-                        <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
-                        <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
-                        <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
-                        <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
-                    {% elif current_user.is_dashboard_only %}
-                        <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
-                        <li><a href="{{ url_for('admin.page_detail_taches') }}">Détail des Tâches</a></li>
-                    {% else %}
-                         <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
-                    {% endif %}
-                    <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
-                {% else %}
-                    <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
-                {% endif %}
-            </ul>
-        </nav>
-
-        <!-- Sélecteur d'année pour l'administrateur ou l'observateur -->
-        {% if current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only) and toutes_les_annees %}
-        <div class="year-switcher no-print">
-            <label for="annee-selector">Changer l'année de visualisation :</label>
-            <select id="annee-selector">
-                {% for annee in toutes_les_annees %}
-                    <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
-                        {{ annee.libelle_annee }} {% if annee.est_courante %}(Courante){% endif %}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        {% endif %}
-
-        <!-- Sélecteur de thème -->
-        <div class="theme-switcher no-print">
-            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
-            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
-        </div>
-    </header>
-
-    <main>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <ul class="flash-messages">
-                {% for category, message in messages %}
-                    <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
-
-        {% if annee_active %}
-        <!-- Conteneur principal simplifié -->
-        <div class="container-principal-sommaire">
-            <!-- Colonne unique pour les moyennes -->
-            <div class="colonne-sommaire colonne-gauche" style="width: 100%; margin: auto; max-width: 1200px;">
-                <div class="moyenne-generale-contenu">
-                    <span>Moyenne générale incluant tous les champs :</span>
-                    <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
-                </div>
-                <div class="moyenne-generale-contenu">
-                    <span>Moyenne générale avec les champs confirmés :</span>
-                    <span id="moyenne-preliminaire-confirmee">{{ moyenne_preliminaire_confirmee | format_periodes }} périodes</span>
-                </div>
-
-                <div>
-                    <h2>Moyennes par champ (temps plein)</h2>
-
-                    <!-- Liens d'action avec les classes de bouton standardisées -->
-                    <div class="details-link-container no-print">
-                        <a href="{{ url_for('admin.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
-                        <a href="{{ url_for('admin.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
-                        <a href="{{ url_for('admin.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
-                        <a href="{{ url_for('admin.exporter_org_scolaire_excel') }}" class="btn btn-export-excel">Exporter pour org. scolaire (Excel)</a>
-                    </div>
-
-                    {% if moyennes_par_champ %}
-                    <table id="table-moyennes-par-champ">
-                        <thead>
-                            <tr>
-                                <th>N° champ</th>
-                                <th>Nom du champ</th>
-                                <th>Verrou</th>
-                                <th>Nb. Ens. TP</th>
-                                <th>Périodes Choisies (TP)</th>
-                                <th>Moyenne</th>
-                                <th>Diff. / 24p</th>
-                                <th>Confirmé</th>
-                                <th>Diff. Confirmé</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {# Le contenu de ce tbody sera trié et inséré par JavaScript. #}
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="3" style="text-align: right; font-weight: bold;">TOTAL</td>
-                                <td id="total-enseignants-tp" style="font-weight: bold;"></td>
-                                <td id="total-periodes-choisies-tp" style="font-weight: bold;"></td>
-                                <td></td> <!-- Cellule vide pour la colonne moyenne -->
-                                <td></td> <!-- Cellule vide pour le total de "Diff. / 24p" -->
-                                <td></td> <!-- Cellule vide pour la colonne Confirmé -->
-                                <td id="total-periodes-confirmees-magiques" style="font-weight: bold;"></td>
-                            </tr>
-                            <tr>
-                                <td colspan="8" style="text-align: right; font-weight: bold;">Chiffre magique (Nb Ens. TP * 0.6)</td>
-                                <td id="valeur-chiffre-magique" style="font-weight: bold;"></td>
-                            </tr>
-                             <tr>
-                                <td colspan="8" style="text-align: right; font-weight: bold;">Solde Final (Diff. Confirmé - Chiffre Magique)</td>
-                                <td id="valeur-solde-final"></td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                    <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
-                    {% else %}
-                    <p>Aucune donnée de moyenne par champ disponible pour cette année.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+            <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
         {% else %}
-            <div class="flash-messages">
-                <li class="warning">Aucune année scolaire n'est active. Les données ne peuvent pas être affichées.</li>
-            </div>
+            <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
         {% endif %}
-    </main>
+    </ul>
+</nav>
 
-    <footer>
-        <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
-    </footer>
+<!-- Sélecteur d'année pour l'administrateur ou l'observateur -->
+{% if current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only) and toutes_les_annees %}
+<div class="year-switcher no-print">
+    <label for="annee-selector">Changer l'année de visualisation :</label>
+    <select id="annee-selector">
+        {% for annee in toutes_les_annees %}
+            <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
+                {{ annee.libelle_annee }} {% if annee.est_courante %}(Courante){% endif %}
+            </option>
+        {% endfor %}
+    </select>
+</div>
+{% endif %}
+{% endblock %}
 
-    <!-- Script JS spécifique à la page sommaire -->
-    <script>
-        const INTERVAL_MISE_A_JOUR = 7000; // Intervalle de rafraîchissement des données en millisecondes
-        const IS_ADMIN = {{ current_user.is_admin | tojson }}; // Variable Jinja pour vérifier si l'utilisateur est admin
+{% block content %}
+{% if annee_active %}
+<!-- Conteneur principal simplifié -->
+<div class="container-principal-sommaire">
+    <!-- Colonne unique pour les moyennes -->
+    <div class="colonne-sommaire colonne-gauche" style="width: 100%; margin: auto; max-width: 1200px;">
+        <div class="moyenne-generale-contenu">
+            <span>Moyenne générale incluant tous les champs :</span>
+            <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
+        </div>
+        <div class="moyenne-generale-contenu">
+            <span>Moyenne générale avec les champs confirmés :</span>
+            <span id="moyenne-preliminaire-confirmee">{{ moyenne_preliminaire_confirmee | format_periodes }} périodes</span>
+        </div>
 
-        // --- Fonctions utilitaires et constantes SVG ---
-        function formatPeriodes(value) {
-            // Formate un nombre en chaîne de caractères pour l'affichage des périodes,
-            // avec un maximum de 2 décimales et utilisant le format numérique canadien français.
-            if (value === null || value === undefined) return '';
-            const formatter = new Intl.NumberFormat('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: false, signDisplay: 'auto' });
-            return formatter.format(value);
-        }
-        // Icônes SVG pour les états verrouillé/déverrouillé et confirmé/non confirmé
-        const SVG_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
-        const SVG_UNLOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
-        const SVG_CONFIRMED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>`;
-        const SVG_UNCONFIRMED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" opacity="0.3"/></svg>`;
+        <div>
+            <h2>Moyennes par champ (temps plein)</h2>
 
-        document.addEventListener('DOMContentLoaded', function() {
-            {% if annee_active %}
-                // La mise à jour initiale des données se fait dans mettreAJourDonneesSommaire()
-                mettreAJourDonneesSommaire();
-                // Met à jour les données du sommaire à intervalle régulier
-                setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
+            <!-- Liens d'action avec les classes de bouton standardisées -->
+            <div class="details-link-container no-print">
+                <a href="{{ url_for('admin.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
+                <a href="{{ url_for('admin.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
+                <a href="{{ url_for('admin.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
+                <a href="{{ url_for('admin.exporter_org_scolaire_excel') }}" class="btn btn-export-excel">Exporter pour org. scolaire (Excel)</a>
+            </div>
 
-                const tableMoyennes = document.getElementById('table-moyennes-par-champ');
-                if (tableMoyennes) {
-                    // Gestion des clics sur les icônes de verrouillage et de confirmation
-                    tableMoyennes.addEventListener('click', function(event) {
-                        const icon = event.target.closest('.lock-icon, .confirm-icon');
-                        if (!icon) return;
-
-                        if (IS_ADMIN) {
-                            if (icon.classList.contains('lock-icon')) {
-                                basculerVerrouChamp(icon.dataset.champNo, icon);
-                            } else if (icon.classList.contains('confirm-icon')) {
-                                basculerConfirmationChamp(icon.dataset.champNo, icon);
-                            }
-                        } else {
-                            // Pour les non-admins, on peut afficher un message ou ne rien faire.
-                            // alert("Vous n'avez pas les permissions pour modifier ce statut.");
-                        }
-                    });
-                }
+            {% if moyennes_par_champ %}
+            <table id="table-moyennes-par-champ">
+                <thead>
+                    <tr>
+                        <th>N° champ</th>
+                        <th>Nom du champ</th>
+                        <th>Verrou</th>
+                        <th>Nb. Ens. TP</th>
+                        <th>Périodes Choisies (TP)</th>
+                        <th>Moyenne</th>
+                        <th>Diff. / 24p</th>
+                        <th>Confirmé</th>
+                        <th>Diff. Confirmé</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {# Le contenu de ce tbody sera trié et inséré par JavaScript. #}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" style="text-align: right; font-weight: bold;">TOTAL</td>
+                        <td id="total-enseignants-tp" style="font-weight: bold;"></td>
+                        <td id="total-periodes-choisies-tp" style="font-weight: bold;"></td>
+                        <td></td> <!-- Cellule vide pour la colonne moyenne -->
+                        <td></td> <!-- Cellule vide pour le total de "Diff. / 24p" -->
+                        <td></td> <!-- Cellule vide pour la colonne Confirmé -->
+                        <td id="total-periodes-confirmees-magiques" style="font-weight: bold;"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="8" style="text-align: right; font-weight: bold;">Chiffre magique (Nb Ens. TP * 0.6)</td>
+                        <td id="valeur-chiffre-magique" style="font-weight: bold;"></td>
+                    </tr>
+                     <tr>
+                        <td colspan="8" style="text-align: right; font-weight: bold;">Solde Final (Diff. Confirmé - Chiffre Magique)</td>
+                        <td id="valeur-solde-final"></td>
+                    </tr>
+                </tfoot>
+            </table>
+            <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
+            {% else %}
+            <p>Aucune donnée de moyenne par champ disponible pour cette année.</p>
             {% endif %}
+        </div>
+    </div>
+</div>
+{% else %}
+    <div class="flash-messages">
+        <li class="warning">Aucune année scolaire n'est active. Les données ne peuvent pas être affichées.</li>
+    </div>
+{% endif %}
+{% endblock %}
 
-            // Gestion du changement d'année de visualisation par l'administrateur
-            const anneeSelector = document.getElementById('annee-selector');
-            if (anneeSelector) {
-                anneeSelector.addEventListener('change', function() {
-                    const anneeId = this.value;
-                    fetch("{{ url_for('admin.api_changer_annee_active') }}", {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ annee_id: parseInt(anneeId, 10) })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            window.location.reload(); // Recharge la page pour refléter le changement d'année
-                        } else {
-                            alert("Erreur lors du changement d'année de visualisation.");
+{% block scripts %}
+<!-- Script JS spécifique à la page sommaire -->
+<script>
+    const INTERVAL_MISE_A_JOUR = 7000; // Intervalle de rafraîchissement des données en millisecondes
+    const IS_ADMIN = {{ current_user.is_admin | tojson }}; // Variable Jinja pour vérifier si l'utilisateur est admin
+
+    // --- Fonctions utilitaires et constantes SVG ---
+    function formatPeriodes(value) {
+        // Formate un nombre en chaîne de caractères pour l'affichage des périodes,
+        // avec un maximum de 2 décimales et utilisant le format numérique canadien français.
+        if (value === null || value === undefined) return '';
+        const formatter = new Intl.NumberFormat('fr-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: false, signDisplay: 'auto' });
+        return formatter.format(value);
+    }
+    // Icônes SVG pour les états verrouillé/déverrouillé et confirmé/non confirmé
+    const SVG_LOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6zm9 14H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
+    const SVG_UNLOCKED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h2c0-1.66 1.34-3 3-3s3 1.34 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/></svg>`;
+    const SVG_CONFIRMED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>`;
+    const SVG_UNCONFIRMED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" opacity="0.3"/></svg>`;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if annee_active %}
+            // La mise à jour initiale des données se fait dans mettreAJourDonneesSommaire()
+            mettreAJourDonneesSommaire();
+            // Met à jour les données du sommaire à intervalle régulier
+            setInterval(mettreAJourDonneesSommaire, INTERVAL_MISE_A_JOUR);
+
+            const tableMoyennes = document.getElementById('table-moyennes-par-champ');
+            if (tableMoyennes) {
+                // Gestion des clics sur les icônes de verrouillage et de confirmation
+                tableMoyennes.addEventListener('click', function(event) {
+                    const icon = event.target.closest('.lock-icon, .confirm-icon');
+                    if (!icon) return;
+
+                    if (IS_ADMIN) {
+                        if (icon.classList.contains('lock-icon')) {
+                            basculerVerrouChamp(icon.dataset.champNo, icon);
+                        } else if (icon.classList.contains('confirm-icon')) {
+                            basculerConfirmationChamp(icon.dataset.champNo, icon);
                         }
-                    });
-                });
-            }
-        });
-
-        async function mettreAJourDonneesSommaire() {
-            // Récupère les données du sommaire depuis l'API et met à jour l'affichage.
-            try {
-                const response = await fetch("{{ url_for('admin.api_get_donnees_sommaire') }}");
-                if (!response.ok) {
-                    // Si l'utilisateur n'est plus authentifié ou autorisé, recharger la page
-                    if (response.status === 401 || response.status === 403) { window.location.reload(); return; }
-                    throw new Error(`Erreur HTTP: ${response.status}`);
-                }
-                const data = await response.json();
-
-                // Mettre à jour les données du tableau et calculer le total des "périodes magiques confirmées"
-                const totalConfirme = mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
-
-                // Mettre à jour les totaux globaux du pied de page
-                if (data.grand_totals) {
-                    mettreAJourTotaux(data.grand_totals, totalConfirme);
-                }
-
-                // Mettre à jour les moyennes globales en haut de la page
-                const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
-                if (elMoyenneGenerale) {
-                    elMoyenneGenerale.textContent = (data.moyenne_generale !== undefined && data.moyenne_generale !== null)
-                        ? `${formatPeriodes(data.moyenne_generale)} périodes`
-                        : `N/A périodes`;
-                }
-                const elMoyennePrelim = document.getElementById('moyenne-preliminaire-confirmee');
-                if (elMoyennePrelim) {
-                    elMoyennePrelim.textContent = (data.moyenne_preliminaire_confirmee !== undefined && data.moyenne_preliminaire_confirmee !== null)
-                        ? `${formatPeriodes(data.moyenne_preliminaire_confirmee)} périodes`
-                        : `N/A périodes`;
-                }
-            } catch (error) {
-                console.error("Erreur lors de la mise à jour du sommaire:", error);
-            }
-        }
-
-        function mettreAJourTotaux(totals, totalConfirme) {
-            // Met à jour les cellules du pied de tableau avec les totaux calculés.
-            // 'totals' provient de data.grand_totals, 'totalConfirme' est la somme des 'periodes_magiques' des champs confirmés.
-
-            document.getElementById('total-enseignants-tp').textContent = totals.total_enseignants_tp;
-            document.getElementById('total-periodes-choisies-tp').textContent = formatPeriodes(totals.total_periodes_choisies_tp);
-            document.getElementById('total-periodes-confirmees-magiques').textContent = formatPeriodes(totalConfirme);
-
-            // Calcul et affichage du "Chiffre magique" : Nombre total d'enseignants TP * 0.6
-            // Le 0.6 est un facteur spécifique à la logique métier de l'application.
-            const chiffreMagique = (totals.total_enseignants_tp || 0) * 0.6;
-            document.getElementById('valeur-chiffre-magique').textContent = formatPeriodes(chiffreMagique);
-
-            // Calcul et affichage du "Solde Final" : Total des Périodes Confirmées Magiques - Chiffre Magique
-            const soldeFinal = totalConfirme - chiffreMagique;
-            const soldeCell = document.getElementById('valeur-solde-final');
-            soldeCell.textContent = formatPeriodes(soldeFinal);
-
-            // Appliquer une couleur au solde final pour une meilleure lisibilité
-            soldeCell.classList.remove('solde-positif', 'solde-negatif'); // Réinitialiser les classes
-            if (soldeFinal < 0) {
-                soldeCell.classList.add('solde-negatif');
-            } else if (soldeFinal > 0) {
-                soldeCell.classList.add('solde-positif');
-            }
-        }
-
-        async function basculerVerrouChamp(champNo, iconElement) {
-            // Bascule l'état de verrouillage d'un champ via l'API et met à jour l'icône.
-            iconElement.style.opacity = '0.5'; // Indique visuellement une action en cours
-            try {
-                const response = await fetch(`/admin/api/champs/${champNo}/basculer_verrou`, { method: 'POST' });
-                const data = await response.json();
-                if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
-                await mettreAJourDonneesSommaire(); // Recharge toutes les données pour refléter le changement
-            } catch (error) {
-                console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
-                alert(error.message);
-            } finally {
-                iconElement.style.opacity = '1'; // Rétablit l'opacité de l'icône
-            }
-        }
-
-        async function basculerConfirmationChamp(champNo, iconElement) {
-            // Bascule l'état de confirmation d'un champ via l'API et met à jour l'icône.
-            iconElement.style.opacity = '0.5'; // Indique visuellement une action en cours
-            try {
-                const response = await fetch(`/admin/api/champs/${champNo}/basculer_confirmation`, { method: 'POST' });
-                const data = await response.json();
-                if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors du changement de statut de confirmation.');
-                await mettreAJourDonneesSommaire(); // Recharge toutes les données pour refléter le changement
-            } catch (error) {
-                console.error(`Erreur bascule confirmation pour champ ${champNo}:`, error);
-                alert(error.message);
-            } finally {
-                iconElement.style.opacity = '1'; // Rétablit l'opacité de l'icône
-            }
-        }
-
-        function mettreAJourIconeVerrou(iconElement, estVerrouille) {
-            // Met à jour l'apparence et le titre de l'icône de verrouillage.
-            iconElement.innerHTML = estVerrouille ? SVG_LOCKED : SVG_UNLOCKED;
-            iconElement.title = estVerrouille ? 'Champ verrouillé' : 'Champ déverrouillé';
-            if(IS_ADMIN) {
-                iconElement.classList.add('admin-only');
-                iconElement.title += '. Cliquer pour modifier.';
-            }
-        }
-
-        function mettreAJourIconeConfirmation(iconElement, estConfirme) {
-            // Met à jour l'apparence et le titre de l'icône de confirmation.
-            iconElement.className = estConfirme ? 'confirm-icon confirmed' : 'confirm-icon unconfirmed';
-            iconElement.innerHTML = estConfirme ? SVG_CONFIRMED : SVG_UNCONFIRMED;
-            iconElement.title = estConfirme ? 'Champ confirmé' : 'Champ non confirmé';
-            if (IS_ADMIN) {
-                iconElement.classList.add('admin-only');
-                iconElement.title += '. Cliquer pour modifier.';
-            }
-        }
-
-        function comparerNumerosChamp(a, b) {
-            // Fonction de comparaison pour trier les numéros de champ (ex: "10A", "10B", "110").
-            const regex = /^(\d+)([a-zA-Z]*)$/; // Sépare la partie numérique de la partie littérale
-            const matchA = a.match(regex);
-            const matchB = b.match(regex);
-            if (matchA && matchB) {
-                const numA = parseInt(matchA[1], 10);
-                const letterA = matchA[2] || '';
-                const numB = parseInt(matchB[1], 10);
-                const letterB = matchB[2] || '';
-                if (numA !== numB) return numA - numB; // Trie par numéro d'abord
-                return letterA.localeCompare(letterB); // Puis par lettre
-            }
-            return a.localeCompare(b); // Fallback pour les formats non standards
-        }
-
-        function mettreAJourTableauMoyennesChamp(moyennesChampData) {
-            // Remplit le tableau des moyennes par champ avec les données reçues.
-            // Calcule et retourne le total des "périodes magiques" pour les champs confirmés.
-            const tbody = document.querySelector('#table-moyennes-par-champ tbody');
-            const aucuneMoyenneMsg = document.getElementById('aucune-moyenne-champ-message');
-            const table = document.getElementById('table-moyennes-par-champ');
-            if (!tbody || !aucuneMoyenneMsg || !table) return 0; // Sécurité si les éléments DOM ne sont pas trouvés
-
-            tbody.innerHTML = ''; // Vide le tableau avant de le remplir
-            const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
-
-            const hasData = champNosTries.length > 0;
-            aucuneMoyenneMsg.style.display = hasData ? 'none' : 'block'; // Affiche/masque message si pas de données
-            table.style.display = hasData ? '' : 'none'; // Affiche/masque le tableau
-
-            let totalPeriodesMagiquesConfirmees = 0.0;
-
-            if (hasData) {
-                champNosTries.forEach(champ_no => {
-                    const data = moyennesChampData[champ_no];
-                    const row = tbody.insertRow();
-                    row.dataset.champNo = champ_no; // Stocke le numéro de champ pour référence
-
-                    // Applique des classes CSS pour le style visuel des lignes
-                    if (data.est_verrouille) row.classList.add('champ-verrouille-row');
-                    if (data.est_confirme) row.classList.add('champ-confirme');
-
-                    row.insertCell().textContent = champ_no;
-
-                    // Crée un lien vers la page de détail du champ
-                    const cellNomChamp = row.insertCell();
-                    const link = document.createElement('a');
-                    link.href = `/champ/${encodeURIComponent(champ_no)}`;
-                    link.textContent = data.champ_nom;
-                    cellNomChamp.appendChild(link);
-
-                    // Ajoute l'icône de verrouillage
-                    const cellStatut = row.insertCell();
-                    const lockIcon = document.createElement('span');
-                    lockIcon.className = 'lock-icon';
-                    lockIcon.dataset.champNo = champ_no;
-                    mettreAJourIconeVerrou(lockIcon, data.est_verrouille);
-                    cellStatut.appendChild(lockIcon);
-
-                    // Remplit les cellules avec les données formatées
-                    row.insertCell().textContent = data.nb_enseignants_tp;
-                    row.insertCell().textContent = formatPeriodes(data.periodes_choisies_tp);
-                    row.insertCell().textContent = formatPeriodes(data.moyenne);
-                    row.insertCell().textContent = formatPeriodes(data.periodes_magiques);
-
-                    // Ajoute l'icône de confirmation
-                    const cellConfirme = row.insertCell();
-                    const confirmIcon = document.createElement('span');
-                    confirmIcon.className = 'confirm-icon';
-                    confirmIcon.dataset.champNo = champ_no;
-                    mettreAJourIconeConfirmation(confirmIcon, data.est_confirme);
-                    cellConfirme.appendChild(confirmIcon);
-
-                    // Calcule et affiche la "Différence Confirmée"
-                    const cellDiffConfirme = row.insertCell();
-                    if (data.est_confirme) {
-                        cellDiffConfirme.textContent = formatPeriodes(data.periodes_magiques);
-                        totalPeriodesMagiquesConfirmees += data.periodes_magiques;
                     } else {
-                        cellDiffConfirme.textContent = ''; // Laisse vide si non confirmé
+                        // Pour les non-admins, on peut afficher un message ou ne rien faire.
+                        // alert("Vous n'avez pas les permissions pour modifier ce statut.");
                     }
                 });
             }
-            // Retourne le total calculé pour utilisation dans le pied de tableau.
-            return totalPeriodesMagiquesConfirmees;
-        }
-    </script>
+        {% endif %}
 
-    <!-- Script de gestion du thème -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const themeSwitcher = document.querySelector('.theme-switcher');
-            if (themeSwitcher) {
-                const themeButtons = themeSwitcher.querySelectorAll('button');
-                function applyThemeUI(theme) {
-                    // Applique le thème à l'élément racine et met à jour l'état actif des boutons.
-                    document.documentElement.className = `theme-${theme}`;
-                    themeButtons.forEach(btn => btn.classList.remove('active'));
-                    const activeButton = document.getElementById(`theme-btn-${theme}`);
-                    if (activeButton) activeButton.classList.add('active');
-                }
-                themeSwitcher.addEventListener('click', function(event) {
-                    // Change le thème lors du clic sur un bouton de thème.
-                    if (event.target.tagName === 'BUTTON') {
-                        const theme = event.target.dataset.theme;
-                        localStorage.setItem('appTheme', theme); // Sauvegarde le thème dans localStorage
-                        applyThemeUI(theme);
+        // Gestion du changement d'année de visualisation par l'administrateur
+        const anneeSelector = document.getElementById('annee-selector');
+        if (anneeSelector) {
+            anneeSelector.addEventListener('change', function() {
+                const anneeId = this.value;
+                fetch("{{ url_for('admin.api_changer_annee_active') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ annee_id: parseInt(anneeId, 10) })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload(); // Recharge la page pour refléter le changement d'année
+                    } else {
+                        alert("Erreur lors du changement d'année de visualisation.");
                     }
                 });
-                // Applique le thème sauvegardé au chargement de la page.
-                const savedTheme = localStorage.getItem('appTheme') || 'light'; // Thème clair par défaut
-                applyThemeUI(savedTheme);
+            });
+        }
+    });
+
+    async function mettreAJourDonneesSommaire() {
+        // Récupère les données du sommaire depuis l'API et met à jour l'affichage.
+        try {
+            const response = await fetch("{{ url_for('admin.api_get_donnees_sommaire') }}");
+            if (!response.ok) {
+                // Si l'utilisateur n'est plus authentifié ou autorisé, recharger la page
+                if (response.status === 401 || response.status === 403) { window.location.reload(); return; }
+                throw new Error(`Erreur HTTP: ${response.status}`);
             }
-        });
-    </script>
-</body>
-</html>
+            const data = await response.json();
+
+            // Mettre à jour les données du tableau et calculer le total des "périodes magiques confirmées"
+            const totalConfirme = mettreAJourTableauMoyennesChamp(data.moyennes_par_champ || {});
+
+            // Mettre à jour les totaux globaux du pied de page
+            if (data.grand_totals) {
+                mettreAJourTotaux(data.grand_totals, totalConfirme);
+            }
+
+            // Mettre à jour les moyennes globales en haut de la page
+            const elMoyenneGenerale = document.getElementById('moyenne-generale-etablissement');
+            if (elMoyenneGenerale) {
+                elMoyenneGenerale.textContent = (data.moyenne_generale !== undefined && data.moyenne_generale !== null)
+                    ? `${formatPeriodes(data.moyenne_generale)} périodes`
+                    : `N/A périodes`;
+            }
+            const elMoyennePrelim = document.getElementById('moyenne-preliminaire-confirmee');
+            if (elMoyennePrelim) {
+                elMoyennePrelim.textContent = (data.moyenne_preliminaire_confirmee !== undefined && data.moyenne_preliminaire_confirmee !== null)
+                    ? `${formatPeriodes(data.moyenne_preliminaire_confirmee)} périodes`
+                    : `N/A périodes`;
+            }
+        } catch (error) {
+            console.error("Erreur lors de la mise à jour du sommaire:", error);
+        }
+    }
+
+    function mettreAJourTotaux(totals, totalConfirme) {
+        // Met à jour les cellules du pied de tableau avec les totaux calculés.
+        // 'totals' provient de data.grand_totals, 'totalConfirme' est la somme des 'periodes_magiques' des champs confirmés.
+
+        document.getElementById('total-enseignants-tp').textContent = totals.total_enseignants_tp;
+        document.getElementById('total-periodes-choisies-tp').textContent = formatPeriodes(totals.total_periodes_choisies_tp);
+        document.getElementById('total-periodes-confirmees-magiques').textContent = formatPeriodes(totalConfirme);
+
+        // Calcul et affichage du "Chiffre magique" : Nombre total d'enseignants TP * 0.6
+        // Le 0.6 est un facteur spécifique à la logique métier de l'application.
+        const chiffreMagique = (totals.total_enseignants_tp || 0) * 0.6;
+        document.getElementById('valeur-chiffre-magique').textContent = formatPeriodes(chiffreMagique);
+
+        // Calcul et affichage du "Solde Final" : Total des Périodes Confirmées Magiques - Chiffre Magique
+        const soldeFinal = totalConfirme - chiffreMagique;
+        const soldeCell = document.getElementById('valeur-solde-final');
+        soldeCell.textContent = formatPeriodes(soldeFinal);
+
+        // Appliquer une couleur au solde final pour une meilleure lisibilité
+        soldeCell.classList.remove('solde-positif', 'solde-negatif'); // Réinitialiser les classes
+        if (soldeFinal < 0) {
+            soldeCell.classList.add('solde-negatif');
+        } else if (soldeFinal > 0) {
+            soldeCell.classList.add('solde-positif');
+        }
+    }
+
+    async function basculerVerrouChamp(champNo, iconElement) {
+        // Bascule l'état de verrouillage d'un champ via l'API et met à jour l'icône.
+        iconElement.style.opacity = '0.5'; // Indique visuellement une action en cours
+        try {
+            const response = await fetch(`/admin/api/champs/${champNo}/basculer_verrou`, { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors du changement de statut du verrou.');
+            await mettreAJourDonneesSommaire(); // Recharge toutes les données pour refléter le changement
+        } catch (error) {
+            console.error(`Erreur bascule verrou pour champ ${champNo}:`, error);
+            alert(error.message);
+        } finally {
+            iconElement.style.opacity = '1'; // Rétablit l'opacité de l'icône
+        }
+    }
+
+    async function basculerConfirmationChamp(champNo, iconElement) {
+        // Bascule l'état de confirmation d'un champ via l'API et met à jour l'icône.
+        iconElement.style.opacity = '0.5'; // Indique visuellement une action en cours
+        try {
+            const response = await fetch(`/admin/api/champs/${champNo}/basculer_confirmation`, { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors du changement de statut de confirmation.');
+            await mettreAJourDonneesSommaire(); // Recharge toutes les données pour refléter le changement
+        } catch (error) {
+            console.error(`Erreur bascule confirmation pour champ ${champNo}:`, error);
+            alert(error.message);
+        } finally {
+            iconElement.style.opacity = '1'; // Rétablit l'opacité de l'icône
+        }
+    }
+
+    function mettreAJourIconeVerrou(iconElement, estVerrouille) {
+        // Met à jour l'apparence et le titre de l'icône de verrouillage.
+        iconElement.innerHTML = estVerrouille ? SVG_LOCKED : SVG_UNLOCKED;
+        iconElement.title = estVerrouille ? 'Champ verrouillé' : 'Champ déverrouillé';
+        if(IS_ADMIN) {
+            iconElement.classList.add('admin-only');
+            iconElement.title += '. Cliquer pour modifier.';
+        }
+    }
+
+    function mettreAJourIconeConfirmation(iconElement, estConfirme) {
+        // Met à jour l'apparence et le titre de l'icône de confirmation.
+        iconElement.className = estConfirme ? 'confirm-icon confirmed' : 'confirm-icon unconfirmed';
+        iconElement.innerHTML = estConfirme ? SVG_CONFIRMED : SVG_UNCONFIRMED;
+        iconElement.title = estConfirme ? 'Champ confirmé' : 'Champ non confirmé';
+        if (IS_ADMIN) {
+            iconElement.classList.add('admin-only');
+            iconElement.title += '. Cliquer pour modifier.';
+        }
+    }
+
+    function comparerNumerosChamp(a, b) {
+        // Fonction de comparaison pour trier les numéros de champ (ex: "10A", "10B", "110").
+        const regex = /^(\d+)([a-zA-Z]*)$/; // Sépare la partie numérique de la partie littérale
+        const matchA = a.match(regex);
+        const matchB = b.match(regex);
+        if (matchA && matchB) {
+            const numA = parseInt(matchA[1], 10);
+            const letterA = matchA[2] || '';
+            const numB = parseInt(matchB[1], 10);
+            const letterB = matchB[2] || '';
+            if (numA !== numB) return numA - numB; // Trie par numéro d'abord
+            return letterA.localeCompare(letterB); // Puis par lettre
+        }
+        return a.localeCompare(b); // Fallback pour les formats non standards
+    }
+
+    function mettreAJourTableauMoyennesChamp(moyennesChampData) {
+        // Remplit le tableau des moyennes par champ avec les données reçues.
+        // Calcule et retourne le total des "périodes magiques" pour les champs confirmés.
+        const tbody = document.querySelector('#table-moyennes-par-champ tbody');
+        const aucuneMoyenneMsg = document.getElementById('aucune-moyenne-champ-message');
+        const table = document.getElementById('table-moyennes-par-champ');
+        if (!tbody || !aucuneMoyenneMsg || !table) return 0; // Sécurité si les éléments DOM ne sont pas trouvés
+
+        tbody.innerHTML = ''; // Vide le tableau avant de le remplir
+        const champNosTries = Object.keys(moyennesChampData).sort(comparerNumerosChamp);
+
+        const hasData = champNosTries.length > 0;
+        aucuneMoyenneMsg.style.display = hasData ? 'none' : 'block'; // Affiche/masque message si pas de données
+        table.style.display = hasData ? '' : 'none'; // Affiche/masque le tableau
+
+        let totalPeriodesMagiquesConfirmees = 0.0;
+
+        if (hasData) {
+            champNosTries.forEach(champ_no => {
+                const data = moyennesChampData[champ_no];
+                const row = tbody.insertRow();
+                row.dataset.champNo = champ_no; // Stocke le numéro de champ pour référence
+
+                // Applique des classes CSS pour le style visuel des lignes
+                if (data.est_verrouille) row.classList.add('champ-verrouille-row');
+                if (data.est_confirme) row.classList.add('champ-confirme');
+
+                row.insertCell().textContent = champ_no;
+
+                // Crée un lien vers la page de détail du champ
+                const cellNomChamp = row.insertCell();
+                const link = document.createElement('a');
+                link.href = `/champ/${encodeURIComponent(champ_no)}`;
+                link.textContent = data.champ_nom;
+                cellNomChamp.appendChild(link);
+
+                // Ajoute l'icône de verrouillage
+                const cellStatut = row.insertCell();
+                const lockIcon = document.createElement('span');
+                lockIcon.className = 'lock-icon';
+                lockIcon.dataset.champNo = champ_no;
+                mettreAJourIconeVerrou(lockIcon, data.est_verrouille);
+                cellStatut.appendChild(lockIcon);
+
+                // Remplit les cellules avec les données formatées
+                row.insertCell().textContent = data.nb_enseignants_tp;
+                row.insertCell().textContent = formatPeriodes(data.periodes_choisies_tp);
+                row.insertCell().textContent = formatPeriodes(data.moyenne);
+                row.insertCell().textContent = formatPeriodes(data.periodes_magiques);
+
+                // Ajoute l'icône de confirmation
+                const cellConfirme = row.insertCell();
+                const confirmIcon = document.createElement('span');
+                confirmIcon.className = 'confirm-icon';
+                confirmIcon.dataset.champNo = champ_no;
+                mettreAJourIconeConfirmation(confirmIcon, data.est_confirme);
+                cellConfirme.appendChild(confirmIcon);
+
+                // Calcule et affiche la "Différence Confirmée"
+                const cellDiffConfirme = row.insertCell();
+                if (data.est_confirme) {
+                    cellDiffConfirme.textContent = formatPeriodes(data.periodes_magiques);
+                    totalPeriodesMagiquesConfirmees += data.periodes_magiques;
+                } else {
+                    cellDiffConfirme.textContent = ''; // Laisse vide si non confirmé
+                }
+            });
+        }
+        // Retourne le total calculé pour utilisation dans le pied de tableau.
+        return totalPeriodesMagiquesConfirmees;
+    }
+</script>
+{% endblock %}
