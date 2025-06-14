@@ -11,12 +11,14 @@
         .champ-confirme {
             font-weight: bold;
         }
-        .confirm-icon {
-            cursor: pointer;
+        .lock-icon, .confirm-icon {
             display: inline-block;
             vertical-align: middle;
             width: 24px;
             height: 24px;
+        }
+        .lock-icon.admin-only, .confirm-icon.admin-only {
+            cursor: pointer;
         }
         .confirm-icon.confirmed path {
             fill: green;
@@ -81,13 +83,18 @@
         </h1>
         <nav>
             <ul>
-                {% if current_user.is_authenticated and current_user.is_admin %}
-                    <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
-                    <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
-                    <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
-                    <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
-                {% endif %}
                 {% if current_user.is_authenticated %}
+                    {% if current_user.is_admin %}
+                        <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+                        <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
+                        <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
+                        <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                    {% elif current_user.is_dashboard_only %}
+                        <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+                        <li><a href="{{ url_for('admin.page_detail_taches') }}">Détail des Tâches</a></li>
+                    {% else %}
+                         <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
+                    {% endif %}
                     <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
                 {% else %}
                     <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
@@ -95,8 +102,8 @@
             </ul>
         </nav>
 
-        <!-- Sélecteur d'année pour l'administrateur -->
-        {% if current_user.is_admin and toutes_les_annees %}
+        <!-- Sélecteur d'année pour l'administrateur ou l'observateur -->
+        {% if current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only) and toutes_les_annees %}
         <div class="year-switcher no-print">
             <label for="annee-selector">Changer l'année de visualisation :</label>
             <select id="annee-selector">
@@ -238,15 +245,18 @@
                 if (tableMoyennes) {
                     // Gestion des clics sur les icônes de verrouillage et de confirmation
                     tableMoyennes.addEventListener('click', function(event) {
-                        const lockIcon = event.target.closest('.lock-icon');
-                        const confirmIcon = event.target.closest('.confirm-icon');
+                        const icon = event.target.closest('.lock-icon, .confirm-icon');
+                        if (!icon) return;
 
-                        if (lockIcon && IS_ADMIN) {
-                            basculerVerrouChamp(lockIcon.dataset.champNo, lockIcon);
-                        } else if (confirmIcon && IS_ADMIN) {
-                            basculerConfirmationChamp(confirmIcon.dataset.champNo, confirmIcon);
-                        } else if ((lockIcon || confirmIcon) && !IS_ADMIN) {
-                            alert("Vous n'avez pas les permissions pour modifier ce statut.");
+                        if (IS_ADMIN) {
+                            if (icon.classList.contains('lock-icon')) {
+                                basculerVerrouChamp(icon.dataset.champNo, icon);
+                            } else if (icon.classList.contains('confirm-icon')) {
+                                basculerConfirmationChamp(icon.dataset.champNo, icon);
+                            }
+                        } else {
+                            // Pour les non-admins, on peut afficher un message ou ne rien faire.
+                            // alert("Vous n'avez pas les permissions pour modifier ce statut.");
                         }
                     });
                 }
@@ -372,16 +382,23 @@
 
         function mettreAJourIconeVerrou(iconElement, estVerrouille) {
             // Met à jour l'apparence et le titre de l'icône de verrouillage.
-            iconElement.className = estVerrouille ? 'lock-icon locked' : 'lock-icon unlocked';
             iconElement.innerHTML = estVerrouille ? SVG_LOCKED : SVG_UNLOCKED;
-            iconElement.title = estVerrouille ? 'Champ verrouillé. Cliquer pour déverrouiller.' : 'Champ déverrouillé. Cliquer pour verrouiller.';
+            iconElement.title = estVerrouille ? 'Champ verrouillé' : 'Champ déverrouillé';
+            if(IS_ADMIN) {
+                iconElement.classList.add('admin-only');
+                iconElement.title += '. Cliquer pour modifier.';
+            }
         }
 
         function mettreAJourIconeConfirmation(iconElement, estConfirme) {
             // Met à jour l'apparence et le titre de l'icône de confirmation.
             iconElement.className = estConfirme ? 'confirm-icon confirmed' : 'confirm-icon unconfirmed';
             iconElement.innerHTML = estConfirme ? SVG_CONFIRMED : SVG_UNCONFIRMED;
-            iconElement.title = estConfirme ? 'Champ confirmé. Cliquer pour annuler.' : 'Champ non confirmé. Cliquer pour confirmer.';
+            iconElement.title = estConfirme ? 'Champ confirmé' : 'Champ non confirmé';
+            if (IS_ADMIN) {
+                iconElement.classList.add('admin-only');
+                iconElement.title += '. Cliquer pour modifier.';
+            }
         }
 
         function comparerNumerosChamp(a, b) {

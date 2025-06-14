@@ -81,16 +81,20 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def load_user(user_id: str):
         """
         Fonction de rappel pour recharger l'objet utilisateur à partir de l'ID stocké dans la session.
+        Cette fonction est cruciale pour la persistance de la session de connexion.
         """
         from .database import get_user_by_id
         from .models import User
 
         user_data = get_user_by_id(int(user_id))
         if user_data:
+            # Crée l'objet User avec toutes les données nécessaires, y compris les permissions.
+            # CORRECTION : Ajout de is_dashboard_only pour assurer la persistance de ce rôle.
             return User(
                 _id=user_data["id"],
                 username=user_data["username"],
                 is_admin=user_data["is_admin"],
+                is_dashboard_only=user_data["is_dashboard_only"],
                 allowed_champs=user_data["allowed_champs"],
             )
         return None
@@ -117,7 +121,14 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             annee_id_session = session.get("annee_scolaire_id")
             if annee_id_session:
                 # Cherche l'année choisie par l'admin dans la liste des années
-                annee_active = next((annee for annee in g.toutes_les_annees if annee["annee_id"] == annee_id_session), None)
+                annee_active = next(
+                    (
+                        annee
+                        for annee in g.toutes_les_annees
+                        if annee["annee_id"] == annee_id_session
+                    ),
+                    None,
+                )
 
         # Si aucune année n'a été choisie par l'admin, ou si l'utilisateur n'est pas admin
         if not annee_active:
@@ -129,7 +140,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             # On prend la plus récente par libellé (ex: "2024-2025" > "2023-2024")
             annee_active = max(g.toutes_les_annees, key=lambda x: x["libelle_annee"])
             if current_user.is_authenticated and current_user.is_admin:
-                flash("Aucune année scolaire n'est définie comme 'courante'. Affichage de la plus récente par défaut.", "warning")
+                flash(
+                    "Aucune année scolaire n'est définie comme 'courante'. Affichage de la plus récente par défaut.",
+                    "warning",
+                )
 
         # On stocke l'année active (dictionnaire) dans le contexte de la requête 'g'
         g.annee_active = annee_active

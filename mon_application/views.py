@@ -24,11 +24,25 @@ bp = Blueprint("views", __name__)
 def index() -> Any:
     """
     Page d'accueil de l'application.
-    Redirige tous les utilisateurs authentifiés vers le tableau de bord global.
+    Redirige les utilisateurs vers la page appropriée en fonction de leur rôle.
+    - Admin et Observateur: vers le tableau de bord global.
+    - Utilisateur Standard: vers la page du premier champ auquel il a accès.
     """
-    # La page 'index.html' n'existe plus. On redirige tout le monde vers le tableau de bord.
-    # Les droits d'accès sont gérés par le template 'page_sommaire.html' lui-même.
-    return redirect(url_for("admin.page_sommaire"))
+    if current_user.is_admin or current_user.is_dashboard_only:
+        return redirect(url_for("admin.page_sommaire"))
+
+    # Pour les utilisateurs standards, on les redirige vers le premier champ accessible.
+    if current_user.allowed_champs:
+        premier_champ = current_user.allowed_champs[0]
+        return redirect(url_for("views.page_champ", champ_no=premier_champ))
+
+    # Cas par défaut : si un utilisateur n'a aucun rôle ni aucun champ,
+    # on le déconnecte avec un message car il ne peut rien faire.
+    flash(
+        "Votre compte n'a aucune permission configurée. Veuillez contacter un administrateur.",
+        "warning",
+    )
+    return redirect(url_for("auth.logout"))
 
 
 @bp.route("/champ/<string:champ_no>")
@@ -41,27 +55,33 @@ def page_champ(champ_no: str) -> Any:
     # Vérification cruciale : pas de données sans année active.
     if not g.annee_active:
         flash("Impossible d'afficher le champ : aucune année scolaire n'est active.", "error")
-        # Redirige vers le tableau de bord qui affichera un message approprié.
-        return redirect(url_for("admin.page_sommaire"))
-
-    annee_id = g.annee_active["annee_id"]
+        # Redirige vers la page d'accueil qui choisira la bonne destination.
+        return redirect(url_for("views.index"))
 
     # Vérifie si l'utilisateur est autorisé à voir ce champ.
     if not current_user.can_access_champ(champ_no):
         flash("Vous n'avez pas la permission d'accéder à ce champ.", "error")
-        return redirect(url_for("admin.page_sommaire"))
+        return redirect(url_for("views.index"))
 
     # Récupère les détails du champ, y compris son statut de verrouillage pour l'année active.
-    champ_details = db.get_champ_details(champ_no, annee_id)
+    champ_details = db.get_champ_details(champ_no, g.annee_active["annee_id"])
     if not champ_details:
         flash(f"Le champ {champ_no} n'a pas été trouvé.", "error")
-        return redirect(url_for("admin.page_sommaire"))
+        return redirect(url_for("views.index"))
 
     # Récupération des données pour l'année active.
-    enseignants_du_champ = db.get_enseignants_par_champ(champ_no, annee_id)
-    cours_disponibles_bruts = db.get_cours_disponibles_par_champ(champ_no, annee_id)
-    cours_enseignement_champ = [c for c in cours_disponibles_bruts if not c["estcoursautre"]]
-    cours_autres_taches_champ = [c for c in cours_disponibles_bruts if c["estcoursautre"]]
+    enseignants_du_champ = db.get_enseignants_par_champ(
+        champ_no, g.annee_active["annee_id"]
+    )
+    cours_disponibles_bruts = db.get_cours_disponibles_par_champ(
+        champ_no, g.annee_active["annee_id"]
+    )
+    cours_enseignement_champ = [
+        c for c in cours_disponibles_bruts if not c["estcoursautre"]
+    ]
+    cours_autres_taches_champ = [
+        c for c in cours_disponibles_bruts if c["estcoursautre"]
+    ]
 
     # Agrégation et calcul des données pour le template Jinja2.
     enseignants_complets = []
@@ -71,12 +91,16 @@ def page_champ(champ_no: str) -> Any:
         # L'ID de l'enseignant est unique pour une année, donc ces appels sont correctement ciblés.
         attributions = db.get_attributions_enseignant(ens["enseignantid"])
         periodes = db.calculer_periodes_pour_attributions(attributions)
-        enseignants_complets.append({"attributions": attributions, "periodes_actuelles": periodes, **ens})
+        enseignants_complets.append(
+            {"attributions": attributions, "periodes_actuelles": periodes, **ens}
+        )
         if ens["esttempsplein"] and not ens["estfictif"]:
             total_periodes_tp += periodes["total_periodes"]
             nb_enseignants_tp += 1
 
-    moyenne_champ = (total_periodes_tp / nb_enseignants_tp) if nb_enseignants_tp > 0 else 0.0
+    moyenne_champ = (
+        (total_periodes_tp / nb_enseignants_tp) if nb_enseignants_tp > 0 else 0.0
+    )
 
     return render_template(
         "page_champ.html",

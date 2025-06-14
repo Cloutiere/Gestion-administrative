@@ -207,7 +207,7 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
-                SELECT u.id, u.username, u.password_hash, u.is_admin,
+                SELECT u.id, u.username, u.password_hash, u.is_admin, u.is_dashboard_only,
                        ARRAY_AGG(uca.champ_no ORDER BY uca.champ_no)
                            FILTER (WHERE uca.champ_no IS NOT NULL) AS allowed_champs
                 FROM Users u
@@ -237,7 +237,7 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
-                "SELECT id, username, password_hash, is_admin "
+                "SELECT id, username, password_hash, is_admin, is_dashboard_only "
                 "FROM Users WHERE username = %s;",
                 (username,),
             )
@@ -281,18 +281,21 @@ def get_admin_count() -> int:
 
 
 def create_user(
-    username: str, password_hash: str, is_admin: bool = False
+    username: str,
+    password_hash: str,
+    is_admin: bool = False,
+    is_dashboard_only: bool = False,
 ) -> dict[str, Any] | None:
-    """Crée un nouvel utilisateur."""
+    """Crée un nouvel utilisateur avec un rôle spécifique."""
     db_conn = get_db()
     if not db_conn:
         return None
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
-                "INSERT INTO Users (username, password_hash, is_admin) "
-                "VALUES (%s, %s, %s) RETURNING id, username, is_admin;",
-                (username, password_hash, is_admin),
+                "INSERT INTO Users (username, password_hash, is_admin, is_dashboard_only) "
+                "VALUES (%s, %s, %s, %s) RETURNING id, username, is_admin, is_dashboard_only;",
+                (username, password_hash, is_admin, is_dashboard_only),
             )
             user_data = cur.fetchone()
             db_conn.commit()
@@ -315,7 +318,7 @@ def get_all_users_with_access_info() -> list[dict[str, Any]]:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
                 """
-                SELECT u.id, u.username, u.is_admin,
+                SELECT u.id, u.username, u.is_admin, u.is_dashboard_only,
                        ARRAY_AGG(uca.champ_no ORDER BY uca.champ_no)
                            FILTER (WHERE uca.champ_no IS NOT NULL) AS allowed_champs
                 FROM Users u
@@ -336,26 +339,48 @@ def get_all_users_with_access_info() -> list[dict[str, Any]]:
         return []
 
 
-def update_user_champ_access(user_id: int, champ_nos: list[str]) -> bool:
-    """Met à jour les accès aux champs pour un utilisateur."""
+def update_user_role_and_access(
+    user_id: int,
+    is_admin: bool,
+    is_dashboard_only: bool,
+    allowed_champs: list[str],
+) -> bool:
+    """
+    Met à jour le rôle et les accès d'un utilisateur de manière transactionnelle.
+
+    Cette fonction garantit que la mise à jour des rôles et des accès aux champs
+    est atomique. Si le rôle est admin ou dashboard_only, les accès aux champs
+    sont supprimés. Sinon, ils sont mis à jour selon la liste fournie.
+    """
     db_conn = get_db()
     if not db_conn:
         return False
     try:
         with db_conn.cursor() as cur:
+            # Mettre à jour les booléens de rôle pour l'utilisateur.
+            cur.execute(
+                "UPDATE Users SET is_admin = %s, is_dashboard_only = %s WHERE id = %s;",
+                (is_admin, is_dashboard_only, user_id),
+            )
+
+            # Supprimer les anciens accès pour garantir un état propre.
             cur.execute("DELETE FROM user_champ_access WHERE user_id = %s;", (user_id,))
-            if champ_nos:
+
+            # Si l'utilisateur est un utilisateur standard avec des accès spécifiques,
+            # les insérer. Sinon, la table des accès reste vide pour cet utilisateur.
+            if not is_admin and not is_dashboard_only and allowed_champs:
                 psycopg2.extras.execute_values(
                     cur,
                     "INSERT INTO user_champ_access (user_id, champ_no) VALUES %s;",
-                    [(user_id, c) for c in champ_nos],
+                    [(user_id, c) for c in allowed_champs],
                 )
+
             db_conn.commit()
             return True
     except psycopg2.Error as e:
         db_conn.rollback()
         current_app.logger.error(
-            f"Erreur DAO update_user_champ_access pour user {user_id}: {e}"
+            f"Erreur DAO update_user_role_and_access pour user {user_id}: {e}"
         )
         return False
 

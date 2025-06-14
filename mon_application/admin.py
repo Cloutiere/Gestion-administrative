@@ -1,10 +1,11 @@
 # mon_application/admin.py
 """
-Ce module contient le Blueprint pour les routes réservées aux administrateurs.
+Ce module contient le Blueprint pour les routes d'administration et de tableau de bord.
 
-Il inclut les pages HTML de l'interface d'administration et les points d'API RESTful
-pour les opérations qui nécessitent des privilèges d'administrateur.
-Toutes les opérations sont désormais dépendantes de l'année scolaire active.
+Il inclut les pages HTML et les points d'API RESTful pour les opérations qui
+nécessitent des privilèges élevés (administrateur ou observateur de tableau de bord).
+Les permissions sont gérées par des décorateurs spécifiques (`admin_required`,
+`dashboard_access_required`, etc.).
 """
 
 from typing import Any, cast
@@ -33,7 +34,12 @@ from werkzeug.security import generate_password_hash
 
 from . import database as db
 from . import exports
-from .utils import admin_api_required, admin_required
+from .utils import (
+    admin_api_required,
+    admin_required,
+    dashboard_access_required,
+    dashboard_api_access_required,
+)
 
 # Crée un Blueprint 'admin' avec un préfixe d'URL.
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -164,11 +170,11 @@ def calculer_donnees_sommaire(
     )
 
 
-# --- ROUTES DES PAGES D'ADMINISTRATION (HTML) ---
+# --- ROUTES DES PAGES (HTML) ---
 
 
 @bp.route("/sommaire")
-@admin_required
+@dashboard_access_required
 def page_sommaire() -> str:
     """Affiche la page du sommaire global des moyennes pour l'année active."""
     if not g.annee_active:
@@ -204,7 +210,7 @@ def page_sommaire() -> str:
 
 
 @bp.route("/detail_taches")
-@admin_required
+@dashboard_access_required
 def page_detail_taches() -> str:
     """Affiche la page de détail des tâches par enseignant pour l'année active."""
     if not g.annee_active:
@@ -298,9 +304,9 @@ def api_creer_annee() -> Any:
 
 
 @bp.route("/api/annees/changer_active", methods=["POST"])
-@admin_api_required
+@dashboard_api_access_required
 def api_changer_annee_active() -> Any:
-    """API pour changer l'année de travail de l'admin (stockée en session)."""
+    """API pour changer l'année de travail (stockée en session)."""
     data = request.get_json()
     if not data or not (annee_id := data.get("annee_id")):
         return jsonify({"success": False, "message": "ID de l'année manquant."}), 400
@@ -312,7 +318,7 @@ def api_changer_annee_active() -> Any:
     )
     if annee_selectionnee:
         current_app.logger.info(
-            f"Année de travail changée pour l'admin '{current_user.username}' : "
+            f"Année de travail changée pour l'utilisateur '{current_user.username}' : "
             f"'{annee_selectionnee['libelle_annee']}'."
         )
     return jsonify({"success": True, "message": "Année de travail changée."})
@@ -344,11 +350,11 @@ def api_set_annee_courante() -> Any:
     )
 
 
-# --- API adaptées pour l'année scolaire ---
+# --- API pour les tableaux de bord (année-dépendantes) ---
 
 
 @bp.route("/api/sommaire/donnees", methods=["GET"])
-@admin_api_required
+@dashboard_api_access_required
 def api_get_donnees_sommaire() -> Any:
     """API pour récupérer les données du sommaire pour l'année active."""
     if not g.annee_active:
@@ -382,6 +388,9 @@ def api_get_donnees_sommaire() -> Any:
         moyenne_preliminaire_confirmee=moyenne_prelim_conf,
         grand_totals=grand_totals_data,
     )
+
+
+# --- API pour la gestion des données (année-dépendantes, admin seulement) ---
 
 
 @bp.route("/api/champs/<string:champ_no>/basculer_verrou", methods=["POST"])
@@ -944,7 +953,7 @@ def api_importer_enseignants_excel() -> Any:
 
 
 @bp.route("/exporter_taches_excel")
-@admin_required
+@dashboard_access_required
 def exporter_taches_excel() -> Any:
     """Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel."""
     if not g.annee_active:
@@ -981,7 +990,7 @@ def exporter_taches_excel() -> Any:
 
 
 @bp.route("/exporter_periodes_restantes_excel")
-@admin_required
+@dashboard_access_required
 def exporter_periodes_restantes_excel() -> Any:
     """Exporte les périodes non attribuées (restantes) pour l'année active."""
     if not g.annee_active:
@@ -1018,7 +1027,7 @@ def exporter_periodes_restantes_excel() -> Any:
 
 
 @bp.route("/exporter_org_scolaire_excel")
-@admin_required
+@dashboard_access_required
 def exporter_org_scolaire_excel() -> Any:
     """Exporte les données pour l'organisation scolaire pour l'année active."""
     if not g.annee_active:
@@ -1029,18 +1038,13 @@ def exporter_org_scolaire_excel() -> Any:
     annee_libelle = g.annee_active["libelle_annee"]
 
     # Étape 1: Mapper le libellé du financement à l'en-tête de colonne Excel.
-    # C'est ici que l'on s'assure que "Soutien en Sport-études" correspond bien
-    # à "PÉRIODES SOUTIEN SPORT-ÉTUDES".
     tous_les_financements = db.get_all_financements()
     libelle_to_header_map = {
         f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}"
         for f in tous_les_financements
     }
-    # Cas spécial si le libellé contient des variations
-    # On peut forcer une correspondance si nécessaire
     libelle_to_header_map["SOUTIEN EN SPORT-ÉTUDES"] = "PÉRIODES SOUTIEN SPORT-ÉTUDES"
 
-    # Récupérer tous les codes de financement pour le mappage
     code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
 
     # Étape 2: Récupérer les données brutes
@@ -1052,13 +1056,21 @@ def exporter_org_scolaire_excel() -> Any:
     # Étape 3: Pivoter les données
     pivot_data: dict[str, dict[str, Any]] = {}
     ALL_HEADERS = [
-        "PÉRIODES RÉGULIER", "PÉRIODES ADAPTATION SCOLAIRE", "PÉRIODES SPORT-ÉTUDES",
-        "PÉRIODES ENSEIGNANT RESSOURCE", "PÉRIODES AIDESEC", "PÉRIODES DIPLÔMA",
+        "PÉRIODES RÉGULIER",
+        "PÉRIODES ADAPTATION SCOLAIRE",
+        "PÉRIODES SPORT-ÉTUDES",
+        "PÉRIODES ENSEIGNANT RESSOURCE",
+        "PÉRIODES AIDESEC",
+        "PÉRIODES DIPLÔMA",
         "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
         "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
-        "PÉRIODES MESURE SEUIL (POUR FABLAB)", "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
-        "PÉRIODES ALTERNE", "PÉRIODES FORMANUM", "PÉRIODES MENTORAT",
-        "PÉRIODES COORDINATION SPORT-ÉTUDES", "PÉRIODES SOUTIEN SPORT-ÉTUDES",
+        "PÉRIODES MESURE SEUIL (POUR FABLAB)",
+        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
+        "PÉRIODES ALTERNE",
+        "PÉRIODES FORMANUM",
+        "PÉRIODES MENTORAT",
+        "PÉRIODES COORDINATION SPORT-ÉTUDES",
+        "PÉRIODES SOUTIEN SPORT-ÉTUDES",
     ]
 
     for item in donnees_raw:
@@ -1071,15 +1083,17 @@ def exporter_org_scolaire_excel() -> Any:
 
         if enseignant_key not in pivot_data.setdefault(champ_no, {}):
             pivot_data[champ_no][enseignant_key] = {
-                "nom": item["nom"], "prenom": item["prenom"],
-                "nomcomplet": item["nomcomplet"], "estfictif": item["estfictif"],
+                "nom": item["nom"],
+                "prenom": item["prenom"],
+                "nomcomplet": item["nomcomplet"],
+                "estfictif": item["estfictif"],
                 "champnom": item["champnom"],
                 **{header: 0.0 for header in ALL_HEADERS},
             }
 
         total_p = float(item["total_periodes"] or 0.0)
         financement_code = item["financement_code"]
-        target_col = "PÉRIODES RÉGULIER"  # Colonne par défaut
+        target_col = "PÉRIODES RÉGULIER"
 
         if financement_code and financement_code in code_to_libelle_map:
             libelle_upper = code_to_libelle_map[financement_code]
@@ -1094,7 +1108,6 @@ def exporter_org_scolaire_excel() -> Any:
                 f"Les périodes pour le code '{financement_code}' sont ignorées."
             )
 
-    # Conversion finale pour la fonction d'export
     donnees_par_champ: dict[str, dict[str, Any]] = {}
     for champ_no, enseignants in pivot_data.items():
         donnees_par_champ[champ_no] = {
@@ -1114,7 +1127,7 @@ def exporter_org_scolaire_excel() -> Any:
     )
 
 
-# --- API pour la gestion des Types de Financement ---
+# --- API pour la gestion des Types de Financement (admin seulement) ---
 
 
 @bp.route("/api/financements", methods=["GET"])
@@ -1202,7 +1215,7 @@ def api_delete_financement(code: str) -> Any:
     return jsonify({"success": success, "message": message}), status_code
 
 
-# --- API non modifiées car indépendantes de l'année ---
+# --- API de gestion des utilisateurs (admin seulement) ---
 @bp.route("/api/utilisateurs", methods=["GET"])
 @admin_api_required
 def api_get_all_users() -> Any:
@@ -1215,16 +1228,17 @@ def api_get_all_users() -> Any:
 @bp.route("/api/utilisateurs/creer", methods=["POST"])
 @admin_api_required
 def api_create_user() -> Any:
-    """Crée un nouvel utilisateur."""
+    """Crée un nouvel utilisateur avec un rôle défini."""
     data = request.get_json()
     if (
         not data
         or not (username := data.get("username", "").strip())
         or not (password := data.get("password", "").strip())
+        or "role" not in data
     ):
         return (
             jsonify(
-                {"success": False, "message": "Nom d'utilisateur et mdp requis."}
+                {"success": False, "message": "Nom d'utilisateur, mdp et rôle requis."}
             ),
             400,
         )
@@ -1236,56 +1250,73 @@ def api_create_user() -> Any:
             400,
         )
 
-    is_admin = data.get("is_admin", False)
-    allowed_champs = data.get("allowed_champs", [])
-    user = db.create_user(username, generate_password_hash(password), is_admin)
-
+    # Étape 1: Créer un utilisateur de base SANS rôle spécifique.
+    # Les rôles seront définis de manière atomique à l'étape suivante.
+    user = db.create_user(username, generate_password_hash(password))
     if not user:
         return (
             jsonify({"success": False, "message": "Ce nom d'utilisateur est déjà pris."}),
             409,
         )
 
-    if not is_admin and allowed_champs:
-        if not db.update_user_champ_access(user["id"], allowed_champs):
-            db.delete_user_data(user["id"])
-            current_app.logger.error(f"Échec droits pour nouvel user {username}.")
-            return (
-                jsonify({"success": False, "message": "Erreur d'attribution des accès."}),
-                500,
-            )
+    # Étape 2: Définir le rôle et les accès de manière atomique.
+    role = data.get("role")
+    is_admin = role == "admin"
+    is_dashboard_only = role == "dashboard_only"
+    allowed_champs = data.get("allowed_champs", []) if role == "specific_champs" else []
 
-    current_app.logger.info(f"Utilisateur '{username}' créé avec ID {user['id']}.")
+    if not db.update_user_role_and_access(
+        user["id"], is_admin, is_dashboard_only, allowed_champs
+    ):
+        # En cas d'échec, on annule la création.
+        db.delete_user_data(user["id"])
+        current_app.logger.error(
+            f"Échec de l'attribution du rôle/accès pour le nouvel utilisateur {username}."
+        )
+        return (
+            jsonify({"success": False, "message": "Erreur lors de la définition du rôle."}),
+            500,
+        )
+
+    current_app.logger.info(
+        f"Utilisateur '{username}' (rôle: {role}) créé avec ID {user['id']}."
+    )
     return (
         jsonify(
-            {"success": True, "message": f"Utilisateur '{username}' créé!", "user_id": user["id"]}
+            {
+                "success": True,
+                "message": f"Utilisateur '{username}' créé!",
+                "user_id": user["id"],
+            }
         ),
         201,
     )
 
 
-@bp.route("/api/utilisateurs/<int:user_id>/update_access", methods=["POST"])
+@bp.route("/api/utilisateurs/<int:user_id>/update_role", methods=["POST"])
 @admin_api_required
-def api_update_user_access(user_id: int) -> Any:
-    """Met à jour les accès aux champs pour un utilisateur non-admin."""
+def api_update_user_role(user_id: int) -> Any:
+    """Met à jour le rôle et les accès d'un utilisateur."""
     data = request.get_json()
-    if not data or not isinstance(champ_nos := data.get("champ_nos"), list):
+    if not data or "role" not in data:
         return jsonify({"success": False, "message": "Données invalides."}), 400
 
     target_user = db.get_user_by_id(user_id)
     if not target_user:
         return jsonify({"success": False, "message": "Utilisateur non trouvé."}), 404
-    if target_user["is_admin"]:
-        return (
-            jsonify({"success": False, "message": "Accès admin non modifiables ici."}),
-            403,
-        )
 
-    if db.update_user_champ_access(user_id, champ_nos):
-        current_app.logger.info(f"Accès mis à jour pour l'utilisateur ID {user_id}.")
-        return jsonify({"success": True, "message": "Accès mis à jour."})
+    role = data["role"]
+    is_admin = role == "admin"
+    is_dashboard_only = role == "dashboard_only"
+    allowed_champs = data.get("allowed_champs", []) if role == "specific_champs" else []
 
-    current_app.logger.error(f"Échec MAJ accès pour l'utilisateur ID {user_id}.")
+    if db.update_user_role_and_access(
+        user_id, is_admin, is_dashboard_only, allowed_champs
+    ):
+        current_app.logger.info(f"Rôle et accès mis à jour pour l'user ID {user_id}.")
+        return jsonify({"success": True, "message": "Rôle et accès mis à jour."})
+
+    current_app.logger.error(f"Échec MAJ rôle/accès pour l'user ID {user_id}.")
     return jsonify({"success": False, "message": "Erreur lors de la mise à jour."}), 500
 
 

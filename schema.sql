@@ -211,7 +211,9 @@ CREATE TABLE public.users (
     id integer NOT NULL,
     username text NOT NULL,
     password_hash text NOT NULL,
-    is_admin boolean DEFAULT false NOT NULL
+    is_admin boolean DEFAULT false NOT NULL,
+    is_dashboard_only boolean DEFAULT false NOT NULL,
+    CONSTRAINT users_role_exclusivity_check CHECK ( NOT (is_admin AND is_dashboard_only) ) -- Un utilisateur ne peut pas être admin ET dashboard_only en même temps.
 );
 
 

@@ -32,16 +32,19 @@ def login() -> Any:
     if request.method == "POST":
         username = request.form["username"].strip()
         password = request.form["password"].strip()
+        # La fonction get_user_by_username récupère maintenant tous les champs nécessaires
         user_data = db.get_user_by_username(username)
 
         if user_data and check_password_hash(user_data["password_hash"], password):
-            # Les données de l'utilisateur ont été trouvées, maintenant on charge l'objet User complet
+            # Les données de l'utilisateur ont été trouvées, maintenant on charge
+            # l'objet User complet, y compris les champs autorisés.
             user_obj_data = db.get_user_by_id(user_data["id"])
             if user_obj_data:
                 user = User(
                     _id=user_obj_data["id"],
                     username=user_obj_data["username"],
                     is_admin=user_obj_data["is_admin"],
+                    is_dashboard_only=user_obj_data["is_dashboard_only"],
                     allowed_champs=user_obj_data["allowed_champs"],
                 )
                 login_user(user)
@@ -71,7 +74,10 @@ def register() -> Any:
 
     # Si des utilisateurs existent déjà, l'inscription est désactivée.
     if user_count > 0 and not current_user.is_authenticated:
-        flash("L'inscription directe est désactivée. Veuillez contacter un administrateur.", "error")
+        flash(
+            "L'inscription directe est désactivée. Veuillez contacter un administrateur.",
+            "error",
+        )
         return redirect(url_for("auth.login"))
 
     if request.method == "POST":
@@ -88,11 +94,19 @@ def register() -> Any:
         else:
             hashed_pwd = generate_password_hash(password)
             # Le premier utilisateur est toujours admin.
+            # is_dashboard_only est False par défaut.
             user = db.create_user(username, hashed_pwd, is_admin=True)
             if user:
-                flash(f"Compte admin '{username}' créé avec succès! Vous pouvez vous connecter.", "success")
+                flash(
+                    f"Compte admin '{username}' créé avec succès! Vous pouvez vous connecter.",
+                    "success",
+                )
                 return redirect(url_for("auth.login"))
             flash("Ce nom d'utilisateur est déjà pris.", "error")
 
     # Affiche le formulaire d'inscription pour le premier utilisateur.
-    return render_template("register.html", first_user=(user_count == 0), username=request.form.get("username", ""))
+    return render_template(
+        "register.html",
+        first_user=(user_count == 0),
+        username=request.form.get("username", ""),
+    )
