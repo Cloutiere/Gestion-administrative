@@ -5,11 +5,10 @@ Ce module contient le Blueprint pour les routes d'authentification.
 Il gère la connexion, la déconnexion et l'inscription des utilisateurs.
 """
 
-from typing import Any
-
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.wrappers import Response
 
 from . import database as db
 from .models import User
@@ -19,25 +18,20 @@ bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 @bp.route("/login", methods=["GET", "POST"])
-def login() -> Any:
+def login() -> str | Response:
     """Gère la connexion des utilisateurs."""
     if current_user.is_authenticated:
         flash("Vous êtes déjà connecté(e).", "info")
-        # CORRECTION: Redirige vers le tableau de bord dans le bon blueprint.
         return redirect(url_for("dashboard.page_sommaire"))
 
-    # Vérifie si c'est le premier utilisateur pour afficher le lien d'inscription.
     first_user = db.get_users_count() == 0
 
     if request.method == "POST":
         username = request.form["username"].strip()
         password = request.form["password"].strip()
-        # La fonction get_user_by_username récupère maintenant tous les champs nécessaires
         user_data = db.get_user_by_username(username)
 
         if user_data and check_password_hash(user_data["password_hash"], password):
-            # Les données de l'utilisateur ont été trouvées, maintenant on charge
-            # l'objet User complet, y compris les champs autorisés.
             user_obj_data = db.get_user_by_id(user_data["id"])
             if user_obj_data:
                 user = User(
@@ -50,7 +44,6 @@ def login() -> Any:
                 login_user(user)
                 flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
 
-                # CORRECTION: Redirection vers le tableau de bord dans le bon blueprint.
                 next_page = request.args.get("next")
                 return redirect(next_page or url_for("dashboard.page_sommaire"))
 
@@ -60,7 +53,7 @@ def login() -> Any:
 
 
 @bp.route("/logout")
-def logout() -> Any:
+def logout() -> Response:
     """Déconnecte l'utilisateur actuel."""
     logout_user()
     flash("Vous avez été déconnecté(e).", "info")
@@ -68,7 +61,7 @@ def logout() -> Any:
 
 
 @bp.route("/register", methods=["GET", "POST"])
-def register() -> Any:
+def register() -> str | Response:
     """Gère l'inscription.
 
     L'inscription est automatiquement autorisée pour le premier utilisateur, qui
@@ -77,8 +70,6 @@ def register() -> Any:
     """
     user_count = db.get_users_count()
 
-    # Si un ou plusieurs utilisateurs existent déjà, l'inscription publique est désactivée.
-    # L'admin peut créer des comptes via l'interface d'administration.
     if user_count > 0:
         flash(
             "L'inscription publique est désactivée. "
@@ -99,8 +90,6 @@ def register() -> Any:
         elif len(password) < 6:
             flash("Le mot de passe doit contenir au moins 6 caractères.", "error")
         else:
-            # Le tout premier utilisateur est toujours un administrateur.
-            # La fonction create_user gère les rôles via des arguments.
             user = db.create_user(
                 username, generate_password_hash(password), is_admin=True
             )
@@ -113,7 +102,6 @@ def register() -> Any:
                 return redirect(url_for("auth.login"))
             flash("Ce nom d'utilisateur est déjà pris.", "error")
 
-    # Affiche le formulaire d'inscription uniquement si aucun utilisateur n'existe.
     return render_template(
         "register.html",
         first_user=(user_count == 0),

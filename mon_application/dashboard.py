@@ -9,11 +9,10 @@ Les permissions sont gérées par les décorateurs `dashboard_access_required`
 et `dashboard_api_access_required`.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from flask import (
     Blueprint,
-    Response,
     current_app,
     flash,
     g,
@@ -25,14 +24,13 @@ from flask import (
     url_for,
 )
 from flask_login import current_user
+from werkzeug.wrappers import Response
 
 from . import database as db
 from . import exports
 from .utils import dashboard_access_required, dashboard_api_access_required
 
 # Crée un Blueprint 'dashboard'.
-# Note : nous conservons le préfixe /admin pour ne pas modifier les URLs existantes
-# et faciliter la transition. Flask autorise plusieurs blueprints sous le même préfixe.
 bp = Blueprint("dashboard", __name__, url_prefix="/admin")
 
 
@@ -45,9 +43,6 @@ def calculer_donnees_sommaire(
     """
     Calcule les données agrégées pour la page sommaire globale pour une année donnée.
 
-    Cette fonction adopte une approche "centrée sur le champ" pour garantir que tous
-    les champs sont listés, même ceux sans enseignant pour l'année active.
-
     Args:
         annee_id: L'ID de l'année scolaire pour laquelle calculer les données.
 
@@ -59,12 +54,10 @@ def calculer_donnees_sommaire(
         - La moyenne "Préliminaire confirmée" (enseignants TP des champs confirmés).
         - Un dictionnaire contenant les totaux globaux pour le pied de tableau.
     """
-    # Étape 1 : Récupérer toutes les données brutes nécessaires.
     tous_les_champs = db.get_all_champs()
     statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
     tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
 
-    # Étape 2 : Initialiser les structures de données en se basant sur TOUS les champs.
     moyennes_par_champ_calculees: dict[str, Any] = {}
     for champ in tous_les_champs:
         champ_no = str(champ["champno"])
@@ -81,7 +74,7 @@ def calculer_donnees_sommaire(
             "periodes_magiques": 0.0,
         }
 
-    enseignants_par_champ_temp: dict[str, Any] = {
+    enseignants_par_champ_temp: dict[str, dict[str, Any]] = {
         str(champ["champno"]): {
             "champno": str(champ["champno"]),
             "champnom": champ["champnom"],
@@ -96,7 +89,6 @@ def calculer_donnees_sommaire(
         for champ in tous_les_champs
     }
 
-    # Étape 3 : Parcourir les enseignants pour peupler les structures initialisées.
     for ens in tous_enseignants_details:
         champ_no = ens["champno"]
         if champ_no in enseignants_par_champ_temp:
@@ -111,7 +103,6 @@ def calculer_donnees_sommaire(
                 "total_periodes"
             ]
 
-    # Étape 4 : Calculer les moyennes, totaux et agrégats finaux.
     total_periodes_global_tp = 0.0
     nb_enseignants_tp_global = 0
     total_periodes_confirme_tp = 0.0
@@ -150,7 +141,7 @@ def calculer_donnees_sommaire(
     )
 
     grand_totals = {
-        "total_enseignants_tp": total_enseignants_tp_etablissement,
+        "total_enseignants_tp": float(total_enseignants_tp_etablissement),
         "total_periodes_choisies_tp": total_periodes_choisies_tp_etablissement,
         "total_periodes_magiques": total_periodes_magiques_etablissement,
     }
@@ -171,7 +162,8 @@ def calculer_donnees_sommaire(
 @dashboard_access_required
 def page_sommaire() -> str:
     """Affiche la page du sommaire global des moyennes pour l'année active."""
-    if not g.annee_active:
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
         flash(
             "Aucune année scolaire n'est disponible. Veuillez en créer une "
             "dans la section 'Données'.",
@@ -189,7 +181,7 @@ def page_sommaire() -> str:
             },
         )
 
-    annee_id = g.annee_active["annee_id"]
+    annee_id = annee_active["annee_id"]
     _, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = (
         calculer_donnees_sommaire(annee_id)
     )
@@ -207,7 +199,8 @@ def page_sommaire() -> str:
 @dashboard_access_required
 def page_detail_taches() -> str:
     """Affiche la page de détail des tâches par enseignant pour l'année active."""
-    if not g.annee_active:
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
         flash(
             "Aucune année scolaire n'est disponible. Les détails ne peuvent "
             "être affichés.",
@@ -215,7 +208,7 @@ def page_detail_taches() -> str:
         )
         return render_template("detail_taches.html", enseignants_par_champ=[])
 
-    annee_id = g.annee_active["annee_id"]
+    annee_id = annee_active["annee_id"]
     enseignants_par_champ_data, _, _, _, _ = calculer_donnees_sommaire(annee_id)
 
     return render_template(
@@ -228,15 +221,19 @@ def page_detail_taches() -> str:
 
 @bp.route("/api/annees/changer_active", methods=["POST"])
 @dashboard_api_access_required
-def api_changer_annee_active() -> Any:
+def api_changer_annee_active() -> tuple[Response, int]:
     """API pour changer l'année de travail (stockée en session)."""
     data = request.get_json()
     if not data or not (annee_id := data.get("annee_id")):
-        return jsonify({"success": False, "message": "ID de l'année manquant."}), 400
+        return (
+            jsonify({"success": False, "message": "ID de l'année manquant."}),
+            400,
+        )
 
     session["annee_scolaire_id"] = annee_id
+    toutes_les_annees = cast(list[dict[str, Any]], getattr(g, "toutes_les_annees", []))
     annee_selectionnee = next(
-        (annee for annee in g.toutes_les_annees if annee["annee_id"] == annee_id),
+        (annee for annee in toutes_les_annees if annee["annee_id"] == annee_id),
         None,
     )
     if annee_selectionnee:
@@ -244,30 +241,34 @@ def api_changer_annee_active() -> Any:
             f"Année de travail changée pour l'utilisateur '{current_user.username}' : "
             f"'{annee_selectionnee['libelle_annee']}'."
         )
-    return jsonify({"success": True, "message": "Année de travail changée."})
+    return jsonify({"success": True, "message": "Année de travail changée."}), 200
 
 
 @bp.route("/api/sommaire/donnees", methods=["GET"])
 @dashboard_api_access_required
-def api_get_donnees_sommaire() -> Any:
+def api_get_donnees_sommaire() -> tuple[Response, int]:
     """API pour récupérer les données du sommaire pour l'année active."""
-    if not g.annee_active:
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
         current_app.logger.warning(
             "API sommaire: Aucune année active, retour de données vides."
         )
-        return jsonify(
-            enseignants_par_champ=[],
-            moyennes_par_champ={},
-            moyenne_generale=0.0,
-            moyenne_preliminaire_confirmee=0.0,
-            grand_totals={
-                "total_enseignants_tp": 0,
-                "total_periodes_choisies_tp": 0.0,
-                "total_periodes_magiques": 0.0,
-            },
+        return (
+            jsonify(
+                enseignants_par_champ=[],
+                moyennes_par_champ={},
+                moyenne_generale=0.0,
+                moyenne_preliminaire_confirmee=0.0,
+                grand_totals={
+                    "total_enseignants_tp": 0,
+                    "total_periodes_choisies_tp": 0.0,
+                    "total_periodes_magiques": 0.0,
+                },
+            ),
+            200,
         )
 
-    annee_id = g.annee_active["annee_id"]
+    annee_id = annee_active["annee_id"]
     (
         enseignants_groupes,
         moyennes_champs,
@@ -275,25 +276,29 @@ def api_get_donnees_sommaire() -> Any:
         moyenne_prelim_conf,
         grand_totals_data,
     ) = calculer_donnees_sommaire(annee_id)
-    return jsonify(
-        enseignants_par_champ=enseignants_groupes,
-        moyennes_par_champ=moyennes_champs,
-        moyenne_generale=moyenne_gen,
-        moyenne_preliminaire_confirmee=moyenne_prelim_conf,
-        grand_totals=grand_totals_data,
+    return (
+        jsonify(
+            enseignants_par_champ=enseignants_groupes,
+            moyennes_par_champ=moyennes_champs,
+            moyenne_generale=moyenne_gen,
+            moyenne_preliminaire_confirmee=moyenne_prelim_conf,
+            grand_totals=grand_totals_data,
+        ),
+        200,
     )
 
 
 @bp.route("/exporter_taches_excel")
 @dashboard_access_required
-def exporter_taches_excel() -> Any:
+def exporter_taches_excel() -> Response:
     """Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel."""
-    if not g.annee_active:
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
         flash("Exportation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("dashboard.page_sommaire"))
 
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
+    annee_id = annee_active["annee_id"]
+    annee_libelle = annee_active["libelle_annee"]
     attributions_raw = db.get_all_attributions_for_export(annee_id)
 
     if not attributions_raw:
@@ -323,14 +328,15 @@ def exporter_taches_excel() -> Any:
 
 @bp.route("/exporter_periodes_restantes_excel")
 @dashboard_access_required
-def exporter_periodes_restantes_excel() -> Any:
+def exporter_periodes_restantes_excel() -> Response:
     """Exporte les périodes non attribuées (restantes) pour l'année active."""
-    if not g.annee_active:
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
         flash("Exportation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("dashboard.page_sommaire"))
 
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
+    annee_id = annee_active["annee_id"]
+    annee_libelle = annee_active["libelle_annee"]
     periodes_restantes_raw = db.get_periodes_restantes_for_export(annee_id)
 
     if not periodes_restantes_raw:
@@ -360,16 +366,16 @@ def exporter_periodes_restantes_excel() -> Any:
 
 @bp.route("/exporter_org_scolaire_excel")
 @dashboard_access_required
-def exporter_org_scolaire_excel() -> Any:
+def exporter_org_scolaire_excel() -> Response:
     """Exporte les données pour l'organisation scolaire pour l'année active."""
-    if not g.annee_active:
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
         flash("Exportation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("dashboard.page_sommaire"))
 
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
+    annee_id = annee_active["annee_id"]
+    annee_libelle = annee_active["libelle_annee"]
 
-    # Étape 1: Mapper le libellé du financement à l'en-tête de colonne Excel.
     tous_les_financements = db.get_all_financements()
     libelle_to_header_map = {
         f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}"
@@ -379,13 +385,11 @@ def exporter_org_scolaire_excel() -> Any:
 
     code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
 
-    # Étape 2: Récupérer les données brutes
     donnees_raw = db.get_data_for_org_scolaire_export(annee_id)
     if not donnees_raw:
         flash(f"Aucune donnée à exporter pour '{annee_libelle}'.", "warning")
         return redirect(url_for("dashboard.page_sommaire"))
 
-    # Étape 3: Pivoter les données
     pivot_data: dict[str, dict[str, Any]] = {}
     ALL_HEADERS = [
         "PÉRIODES RÉGULIER",
@@ -447,7 +451,6 @@ def exporter_org_scolaire_excel() -> Any:
             "donnees": list(enseignants.values()),
         }
 
-    # Étape 4: Générer le fichier Excel
     mem_file = exports.generer_export_org_scolaire(donnees_par_champ)
     filename = f"export_org_scolaire_{annee_libelle}.xlsx"
     current_app.logger.info(f"Génération de l'export '{filename}'.")

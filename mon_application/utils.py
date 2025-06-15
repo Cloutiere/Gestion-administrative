@@ -8,21 +8,21 @@ et le paquet principal (__init__.py) dépendent les uns des autres.
 """
 
 from functools import wraps
-from typing import Callable
+from typing import Any, Callable
 
 from flask import flash, jsonify, redirect, url_for
 from flask_login import current_user
+from werkzeug.wrappers import Response
 
 
-def api_login_required(f: Callable) -> Callable:
+def api_login_required(f: Callable[..., Any]) -> Callable[..., Any]:
     """
     Décorateur pour les routes d'API qui nécessitent une authentification.
-    Si l'utilisateur n'est pas connecté, retourne une réponse JSON avec un
-    code d'erreur 401 (Unauthorized) au lieu d'une redirection HTML.
+    Si l'utilisateur n'est pas connecté, retourne une réponse JSON 401.
     """
 
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> tuple[Response, int] | Any:
         if not current_user.is_authenticated:
             return jsonify({"success": False, "message": "Authentification requise."}), 401
         return f(*args, **kwargs)
@@ -30,15 +30,14 @@ def api_login_required(f: Callable) -> Callable:
     return decorated_function
 
 
-def admin_required(f: Callable) -> Callable:
+def admin_required(f: Callable[..., Any]) -> Callable[..., Any]:
     """
     Décorateur pour les routes de pages web nécessitant des privilèges d'administrateur.
-    Si l'utilisateur n'est pas authentifié ou n'est pas administrateur (`is_admin`),
-    il est redirigé vers la page d'accueil avec un message flash.
+    Si l'utilisateur n'est pas autorisé, redirige vers la page d'accueil.
     """
 
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> Response | Any:
         if not current_user.is_authenticated or not getattr(
             current_user, "is_admin", False
         ):
@@ -52,16 +51,14 @@ def admin_required(f: Callable) -> Callable:
     return decorated_function
 
 
-def admin_api_required(f: Callable) -> Callable:
+def admin_api_required(f: Callable[..., Any]) -> Callable[..., Any]:
     """
     Décorateur pour les routes d'API nécessitant des privilèges d'administrateur.
-    Si l'utilisateur n'est pas authentifié ou n'est pas administrateur, il retourne
-    une réponse JSON avec un code d'erreur HTTP approprié (401 ou 403).
-    Ce décorateur vérifie d'abord l'authentification.
+    Retourne une erreur JSON 401 ou 403 si l'utilisateur n'est pas autorisé.
     """
 
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> tuple[Response, int] | Any:
         if not current_user.is_authenticated:
             return jsonify({"success": False, "message": "Authentification requise."}), 401
         if not getattr(current_user, "is_admin", False):
@@ -74,16 +71,14 @@ def admin_api_required(f: Callable) -> Callable:
     return decorated_function
 
 
-def dashboard_access_required(f: Callable) -> Callable:
+def dashboard_access_required(f: Callable[..., Any]) -> Callable[..., Any]:
     """
     Décorateur pour les pages web du tableau de bord.
-    Autorise l'accès si l'utilisateur est authentifié ET est soit administrateur
-    (`is_admin`), soit un observateur de tableau de bord (`is_dashboard_only`).
-    Sinon, redirige avec un message d'erreur.
+    Autorise l'accès aux administrateurs et aux observateurs.
     """
 
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> Response | Any:
         is_admin = getattr(current_user, "is_admin", False)
         is_dashboard_only = getattr(current_user, "is_dashboard_only", False)
 
@@ -98,16 +93,14 @@ def dashboard_access_required(f: Callable) -> Callable:
     return decorated_function
 
 
-def dashboard_api_access_required(f: Callable) -> Callable:
+def dashboard_api_access_required(f: Callable[..., Any]) -> Callable[..., Any]:
     """
     Décorateur pour les API du tableau de bord.
-    Autorise l'accès si l'utilisateur est authentifié ET est soit administrateur
-    (`is_admin`), soit un observateur de tableau de bord (`is_dashboard_only`).
-    Sinon, retourne une erreur JSON 401 ou 403.
+    Autorise l'accès aux administrateurs et aux observateurs.
     """
 
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> tuple[Response, int] | Any:
         if not current_user.is_authenticated:
             return jsonify({"success": False, "message": "Authentification requise."}), 401
 

@@ -67,7 +67,8 @@ def init_db_command() -> None:
             )
 
     except psycopg2.Error as e:
-        db_conn.rollback()
+        if db_conn:
+            db_conn.rollback()
         click.secho(f"Erreur lors de l'application du schéma : {e}", fg="red")
 
     click.echo("--- Initialisation terminée. ---")

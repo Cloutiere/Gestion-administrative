@@ -10,10 +10,13 @@ Il gère également la détermination de l'année scolaire active pour chaque re
 
 import datetime
 import os
-from typing import Any
+from typing import Any, cast
 
 from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
 from flask_login import LoginManager, current_user
+from werkzeug.wrappers import Response
+
+from .models import User
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
@@ -21,17 +24,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     Crée et configure une instance de l'application Flask (Application Factory).
 
     Args:
-        test_config (dict, optional): Configuration à utiliser pour les tests. Defaults to None.
+        test_config: Configuration à utiliser pour les tests. Defaults to None.
 
     Returns:
-        Flask: L'instance de l'application Flask configurée.
+        L'instance de l'application Flask configurée.
     """
-    # Crée l'application Flask. __name__ fait référence au nom de ce package.
-    # L'application cherchera les dossiers `static` et `templates` dans ce même dossier.
     app = Flask(__name__, instance_relative_config=False)
 
-    # Configuration par défaut de l'application.
-    # Le SECRET_KEY est essentiel pour la sécurité des sessions.
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", os.urandom(24)),
         UPLOAD_FOLDER=os.path.join(app.root_path, "uploads"),
@@ -39,59 +38,50 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     )
 
     if test_config:
-        # Surcharge la configuration avec celle passée pour les tests.
         app.config.from_mapping(test_config)
 
-    # S'assure que le dossier pour les fichiers téléversés existe.
     try:
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     except OSError as e:
         app.logger.error(f"Erreur lors de la création du dossier d'upload: {e}")
 
     # --- Initialisation des extensions et services ---
-
-    # Initialisation de la base de données
     from . import database
 
     database.init_app(app)
 
-    # Initialisation de Flask-Login
     login_manager = LoginManager()
     login_manager.init_app(app)
-    # Le point d'entrée `auth.login` est le nom de la vue de connexion.
+    # Nous utilisons un ignore général car la déclaration de type de flask-login
+    # est trop restrictive pour pyright dans ce cas précis.
+    # pyright: ignore
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Veuillez vous connecter pour accéder à cette page."
     login_manager.login_message_category = "info"
 
-    # Gestionnaire personnalisé pour les accès non autorisés, évitant les redirections sur les appels API.
     @login_manager.unauthorized_handler
-    def unauthorized_callback():
+    def unauthorized_callback() -> tuple[Response, int] | Response:
         """
         Gère les accès non authentifiés.
         Renvoie du JSON pour les requêtes API et redirige pour les autres.
         """
-        # Note : On inclut les deux préfixes, /api/ et /admin/api/, pour une gestion complète.
         if request.path.startswith(("/api/", "/admin/api/")):
             return (
                 jsonify({"success": False, "message": "Authentification requise."}),
                 401,
             )
-        # Pour toutes les autres requêtes (pages web), on garde la redirection.
         flash("Veuillez vous connecter pour accéder à cette page.", "info")
         return redirect(url_for("auth.login"))
 
     @login_manager.user_loader
-    def load_user(user_id: str):
+    def load_user(user_id: str) -> User | None:
         """
-        Fonction de rappel pour recharger l'objet utilisateur à partir de l'ID stocké dans la session.
-        Cette fonction est cruciale pour la persistance de la session de connexion.
+        Fonction pour recharger l'objet utilisateur à partir de l'ID stocké en session.
         """
         from .database import get_user_by_id
-        from .models import User
 
         user_data = get_user_by_id(int(user_id))
         if user_data:
-            # Crée l'objet User avec toutes les données nécessaires, y compris les permissions.
             return User(
                 _id=user_data["id"],
                 username=user_data["username"],
@@ -101,49 +91,38 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             )
         return None
 
-    # Détermination de l'année scolaire active avant chaque requête.
-    # Cette fonction s'assure que 'g.annee_active' est toujours disponible.
     @app.before_request
-    def load_active_school_year():
+    def load_active_school_year() -> None:
         """
-        Détermine l'année scolaire active pour la requête en cours et la stocke dans `g`.
-
-        - Pour les administrateurs et observateurs, elle utilise l'année en session si elle existe.
-        - Pour tous les autres, ou si la session est vide, elle utilise l'année "courante" de la BDD.
-        - En dernier recours, elle utilise l'année la plus récente.
+        Détermine l'année scolaire active pour la requête et la stocke dans `g`.
         """
         from . import database as db
 
-        # Met en cache la liste des années pour la durée de la requête afin d'éviter les appels BDD multiples
         g.toutes_les_annees = db.get_all_annees()
-        annee_active = None
+        annee_active: dict[str, Any] | None = None
         has_dashboard_access = current_user.is_authenticated and (
             current_user.is_admin or current_user.is_dashboard_only
         )
 
-        # Si l'utilisateur a accès au tableau de bord, on vérifie s'il a choisi une année spécifique
+        toutes_les_annees_g = cast(list[dict[str, Any]], g.toutes_les_annees)
+
         if has_dashboard_access:
             annee_id_session = session.get("annee_scolaire_id")
             if annee_id_session:
-                # Cherche l'année choisie par l'admin/observateur dans la liste des années
                 annee_active = next(
                     (
                         annee
-                        for annee in g.toutes_les_annees
+                        for annee in toutes_les_annees_g
                         if annee["annee_id"] == annee_id_session
                     ),
                     None,
                 )
 
-        # Si aucune année n'a été choisie, ou si l'utilisateur n'a pas accès au tableau de bord
         if not annee_active:
-            # On cherche l'année marquée comme "courante" dans la BDD
             annee_active = db.get_annee_courante()
 
-        # Si aucune année n'est marquée comme courante (fallback)
-        if not annee_active and g.toutes_les_annees:
-            # On prend la plus récente par libellé (ex: "2024-2025" > "2023-2024")
-            annee_active = max(g.toutes_les_annees, key=lambda x: x["libelle_annee"])
+        if not annee_active and toutes_les_annees_g:
+            annee_active = max(toutes_les_annees_g, key=lambda x: x["libelle_annee"])
             if has_dashboard_access:
                 flash(
                     "Aucune année scolaire n'est définie comme 'courante'. "
@@ -151,7 +130,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     "warning",
                 )
 
-        # On stocke l'année active (dictionnaire) dans le contexte de la requête 'g'
         g.annee_active = annee_active
 
     # --- Filtres Jinja2 et Context Processors ---
@@ -159,12 +137,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         """Filtre Jinja pour formater joliment les nombres de périodes."""
         if value is None:
             return ""
-        # Le format 'g' est idéal: il supprime les zéros non significatifs.
         return f"{float(value):g}"
 
     app.jinja_env.filters["format_periodes"] = format_periodes_filter
 
-    # Le context processor injecte maintenant aussi les données de l'année scolaire.
     @app.context_processor
     def inject_global_data() -> dict[str, Any]:
         """Rend des variables globales disponibles dans tous les templates."""
@@ -176,26 +152,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         }
 
     # --- Enregistrement des Blueprints ---
-    from . import auth
+    from . import admin, api, auth, dashboard, views
 
     app.register_blueprint(auth.bp)
-
-    from . import views
-
     app.register_blueprint(views.bp)
-    # La route racine '/' doit pointer vers la page d'accueil définie dans le blueprint 'views'.
     app.add_url_rule("/", endpoint="index")
-
-    from . import admin
-
     app.register_blueprint(admin.bp)
-
-    from . import dashboard
-
     app.register_blueprint(dashboard.bp)
-
-    from . import api
-
     app.register_blueprint(api.bp)
 
     # --- Enregistrement des commandes CLI ---

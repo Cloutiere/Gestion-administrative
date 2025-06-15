@@ -13,7 +13,7 @@ import openpyxl
 import psycopg2
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
-from psycopg2.extensions import connection
+from psycopg2.extensions import connection as PgConnection
 
 from . import database as db
 
@@ -31,9 +31,6 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
     """
     Traite un fichier Excel de cours.
 
-    Lit le flux du fichier, valide les en-têtes et les données de chaque ligne,
-    et retourne une liste de dictionnaires de cours prêts à être insérés.
-
     Args:
         file_stream: Le flux du fichier Excel (.xlsx).
 
@@ -41,11 +38,10 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
         Une liste de dictionnaires, où chaque dictionnaire représente un cours.
 
     Raises:
-        ValueError: Si le fichier est invalide, vide, ou si une ligne
-                    contient des données invalides ou manquantes.
+        ValueError: Si le fichier est invalide, vide, ou si une ligne contient des données invalides.
         InvalidFileException: Si le fichier est corrompu.
     """
-    nouveaux_cours = []
+    nouveaux_cours: list[dict[str, Any]] = []
     try:
         workbook = openpyxl.load_workbook(file_stream)
         sheet = cast(Worksheet, workbook.active)
@@ -54,36 +50,21 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
 
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
-            # Colonnes: 0:champ, 1:code, 2:N/A, 3:desc, 4:grp, 5:per, 6:autre, 7:financement
             if not any(v is not None and str(v).strip() != "" for v in values[:7]):
-                continue  # Ignore les lignes complètement vides
+                continue
 
             (
-                champ_no_raw,
-                code_cours_raw,
-                desc_raw,
-                nb_grp_raw,
-                nb_per_raw,
+                champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw,
             ) = (values[0], values[1], values[3], values[4], values[5])
             est_autre_raw = values[6] if len(values) > 6 else None
             financement_code_raw = values[7] if len(values) > 7 else None
 
-            if not all(
-                [champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw]
-            ):
+            if not all([champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw]):
                 raise ValueError(f"Ligne {row_idx}: Données essentielles manquantes.")
 
             try:
-                est_autre = str(est_autre_raw).strip().upper() in (
-                    "VRAI",
-                    "TRUE",
-                    "OUI",
-                    "YES",
-                    "1",
-                )
-                financement_code = (
-                    str(financement_code_raw).strip() if financement_code_raw else None
-                )
+                est_autre = str(est_autre_raw).strip().upper() in ("VRAI", "TRUE", "OUI", "YES", "1")
+                financement_code = str(financement_code_raw).strip() if financement_code_raw else None
 
                 nouveaux_cours.append(
                     {
@@ -91,17 +72,13 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
                         "champno": str(champ_no_raw).strip(),
                         "coursdescriptif": str(desc_raw).strip(),
                         "nbperiodes": float(str(nb_per_raw).replace(",", ".")),
-                        "nbgroupeinitial": int(
-                            float(str(nb_grp_raw).replace(",", "."))
-                        ),
+                        "nbgroupeinitial": int(float(str(nb_grp_raw).replace(",", "."))),
                         "estcoursautre": est_autre,
                         "financement_code": financement_code,
                     }
                 )
             except (ValueError, TypeError) as e:
-                raise ValueError(
-                    f"Ligne {row_idx}: Erreur de type de données. Détails: {e}"
-                ) from e
+                raise ValueError(f"Ligne {row_idx}: Erreur de type de données. Détails: {e}") from e
 
     except InvalidFileException as e:
         raise InvalidFileException("Fichier Excel corrompu ou invalide.") from e
@@ -118,29 +95,21 @@ def save_imported_courses(
     """
     Sauvegarde les cours importés dans une transaction atomique.
 
-    Supprime d'abord les anciennes attributions et les anciens cours pour l'année
-    donnée, puis insère les nouveaux cours.
-
     Args:
         courses_data: La liste des cours à insérer.
         annee_id: L'ID de l'année scolaire concernée.
 
     Returns:
         Un objet ImportationStats avec les comptes des opérations.
-
-    Raises:
-        psycopg2.Error: En cas de problème avec la base de données.
     """
     stats = ImportationStats()
-    conn = cast(connection | None, db.get_db())
+    conn = cast(PgConnection | None, db.get_db())
     if not conn:
         raise psycopg2.Error("Impossible d'obtenir une connexion à la base de données.")
 
     try:
         with conn.cursor():
-            stats.deleted_attributions_count = db.delete_all_attributions_for_year(
-                annee_id
-            )
+            stats.deleted_attributions_count = db.delete_all_attributions_for_year(annee_id)
             stats.deleted_main_entities_count = db.delete_all_cours_for_year(annee_id)
 
             for cours in courses_data:
@@ -150,7 +119,7 @@ def save_imported_courses(
             conn.commit()
     except psycopg2.Error:
         conn.rollback()
-        raise  # Propage l'exception pour que la route puisse la gérer
+        raise
 
     return stats
 
@@ -159,21 +128,13 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
     """
     Traite un fichier Excel d'enseignants.
 
-    Lit le flux du fichier, valide les données de chaque ligne,
-    et retourne une liste de dictionnaires d'enseignants prêts à être insérés.
-
     Args:
         file_stream: Le flux du fichier Excel (.xlsx).
 
     Returns:
         Une liste de dictionnaires, où chaque dictionnaire représente un enseignant.
-
-    Raises:
-        ValueError: Si le fichier est invalide, vide, ou si une ligne
-                    contient des données invalides ou manquantes.
-        InvalidFileException: Si le fichier est corrompu.
     """
-    nouveaux_enseignants = []
+    nouveaux_enseignants: list[dict[str, Any]] = []
     try:
         workbook = openpyxl.load_workbook(file_stream)
         sheet = cast(Worksheet, workbook.active)
@@ -183,24 +144,19 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
         for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
             values = [cell.value for cell in row]
             if not any(v is not None and str(v).strip() != "" for v in values[:4]):
-                continue  # Ignore les lignes complètement vides
+                continue
 
             champ_no_raw, nom_raw, prenom_raw, temps_plein_raw = (
-                values[0],
-                values[1],
-                values[2],
-                values[3],
+                values[0], values[1], values[2], values[3],
             )
 
-            if not all(
-                [champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]
-            ):
+            if not all([champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]):
                 raise ValueError(f"Ligne {row_idx}: Données essentielles manquantes.")
 
             try:
                 nom_clean, prenom_clean = str(nom_raw).strip(), str(prenom_raw).strip()
                 if not nom_clean or not prenom_clean:
-                    continue  # Ignore les lignes avec nom ou prénom vide
+                    continue
                 nouveaux_enseignants.append(
                     {
                         "nom": nom_clean,
@@ -211,14 +167,10 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
                     }
                 )
             except (ValueError, TypeError) as e:
-                raise ValueError(
-                    f"Ligne {row_idx}: Erreur de type de données. Détails: {e}"
-                ) from e
+                raise ValueError(f"Ligne {row_idx}: Erreur de type de données. Détails: {e}") from e
 
     except InvalidFileException as e:
-        raise InvalidFileException(
-            "Fichier Excel des enseignants corrompu ou invalide."
-        ) from e
+        raise InvalidFileException("Fichier Excel des enseignants corrompu ou invalide.") from e
 
     if not nouveaux_enseignants:
         raise ValueError("Aucun enseignant valide n'a été trouvé dans le fichier.")
@@ -232,32 +184,22 @@ def save_imported_teachers(
     """
     Sauvegarde les enseignants importés dans une transaction atomique.
 
-    Supprime d'abord les anciennes attributions et les anciens enseignants pour l'année
-    donnée, puis insère les nouveaux.
-
     Args:
         teachers_data: La liste des enseignants à insérer.
         annee_id: L'ID de l'année scolaire concernée.
 
     Returns:
         Un objet ImportationStats avec les comptes des opérations.
-
-    Raises:
-        psycopg2.Error: En cas de problème avec la base de données.
     """
     stats = ImportationStats()
-    conn = cast(connection | None, db.get_db())
+    conn = cast(PgConnection | None, db.get_db())
     if not conn:
         raise psycopg2.Error("Impossible d'obtenir une connexion à la base de données.")
 
     try:
         with conn.cursor():
-            stats.deleted_attributions_count = db.delete_all_attributions_for_year(
-                annee_id
-            )
-            stats.deleted_main_entities_count = db.delete_all_enseignants_for_year(
-                annee_id
-            )
+            stats.deleted_attributions_count = db.delete_all_attributions_for_year(annee_id)
+            stats.deleted_main_entities_count = db.delete_all_enseignants_for_year(annee_id)
 
             for ens in teachers_data:
                 db.create_enseignant(ens, annee_id)
@@ -266,6 +208,6 @@ def save_imported_teachers(
             conn.commit()
     except psycopg2.Error:
         conn.rollback()
-        raise  # Propage l'exception pour que la route puisse la gérer
+        raise
 
     return stats
