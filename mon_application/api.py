@@ -10,6 +10,7 @@ globalement pour la requête en cours et accessible via `g.annee_active`.
 from typing import Any, cast
 
 from flask import Blueprint, current_app, g, jsonify, request
+# CORRECTION: Ajout de l'import manquant pour current_user
 from flask_login import current_user, login_required
 from werkzeug.wrappers import Response
 
@@ -47,9 +48,7 @@ def api_ajouter_attribution() -> tuple[Response, int]:
         if not verrou_info:
             return jsonify({"success": False, "message": "Enseignant non trouvé."}), 404
 
-        if "champno" not in verrou_info or not current_user.can_access_champ(
-            verrou_info["champno"]
-        ):
+        if "champno" not in verrou_info or not current_user.can_access_champ(verrou_info["champno"]):
             return (
                 jsonify({"success": False, "message": "Accès non autorisé à ce champ."}),
                 403,
@@ -76,9 +75,7 @@ def api_ajouter_attribution() -> tuple[Response, int]:
                 409,
             )
 
-        nouvelle_attribution_id = db.add_attribution(
-            enseignant_id, code_cours, annee_id
-        )
+        nouvelle_attribution_id = db.add_attribution(enseignant_id, code_cours, annee_id)
         if nouvelle_attribution_id is None:
             return (
                 jsonify(
@@ -99,23 +96,15 @@ def api_ajouter_attribution() -> tuple[Response, int]:
                     "enseignant_id": enseignant_id,
                     "code_cours": code_cours,
                     "annee_id_cours": annee_id,
-                    "periodes_enseignant": db.calculer_periodes_enseignant(
-                        enseignant_id
-                    ),
-                    "groupes_restants_cours": db.get_groupes_restants_pour_cours(
-                        code_cours, annee_id
-                    ),
-                    "attributions_enseignant": db.get_attributions_enseignant(
-                        enseignant_id
-                    ),
+                    "periodes_enseignant": db.get_periodes_enseignant(enseignant_id),
+                    "groupes_restants_cours": db.get_groupes_restants_pour_cours(code_cours, annee_id),
+                    "attributions_enseignant": db.get_attributions_enseignant(enseignant_id),
                 }
             ),
             201,
         )
     except Exception as e:
-        current_app.logger.error(
-            f"Erreur inattendue dans api_ajouter_attribution: {str(e)}", exc_info=True
-        )
+        current_app.logger.error(f"Erreur inattendue dans api_ajouter_attribution: {str(e)}", exc_info=True)
         return (
             jsonify(
                 {
@@ -142,6 +131,7 @@ def api_supprimer_attribution() -> tuple[Response, int]:
         attr_info = db.get_attribution_info(attr_id)
         if not attr_info:
             return jsonify({"success": False, "message": "Attribution non trouvée."}), 404
+
         if not current_user.can_access_champ(attr_info["champno"]):
             return (
                 jsonify({"success": False, "message": "Accès non autorisé à ce champ."}),
@@ -164,9 +154,7 @@ def api_supprimer_attribution() -> tuple[Response, int]:
         annee_id_cours = attr_info["annee_id_cours"]
         if not db.delete_attribution(attr_id):
             return (
-                jsonify(
-                    {"success": False, "message": "Échec de la suppression de l'attribution."}
-                ),
+                jsonify({"success": False, "message": "Échec de la suppression de l'attribution."}),
                 500,
             )
 
@@ -178,15 +166,9 @@ def api_supprimer_attribution() -> tuple[Response, int]:
                     "enseignant_id": enseignant_id,
                     "code_cours": code_cours,
                     "annee_id_cours": annee_id_cours,
-                    "periodes_enseignant": db.calculer_periodes_enseignant(
-                        enseignant_id
-                    ),
-                    "groupes_restants_cours": db.get_groupes_restants_pour_cours(
-                        code_cours, annee_id_cours
-                    ),
-                    "attributions_enseignant": db.get_attributions_enseignant(
-                        enseignant_id
-                    ),
+                    "periodes_enseignant": db.get_periodes_enseignant(enseignant_id),
+                    "groupes_restants_cours": db.get_groupes_restants_pour_cours(code_cours, annee_id_cours),
+                    "attributions_enseignant": db.get_attributions_enseignant(enseignant_id),
                 }
             ),
             200,
@@ -220,7 +202,6 @@ def api_creer_tache_restante(champ_no: str) -> tuple[Response, int]:
                 jsonify({"success": False, "message": "Aucune année scolaire active."}),
                 400,
             )
-
         if not current_user.can_access_champ(champ_no):
             return (
                 jsonify({"success": False, "message": "Accès non autorisé à ce champ."}),
@@ -259,10 +240,7 @@ def api_creer_tache_restante(champ_no: str) -> tuple[Response, int]:
             201,
         )
     except Exception as e:
-        current_app.logger.error(
-            f"Erreur inattendue dans api_creer_tache_restante pour champ {champ_no}: {str(e)}",
-            exc_info=True,
-        )
+        current_app.logger.error(f"Erreur inattendue dans api_creer_tache_restante pour champ {champ_no}: {str(e)}", exc_info=True)
         return (
             jsonify(
                 {
@@ -285,6 +263,7 @@ def api_supprimer_enseignant(enseignant_id: int) -> tuple[Response, int]:
         enseignant_info = db.get_enseignant_details(enseignant_id)
         if not enseignant_info:
             return jsonify({"success": False, "message": "Enseignant non trouvé."}), 404
+
         if not current_user.can_access_champ(enseignant_info["champno"]):
             return (
                 jsonify({"success": False, "message": "Accès non autorisé à ce champ."}),
@@ -294,9 +273,7 @@ def api_supprimer_enseignant(enseignant_id: int) -> tuple[Response, int]:
         cours_affectes = db.get_affected_cours_for_enseignant(enseignant_id)
         if not db.delete_enseignant(enseignant_id):
             return (
-                jsonify(
-                    {"success": False, "message": "Échec de la suppression de l'enseignant."}
-                ),
+                jsonify({"success": False, "message": "Échec de la suppression de l'enseignant."}),
                 500,
             )
 
@@ -304,9 +281,7 @@ def api_supprimer_enseignant(enseignant_id: int) -> tuple[Response, int]:
             {
                 "code_cours": c["codecours"],
                 "annee_id_cours": c["annee_id_cours"],
-                "nouveaux_groupes_restants": db.get_groupes_restants_pour_cours(
-                    c["codecours"], c["annee_id_cours"]
-                ),
+                "nouveaux_groupes_restants": db.get_groupes_restants_pour_cours(c["codecours"], c["annee_id_cours"]),
             }
             for c in cours_affectes
         ]
@@ -322,10 +297,7 @@ def api_supprimer_enseignant(enseignant_id: int) -> tuple[Response, int]:
             200,
         )
     except Exception as e:
-        current_app.logger.error(
-            f"Erreur inattendue dans api_supprimer_enseignant pour ID {enseignant_id}: {str(e)}",
-            exc_info=True,
-        )
+        current_app.logger.error(f"Erreur inattendue dans api_supprimer_enseignant pour ID {enseignant_id}: {str(e)}", exc_info=True)
         return (
             jsonify(
                 {

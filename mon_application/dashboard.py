@@ -9,6 +9,7 @@ Les permissions sont gérées par les décorateurs `dashboard_access_required`
 et `dashboard_api_access_required`.
 """
 
+from collections import defaultdict
 from typing import Any, cast
 
 from flask import (
@@ -34,127 +35,6 @@ from .utils import dashboard_access_required, dashboard_api_access_required
 bp = Blueprint("dashboard", __name__, url_prefix="/admin")
 
 
-# --- Fonctions utilitaires pour le sommaire (dépendantes de l'année) ---
-def calculer_donnees_sommaire(
-    annee_id: int,
-) -> tuple[
-    list[dict[str, Any]], dict[str, dict[str, Any]], float, float, dict[str, float]
-]:
-    """
-    Calcule les données agrégées pour la page sommaire globale pour une année donnée.
-
-    Args:
-        annee_id: L'ID de l'année scolaire pour laquelle calculer les données.
-
-    Returns:
-        Un tuple contenant :
-        - La liste des enseignants groupés par champ (pour la page de détail).
-        - Un dictionnaire des moyennes et totaux par champ, incluant les statuts.
-        - La moyenne générale des périodes pour les enseignants à temps plein.
-        - La moyenne "Préliminaire confirmée" (enseignants TP des champs confirmés).
-        - Un dictionnaire contenant les totaux globaux pour le pied de tableau.
-    """
-    tous_les_champs = db.get_all_champs()
-    statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
-    tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
-
-    moyennes_par_champ_calculees: dict[str, Any] = {}
-    for champ in tous_les_champs:
-        champ_no = str(champ["champno"])
-        statut = statuts_champs.get(
-            champ_no, {"est_verrouille": False, "est_confirme": False}
-        )
-        moyennes_par_champ_calculees[champ_no] = {
-            "champ_nom": champ["champnom"],
-            "est_verrouille": statut["est_verrouille"],
-            "est_confirme": statut["est_confirme"],
-            "nb_enseignants_tp": 0,
-            "periodes_choisies_tp": 0.0,
-            "moyenne": 0.0,
-            "periodes_magiques": 0.0,
-        }
-
-    enseignants_par_champ_temp: dict[str, dict[str, Any]] = {
-        str(champ["champno"]): {
-            "champno": str(champ["champno"]),
-            "champnom": champ["champnom"],
-            "enseignants": [],
-            "est_verrouille": moyennes_par_champ_calculees[str(champ["champno"])][
-                "est_verrouille"
-            ],
-            "est_confirme": moyennes_par_champ_calculees[str(champ["champno"])][
-                "est_confirme"
-            ],
-        }
-        for champ in tous_les_champs
-    }
-
-    for ens in tous_enseignants_details:
-        champ_no = ens["champno"]
-        if champ_no in enseignants_par_champ_temp:
-            enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
-
-        if (
-            ens["compte_pour_moyenne_champ"]
-            and champ_no in moyennes_par_champ_calculees
-        ):
-            moyennes_par_champ_calculees[champ_no]["nb_enseignants_tp"] += 1
-            moyennes_par_champ_calculees[champ_no]["periodes_choisies_tp"] += ens[
-                "total_periodes"
-            ]
-
-    total_periodes_global_tp = 0.0
-    nb_enseignants_tp_global = 0
-    total_periodes_confirme_tp = 0.0
-    nb_enseignants_confirme_tp = 0
-    total_enseignants_tp_etablissement = 0
-    total_periodes_choisies_tp_etablissement = 0.0
-    total_periodes_magiques_etablissement = 0.0
-
-    for data in moyennes_par_champ_calculees.values():
-        nb_ens_tp = data["nb_enseignants_tp"]
-        periodes_choisies_tp = data["periodes_choisies_tp"]
-
-        data["moyenne"] = (periodes_choisies_tp / nb_ens_tp) if nb_ens_tp > 0 else 0.0
-        data["periodes_magiques"] = periodes_choisies_tp - (nb_ens_tp * 24)
-
-        total_enseignants_tp_etablissement += nb_ens_tp
-        total_periodes_choisies_tp_etablissement += periodes_choisies_tp
-        total_periodes_magiques_etablissement += data["periodes_magiques"]
-
-        if nb_ens_tp > 0:
-            total_periodes_global_tp += periodes_choisies_tp
-            nb_enseignants_tp_global += nb_ens_tp
-            if data["est_confirme"]:
-                total_periodes_confirme_tp += periodes_choisies_tp
-                nb_enseignants_confirme_tp += nb_ens_tp
-
-    moyenne_generale_calculee = (
-        (total_periodes_global_tp / nb_enseignants_tp_global)
-        if nb_enseignants_tp_global > 0
-        else 0.0
-    )
-    moyenne_prelim_conf = (
-        (total_periodes_confirme_tp / nb_enseignants_confirme_tp)
-        if nb_enseignants_confirme_tp > 0
-        else 0.0
-    )
-
-    grand_totals = {
-        "total_enseignants_tp": float(total_enseignants_tp_etablissement),
-        "total_periodes_choisies_tp": total_periodes_choisies_tp_etablissement,
-        "total_periodes_magiques": total_periodes_magiques_etablissement,
-    }
-
-    return (
-        list(enseignants_par_champ_temp.values()),
-        moyennes_par_champ_calculees,
-        moyenne_generale_calculee,
-        moyenne_prelim_conf,
-        grand_totals,
-    )
-
-
 # --- ROUTES DES PAGES (HTML) ---
 
 
@@ -164,34 +44,23 @@ def page_sommaire() -> str:
     """Affiche la page du sommaire global des moyennes pour l'année active."""
     annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
     if not annee_active:
-        flash(
-            "Aucune année scolaire n'est disponible. Veuillez en créer une "
-            "dans la section 'Données'.",
-            "warning",
-        )
+        flash("Aucune année scolaire n'est disponible. Veuillez en créer une dans la section 'Données'.", "warning")
         return render_template(
             "page_sommaire.html",
             moyennes_par_champ={},
             moyenne_generale=0.0,
             moyenne_preliminaire_confirmee=0.0,
-            grand_totals={
-                "total_enseignants_tp": 0,
-                "total_periodes_choisies_tp": 0.0,
-                "total_periodes_magiques": 0.0,
-            },
+            grand_totals={"total_enseignants_tp": 0, "total_periodes_choisies_tp": 0.0, "total_periodes_magiques": 0.0},
         )
 
-    annee_id = annee_active["annee_id"]
-    _, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = (
-        calculer_donnees_sommaire(annee_id)
-    )
+    summary_data = db.get_dashboard_summary_data(annee_active["annee_id"])
 
     return render_template(
         "page_sommaire.html",
-        moyennes_par_champ=moyennes_champs,
-        moyenne_generale=moyenne_gen,
-        moyenne_preliminaire_confirmee=moyenne_prelim_conf,
-        grand_totals=grand_totals_data,
+        moyennes_par_champ=summary_data.get("moyennes_par_champ", {}),
+        moyenne_generale=summary_data.get("moyenne_generale", 0.0),
+        moyenne_preliminaire_confirmee=summary_data.get("moyenne_preliminaire_confirmee", 0.0),
+        grand_totals=summary_data.get("grand_totals", {}),
     )
 
 
@@ -201,19 +70,32 @@ def page_detail_taches() -> str:
     """Affiche la page de détail des tâches par enseignant pour l'année active."""
     annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
     if not annee_active:
-        flash(
-            "Aucune année scolaire n'est disponible. Les détails ne peuvent "
-            "être affichés.",
-            "warning",
-        )
+        flash("Aucune année scolaire n'est disponible. Les détails ne peuvent être affichés.", "warning")
         return render_template("detail_taches.html", enseignants_par_champ=[])
 
     annee_id = annee_active["annee_id"]
-    enseignants_par_champ_data, _, _, _, _ = calculer_donnees_sommaire(annee_id)
+    tous_les_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
+    tous_les_champs = db.get_all_champs()
+    statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
 
-    return render_template(
-        "detail_taches.html", enseignants_par_champ=enseignants_par_champ_data
-    )
+    # Regroupement des enseignants par champ
+    enseignants_par_champ_temp: dict[str, dict[str, Any]] = {
+        str(champ["champno"]): {
+            "champno": str(champ["champno"]),
+            "champnom": champ["champnom"],
+            "enseignants": [],
+            "est_verrouille": statuts_champs.get(str(champ["champno"]), {}).get("est_verrouille", False),
+            "est_confirme": statuts_champs.get(str(champ["champno"]), {}).get("est_confirme", False),
+        }
+        for champ in tous_les_champs
+    }
+
+    for ens in tous_les_enseignants_details:
+        champ_no = ens["champno"]
+        if champ_no in enseignants_par_champ_temp:
+            enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
+
+    return render_template("detail_taches.html", enseignants_par_champ=list(enseignants_par_champ_temp.values()))
 
 
 # --- API ENDPOINTS (JSON) ---
@@ -225,21 +107,14 @@ def api_changer_annee_active() -> tuple[Response, int]:
     """API pour changer l'année de travail (stockée en session)."""
     data = request.get_json()
     if not data or not (annee_id := data.get("annee_id")):
-        return (
-            jsonify({"success": False, "message": "ID de l'année manquant."}),
-            400,
-        )
+        return jsonify({"success": False, "message": "ID de l'année manquant."}), 400
 
     session["annee_scolaire_id"] = annee_id
     toutes_les_annees = cast(list[dict[str, Any]], getattr(g, "toutes_les_annees", []))
-    annee_selectionnee = next(
-        (annee for annee in toutes_les_annees if annee["annee_id"] == annee_id),
-        None,
-    )
+    annee_selectionnee = next((annee for annee in toutes_les_annees if annee["annee_id"] == annee_id), None)
     if annee_selectionnee:
         current_app.logger.info(
-            f"Année de travail changée pour l'utilisateur '{current_user.username}' : "
-            f"'{annee_selectionnee['libelle_annee']}'."
+            f"Année de travail changée pour l'utilisateur '{current_user.username}' : " f"'{annee_selectionnee['libelle_annee']}'."
         )
     return jsonify({"success": True, "message": "Année de travail changée."}), 200
 
@@ -250,42 +125,46 @@ def api_get_donnees_sommaire() -> tuple[Response, int]:
     """API pour récupérer les données du sommaire pour l'année active."""
     annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
     if not annee_active:
-        current_app.logger.warning(
-            "API sommaire: Aucune année active, retour de données vides."
-        )
+        current_app.logger.warning("API sommaire: Aucune année active, retour de données vides.")
         return (
             jsonify(
                 enseignants_par_champ=[],
                 moyennes_par_champ={},
                 moyenne_generale=0.0,
                 moyenne_preliminaire_confirmee=0.0,
-                grand_totals={
-                    "total_enseignants_tp": 0,
-                    "total_periodes_choisies_tp": 0.0,
-                    "total_periodes_magiques": 0.0,
-                },
+                grand_totals={"total_enseignants_tp": 0, "total_periodes_choisies_tp": 0.0, "total_periodes_magiques": 0.0},
             ),
             200,
         )
 
     annee_id = annee_active["annee_id"]
-    (
-        enseignants_groupes,
-        moyennes_champs,
-        moyenne_gen,
-        moyenne_prelim_conf,
-        grand_totals_data,
-    ) = calculer_donnees_sommaire(annee_id)
-    return (
-        jsonify(
-            enseignants_par_champ=enseignants_groupes,
-            moyennes_par_champ=moyennes_champs,
-            moyenne_generale=moyenne_gen,
-            moyenne_preliminaire_confirmee=moyenne_prelim_conf,
-            grand_totals=grand_totals_data,
-        ),
-        200,
-    )
+    summary_data = db.get_dashboard_summary_data(annee_id)
+    enseignants_details = db.get_all_enseignants_avec_details(annee_id)
+    tous_les_champs = db.get_all_champs()
+    statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
+
+    # Regroupement des enseignants par champ pour la partie "détail" de la réponse API
+    enseignants_par_champ_temp: dict[str, Any] = {
+        str(champ["champno"]): {
+            "champno": str(champ["champno"]),
+            "champnom": champ["champnom"],
+            "enseignants": [],
+            "est_verrouille": statuts_champs.get(str(champ["champno"]), {}).get("est_verrouille", False),
+            "est_confirme": statuts_champs.get(str(champ["champno"]), {}).get("est_confirme", False),
+        }
+        for champ in tous_les_champs
+    }
+    for ens in enseignants_details:
+        if ens["champno"] in enseignants_par_champ_temp:
+            enseignants_par_champ_temp[ens["champno"]]["enseignants"].append(ens)
+
+    # Combinaison des données du sommaire et des détails
+    response_data = {
+        **summary_data,
+        "enseignants_par_champ": list(enseignants_par_champ_temp.values()),
+    }
+
+    return jsonify(response_data), 200
 
 
 @bp.route("/exporter_taches_excel")
@@ -377,10 +256,7 @@ def exporter_org_scolaire_excel() -> Response:
     annee_libelle = annee_active["libelle_annee"]
 
     tous_les_financements = db.get_all_financements()
-    libelle_to_header_map = {
-        f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}"
-        for f in tous_les_financements
-    }
+    libelle_to_header_map = {f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}" for f in tous_les_financements}
     libelle_to_header_map["SOUTIEN EN SPORT-ÉTUDES"] = "PÉRIODES SOUTIEN SPORT-ÉTUDES"
 
     code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
@@ -411,11 +287,7 @@ def exporter_org_scolaire_excel() -> Response:
 
     for item in donnees_raw:
         champ_no = item["champno"]
-        enseignant_key = (
-            f"fictif-{item['nomcomplet']}"
-            if item["estfictif"]
-            else f"reel-{item['nom']}-{item['prenom']}"
-        )
+        enseignant_key = f"fictif-{item['nomcomplet']}" if item["estfictif"] else f"reel-{item['nom']}-{item['prenom']}"
 
         if enseignant_key not in pivot_data.setdefault(champ_no, {}):
             pivot_data[champ_no][enseignant_key] = {
@@ -440,8 +312,7 @@ def exporter_org_scolaire_excel() -> Response:
             pivot_data[champ_no][enseignant_key][target_col] += total_p
         else:
             current_app.logger.warning(
-                f"L'en-tête de colonne '{target_col}' n'a pas été trouvé. "
-                f"Les périodes pour le code '{financement_code}' sont ignorées."
+                f"L'en-tête de colonne '{target_col}' n'a pas été trouvé. " f"Les périodes pour le code '{financement_code}' sont ignorées."
             )
 
     donnees_par_champ: dict[str, dict[str, Any]] = {}

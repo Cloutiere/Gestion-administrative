@@ -26,7 +26,6 @@ def index() -> Response:
     Page d'accueil de l'application. Redirige les utilisateurs.
     """
     if current_user.is_admin or current_user.is_dashboard_only:
-        # CORRECTION : La route `page_sommaire` est dans le blueprint `dashboard`.
         return redirect(url_for("dashboard.page_sommaire"))
 
     if current_user.allowed_champs:
@@ -71,12 +70,13 @@ def page_champ(champ_no: str) -> str | Response:
     nb_enseignants_tp = 0
     for ens in enseignants_du_champ:
         attributions = db.get_attributions_enseignant(ens["enseignantid"])
-        periodes = db.calculer_periodes_pour_attributions(attributions)
+        periodes = db.get_periodes_enseignant(ens["enseignantid"])
         enseignants_complets.append(
             {"attributions": attributions, "periodes_actuelles": periodes, **ens}
         )
         if ens["esttempsplein"] and not ens["estfictif"]:
-            total_periodes_tp += periodes["total_periodes"]
+            # CORRECTION: Conversion explicite en float avant l'addition
+            total_periodes_tp += float(periodes["total_periodes"])
             nb_enseignants_tp += 1
 
     moyenne_champ = (total_periodes_tp / nb_enseignants_tp) if nb_enseignants_tp > 0 else 0.0

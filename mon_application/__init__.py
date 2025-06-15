@@ -19,6 +19,41 @@ from werkzeug.wrappers import Response
 from .models import User
 
 
+def determine_active_school_year(
+    toutes_les_annees: list[dict[str, Any]], has_dashboard_access: bool, annee_id_session: int | None
+) -> dict[str, Any] | None:
+    """
+    Détermine l'année scolaire active en fonction du contexte utilisateur et de la session.
+
+    Args:
+        toutes_les_annees: La liste de toutes les années scolaires disponibles.
+        has_dashboard_access: Booléen indiquant si l'utilisateur a accès au tableau de bord.
+        annee_id_session: L'ID de l'année stocké dans la session, ou None.
+
+    Returns:
+        Le dictionnaire de l'année active, ou None si aucune année n'existe.
+    """
+    from . import database as db
+
+    annee_active: dict[str, Any] | None = None
+
+    if has_dashboard_access and annee_id_session:
+        annee_active = next((annee for annee in toutes_les_annees if annee["annee_id"] == annee_id_session), None)
+
+    if not annee_active:
+        annee_active = db.get_annee_courante()
+
+    if not annee_active and toutes_les_annees:
+        annee_active = max(toutes_les_annees, key=lambda x: x["libelle_annee"])
+        if has_dashboard_access:
+            flash(
+                "Aucune année scolaire n'est définie comme 'courante'. Affichage de la plus récente par défaut.",
+                "warning",
+            )
+
+    return annee_active
+
+
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     """
     Crée et configure une instance de l'application Flask (Application Factory).
@@ -52,9 +87,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     login_manager = LoginManager()
     login_manager.init_app(app)
-    # Nous utilisons un ignore général car la déclaration de type de flask-login
-    # est trop restrictive pour pyright dans ce cas précis.
-    # pyright: ignore
+    # pyright: ignore [reportAttributeAccessIssue]
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Veuillez vous connecter pour accéder à cette page."
     login_manager.login_message_category = "info"
@@ -66,30 +99,16 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         Renvoie du JSON pour les requêtes API et redirige pour les autres.
         """
         if request.path.startswith(("/api/", "/admin/api/")):
-            return (
-                jsonify({"success": False, "message": "Authentification requise."}),
-                401,
-            )
+            return jsonify({"success": False, "message": "Authentification requise."}), 401
         flash("Veuillez vous connecter pour accéder à cette page.", "info")
         return redirect(url_for("auth.login"))
 
     @login_manager.user_loader
     def load_user(user_id: str) -> User | None:
-        """
-        Fonction pour recharger l'objet utilisateur à partir de l'ID stocké en session.
-        """
-        from .database import get_user_by_id
+        """Fonction pour recharger l'objet utilisateur à partir de l'ID stocké en session."""
+        from .database import get_user_obj_by_id
 
-        user_data = get_user_by_id(int(user_id))
-        if user_data:
-            return User(
-                _id=user_data["id"],
-                username=user_data["username"],
-                is_admin=user_data["is_admin"],
-                is_dashboard_only=user_data["is_dashboard_only"],
-                allowed_champs=user_data["allowed_champs"],
-            )
-        return None
+        return get_user_obj_by_id(int(user_id))
 
     @app.before_request
     def load_active_school_year() -> None:
@@ -99,38 +118,14 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         from . import database as db
 
         g.toutes_les_annees = db.get_all_annees()
-        annee_active: dict[str, Any] | None = None
-        has_dashboard_access = current_user.is_authenticated and (
-            current_user.is_admin or current_user.is_dashboard_only
+        has_dashboard_access = current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only)
+        annee_id_session = session.get("annee_scolaire_id")
+
+        g.annee_active = determine_active_school_year(
+            cast(list[dict[str, Any]], g.toutes_les_annees),
+            has_dashboard_access,
+            annee_id_session,
         )
-
-        toutes_les_annees_g = cast(list[dict[str, Any]], g.toutes_les_annees)
-
-        if has_dashboard_access:
-            annee_id_session = session.get("annee_scolaire_id")
-            if annee_id_session:
-                annee_active = next(
-                    (
-                        annee
-                        for annee in toutes_les_annees_g
-                        if annee["annee_id"] == annee_id_session
-                    ),
-                    None,
-                )
-
-        if not annee_active:
-            annee_active = db.get_annee_courante()
-
-        if not annee_active and toutes_les_annees_g:
-            annee_active = max(toutes_les_annees_g, key=lambda x: x["libelle_annee"])
-            if has_dashboard_access:
-                flash(
-                    "Aucune année scolaire n'est définie comme 'courante'. "
-                    "Affichage de la plus récente par défaut.",
-                    "warning",
-                )
-
-        g.annee_active = annee_active
 
     # --- Filtres Jinja2 et Context Processors ---
     def format_periodes_filter(value: float | None) -> str:

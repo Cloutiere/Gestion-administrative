@@ -11,7 +11,6 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.wrappers import Response
 
 from . import database as db
-from .models import User
 
 # Crée un Blueprint nommé 'auth'.
 bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -32,17 +31,11 @@ def login() -> str | Response:
         user_data = db.get_user_by_username(username)
 
         if user_data and check_password_hash(user_data["password_hash"], password):
-            user_obj_data = db.get_user_by_id(user_data["id"])
-            if user_obj_data:
-                user = User(
-                    _id=user_obj_data["id"],
-                    username=user_obj_data["username"],
-                    is_admin=user_obj_data["is_admin"],
-                    is_dashboard_only=user_obj_data["is_dashboard_only"],
-                    allowed_champs=user_obj_data["allowed_champs"],
-                )
-                login_user(user)
-                flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
+            # Utilisation de la factory centralisée pour créer l'objet User
+            user_obj = db.get_user_obj_by_id(user_data["id"])
+            if user_obj:
+                login_user(user_obj)
+                flash(f"Connexion réussie! Bienvenue, {user_obj.username}.", "success")
 
                 next_page = request.args.get("next")
                 return redirect(next_page or url_for("dashboard.page_sommaire"))
@@ -72,8 +65,7 @@ def register() -> str | Response:
 
     if user_count > 0:
         flash(
-            "L'inscription publique est désactivée. "
-            "Un administrateur doit créer les nouveaux comptes.",
+            "L'inscription publique est désactivée. " "Un administrateur doit créer les nouveaux comptes.",
             "warning",
         )
         return redirect(url_for("auth.login"))
@@ -90,13 +82,10 @@ def register() -> str | Response:
         elif len(password) < 6:
             flash("Le mot de passe doit contenir au moins 6 caractères.", "error")
         else:
-            user = db.create_user(
-                username, generate_password_hash(password), is_admin=True
-            )
+            user = db.create_user(username, generate_password_hash(password), is_admin=True)
             if user:
                 flash(
-                    f"Compte admin '{username}' créé avec succès! "
-                    "Vous pouvez maintenant vous connecter.",
+                    f"Compte admin '{username}' créé avec succès! " "Vous pouvez maintenant vous connecter.",
                     "success",
                 )
                 return redirect(url_for("auth.login"))
