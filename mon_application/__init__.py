@@ -4,7 +4,7 @@ Ce module est le cœur de l'application (paquet).
 
 Il contient la factory `create_app`, qui est responsable de l'initialisation
 et de la configuration de l'instance Flask, de la base de données, du gestionnaire
-de connexion et de l'enregistrement des "Blueprints" (nos modules de routes).
+de connexion, des commandes CLI et de l'enregistrement des "Blueprints".
 Il gère également la détermination de l'année scolaire active pour chaque requête.
 """
 
@@ -194,8 +194,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     app.register_blueprint(dashboard.bp)
 
-    from . import api  # Importation du module API
+    from . import api
 
-    app.register_blueprint(api.bp)  # Enregistrement du blueprint API
+    app.register_blueprint(api.bp)
+
+    # --- Enregistrement des commandes CLI ---
+    from . import commands
+
+    commands.init_app(app)
 
     return app
