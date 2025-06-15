@@ -1389,6 +1389,7 @@ def get_dashboard_summary_data(annee_id: int) -> dict[str, Any]:
     if not db_conn:
         return {}
 
+    # REQUÊTE CORRIGÉE : Utilise LEFT JOIN depuis Champs pour inclure tous les champs.
     query = """
     WITH enseignants_avec_periodes AS (
         SELECT
@@ -1400,25 +1401,31 @@ def get_dashboard_summary_data(annee_id: int) -> dict[str, Any]:
         WHERE e.annee_id = %(annee_id)s
         GROUP BY e.EnseignantID
     ),
-    champs_stats AS (
+    champs_stats_aggregated AS (
         SELECT
-            e.ChampNo,
-            ch.ChampNom,
-            COALESCE(cas.est_verrouille, FALSE) AS est_verrouille,
-            COALESCE(cas.est_confirme, FALSE) AS est_confirme,
-            COUNT(e.EnseignantID) FILTER (WHERE e.EstTempsPlein AND NOT e.EstFictif) AS nb_enseignants_tp,
-            SUM(e.total_periodes) FILTER (WHERE e.EstTempsPlein AND NOT e.EstFictif) AS periodes_choisies_tp
-        FROM enseignants_avec_periodes e
-        JOIN Champs ch ON e.ChampNo = ch.ChampNo
-        LEFT JOIN champ_annee_statuts cas ON e.ChampNo = cas.champ_no AND cas.annee_id = %(annee_id)s
-        GROUP BY e.ChampNo, ch.ChampNom, cas.est_verrouille, cas.est_confirme
+            eap.ChampNo,
+            COUNT(eap.EnseignantID) FILTER (WHERE eap.EstTempsPlein AND NOT eap.EstFictif) AS nb_enseignants_tp,
+            SUM(eap.total_periodes) FILTER (WHERE eap.EstTempsPlein AND NOT eap.EstFictif) AS periodes_choisies_tp
+        FROM enseignants_avec_periodes eap
+        GROUP BY eap.ChampNo
     ),
     champs_calculs_intermediaires AS (
         SELECT
-            *,
-            COALESCE(periodes_choisies_tp, 0) - (COALESCE(nb_enseignants_tp, 0) * 24) AS periodes_magiques,
-            CASE WHEN nb_enseignants_tp > 0 THEN periodes_choisies_tp / nb_enseignants_tp ELSE 0 END AS moyenne
-        FROM champs_stats
+            ch.ChampNo,
+            ch.ChampNom,
+            COALESCE(cas.est_verrouille, FALSE) AS est_verrouille,
+            COALESCE(cas.est_confirme, FALSE) AS est_confirme,
+            COALESCE(csa.nb_enseignants_tp, 0) AS nb_enseignants_tp,
+            COALESCE(csa.periodes_choisies_tp, 0) AS periodes_choisies_tp,
+            COALESCE(csa.periodes_choisies_tp, 0) - (COALESCE(csa.nb_enseignants_tp, 0) * 24) AS periodes_magiques,
+            CASE
+                WHEN COALESCE(csa.nb_enseignants_tp, 0) > 0
+                THEN COALESCE(csa.periodes_choisies_tp, 0) / csa.nb_enseignants_tp
+                ELSE 0
+            END AS moyenne
+        FROM Champs ch
+        LEFT JOIN champ_annee_statuts cas ON ch.ChampNo = cas.champ_no AND cas.annee_id = %(annee_id)s
+        LEFT JOIN champs_stats_aggregated csa ON ch.ChampNo = csa.ChampNo
     )
     SELECT * FROM champs_calculs_intermediaires ORDER BY ChampNo;
     """
