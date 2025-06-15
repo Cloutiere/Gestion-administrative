@@ -21,12 +21,14 @@
     <ul>
         {% if current_user.is_authenticated %}
             {% if current_user.is_admin %}
-                <li><a href="{{ url_for('admin.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
+                <li><a href="{{ url_for('dashboard.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
                 <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                 <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+            {% elif current_user.is_dashboard_only %}
+                <li><a href="{{ url_for('dashboard.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
             {% else %}
-                {# Pour un utilisateur non-admin, le sommaire est la page principale #}
-                <li><a href="{{ url_for('admin.page_sommaire') }}">« Retour au Tableau de Bord</a></li>
+                {# Un utilisateur avec un accès spécifique retourne à la page d'accueil principale #}
+                <li><a href="{{ url_for('views.index') }}">« Retour à la navigation</a></li>
             {% endif %}
             <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
         {% else %}

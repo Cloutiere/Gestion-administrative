@@ -72,7 +72,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         """
         # Note : On inclut les deux préfixes, /api/ et /admin/api/, pour une gestion complète.
         if request.path.startswith(("/api/", "/admin/api/")):
-            return jsonify({"success": False, "message": "Authentification requise."}), 401
+            return (
+                jsonify({"success": False, "message": "Authentification requise."}),
+                401,
+            )
         # Pour toutes les autres requêtes (pages web), on garde la redirection.
         flash("Veuillez vous connecter pour accéder à cette page.", "info")
         return redirect(url_for("auth.login"))
@@ -89,7 +92,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         user_data = get_user_by_id(int(user_id))
         if user_data:
             # Crée l'objet User avec toutes les données nécessaires, y compris les permissions.
-            # CORRECTION : Ajout de is_dashboard_only pour assurer la persistance de ce rôle.
             return User(
                 _id=user_data["id"],
                 username=user_data["username"],
@@ -106,7 +108,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         """
         Détermine l'année scolaire active pour la requête en cours et la stocke dans `g`.
 
-        - Pour les administrateurs, elle utilise l'année stockée en session s'il y en a une.
+        - Pour les administrateurs et observateurs, elle utilise l'année en session si elle existe.
         - Pour tous les autres, ou si la session est vide, elle utilise l'année "courante" de la BDD.
         - En dernier recours, elle utilise l'année la plus récente.
         """
@@ -115,12 +117,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         # Met en cache la liste des années pour la durée de la requête afin d'éviter les appels BDD multiples
         g.toutes_les_annees = db.get_all_annees()
         annee_active = None
+        has_dashboard_access = current_user.is_authenticated and (
+            current_user.is_admin or current_user.is_dashboard_only
+        )
 
-        # Si l'utilisateur est admin, on vérifie s'il a choisi une année spécifique
-        if current_user.is_authenticated and current_user.is_admin:
+        # Si l'utilisateur a accès au tableau de bord, on vérifie s'il a choisi une année spécifique
+        if has_dashboard_access:
             annee_id_session = session.get("annee_scolaire_id")
             if annee_id_session:
-                # Cherche l'année choisie par l'admin dans la liste des années
+                # Cherche l'année choisie par l'admin/observateur dans la liste des années
                 annee_active = next(
                     (
                         annee
@@ -130,7 +135,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     None,
                 )
 
-        # Si aucune année n'a été choisie par l'admin, ou si l'utilisateur n'est pas admin
+        # Si aucune année n'a été choisie, ou si l'utilisateur n'a pas accès au tableau de bord
         if not annee_active:
             # On cherche l'année marquée comme "courante" dans la BDD
             annee_active = db.get_annee_courante()
@@ -139,9 +144,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if not annee_active and g.toutes_les_annees:
             # On prend la plus récente par libellé (ex: "2024-2025" > "2023-2024")
             annee_active = max(g.toutes_les_annees, key=lambda x: x["libelle_annee"])
-            if current_user.is_authenticated and current_user.is_admin:
+            if has_dashboard_access:
                 flash(
-                    "Aucune année scolaire n'est définie comme 'courante'. Affichage de la plus récente par défaut.",
+                    "Aucune année scolaire n'est définie comme 'courante'. "
+                    "Affichage de la plus récente par défaut.",
                     "warning",
                 )
 
@@ -183,6 +189,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     from . import admin
 
     app.register_blueprint(admin.bp)
+
+    from . import dashboard
+
+    app.register_blueprint(dashboard.bp)
 
     from . import api  # Importation du module API
 

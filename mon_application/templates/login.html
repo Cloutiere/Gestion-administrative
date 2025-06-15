@@ -16,10 +16,8 @@
 <div class="auth-form-container">
     <h2>Se connecter</h2>
 
-    {# Les messages flash sont maintenant gérés par le layout de base, mais on garde le conteneur ici #}
-    {# au cas où on voudrait les styliser différemment sur cette page. Pour l'instant, on le laisse vide #}
-    {# car _layout.html s'en occupe déjà. On pourrait aussi simplement l'enlever. #}
-    {# Pour la propreté, je vais le retirer, car le layout le gère déjà. #}
+    {# Les messages flash sont maintenant gérés par le layout de base, donc le bloc
+       qui se trouvait ici a été retiré pour éviter la redondance. #}
 
     <form method="POST">
         <div class="form-group">

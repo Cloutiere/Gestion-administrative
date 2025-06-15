@@ -53,13 +53,12 @@
     <ul>
         {% if current_user.is_authenticated %}
             {% if current_user.is_admin %}
-                <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
-                {# La ligne "Navigation par champ" a été retirée car redondante pour l'admin #}
+                <li><a href="{{ url_for('dashboard.page_sommaire') }}">Tableau de Bord</a></li>
                 <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                 <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
             {% elif current_user.is_dashboard_only %}
-                <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
-                <li><a href="{{ url_for('admin.page_detail_taches') }}">Détail des Tâches</a></li>
+                <li><a href="{{ url_for('dashboard.page_sommaire') }}">Tableau de Bord</a></li>
+                <li><a href="{{ url_for('dashboard.page_detail_taches') }}">Détail des Tâches</a></li>
             {% else %}
                  <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
             {% endif %}
@@ -105,10 +104,10 @@
 
             <!-- Liens d'action avec les classes de bouton standardisées -->
             <div class="details-link-container no-print">
-                <a href="{{ url_for('admin.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
-                <a href="{{ url_for('admin.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
-                <a href="{{ url_for('admin.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
-                <a href="{{ url_for('admin.exporter_org_scolaire_excel') }}" class="btn btn-export-excel">Exporter pour org. scolaire (Excel)</a>
+                <a href="{{ url_for('dashboard.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
+                <a href="{{ url_for('dashboard.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
+                <a href="{{ url_for('dashboard.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
+                <a href="{{ url_for('dashboard.exporter_org_scolaire_excel') }}" class="btn btn-export-excel">Exporter pour org. scolaire (Excel)</a>
             </div>
 
             {% if moyennes_par_champ %}
@@ -170,8 +169,8 @@
         IS_ADMIN: {{ current_user.is_admin | tojson }},
         ANNEE_ACTIVE: {{ annee_active is not none | tojson }},
         URLS: {
-            API_CHANGER_ANNEE: "{{ url_for('admin.api_changer_annee_active') }}",
-            API_GET_DONNEES_SOMMAIRE: "{{ url_for('admin.api_get_donnees_sommaire') }}"
+            API_CHANGER_ANNEE: "{{ url_for('dashboard.api_changer_annee_active') }}",
+            API_GET_DONNEES_SOMMAIRE: "{{ url_for('dashboard.api_get_donnees_sommaire') }}"
         }
     };
 </script>

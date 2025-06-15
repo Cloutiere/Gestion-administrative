@@ -23,8 +23,8 @@ def login() -> Any:
     """Gère la connexion des utilisateurs."""
     if current_user.is_authenticated:
         flash("Vous êtes déjà connecté(e).", "info")
-        # Redirige vers le tableau de bord si déjà connecté.
-        return redirect(url_for("admin.page_sommaire"))
+        # CORRECTION: Redirige vers le tableau de bord dans le bon blueprint.
+        return redirect(url_for("dashboard.page_sommaire"))
 
     # Vérifie si c'est le premier utilisateur pour afficher le lien d'inscription.
     first_user = db.get_users_count() == 0
@@ -50,9 +50,9 @@ def login() -> Any:
                 login_user(user)
                 flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
 
-                # Redirection systématique vers le tableau de bord global.
+                # CORRECTION: Redirection vers le tableau de bord dans le bon blueprint.
                 next_page = request.args.get("next")
-                return redirect(next_page or url_for("admin.page_sommaire"))
+                return redirect(next_page or url_for("dashboard.page_sommaire"))
 
         flash("Nom d'utilisateur ou mot de passe invalide.", "error")
 
@@ -69,14 +69,21 @@ def logout() -> Any:
 
 @bp.route("/register", methods=["GET", "POST"])
 def register() -> Any:
-    """Gère l'inscription, réservée au premier utilisateur."""
+    """Gère l'inscription.
+
+    L'inscription est automatiquement autorisée pour le premier utilisateur, qui
+    sera créé en tant qu'administrateur. Pour les utilisateurs suivants,
+    l'inscription doit être gérée par un administrateur via l'interface dédiée.
+    """
     user_count = db.get_users_count()
 
-    # Si des utilisateurs existent déjà, l'inscription est désactivée.
-    if user_count > 0 and not current_user.is_authenticated:
+    # Si un ou plusieurs utilisateurs existent déjà, l'inscription publique est désactivée.
+    # L'admin peut créer des comptes via l'interface d'administration.
+    if user_count > 0:
         flash(
-            "L'inscription directe est désactivée. Veuillez contacter un administrateur.",
-            "error",
+            "L'inscription publique est désactivée. "
+            "Un administrateur doit créer les nouveaux comptes.",
+            "warning",
         )
         return redirect(url_for("auth.login"))
 
@@ -92,19 +99,21 @@ def register() -> Any:
         elif len(password) < 6:
             flash("Le mot de passe doit contenir au moins 6 caractères.", "error")
         else:
-            hashed_pwd = generate_password_hash(password)
-            # Le premier utilisateur est toujours admin.
-            # is_dashboard_only est False par défaut.
-            user = db.create_user(username, hashed_pwd, is_admin=True)
+            # Le tout premier utilisateur est toujours un administrateur.
+            # La fonction create_user gère les rôles via des arguments.
+            user = db.create_user(
+                username, generate_password_hash(password), is_admin=True
+            )
             if user:
                 flash(
-                    f"Compte admin '{username}' créé avec succès! Vous pouvez vous connecter.",
+                    f"Compte admin '{username}' créé avec succès! "
+                    "Vous pouvez maintenant vous connecter.",
                     "success",
                 )
                 return redirect(url_for("auth.login"))
             flash("Ce nom d'utilisateur est déjà pris.", "error")
 
-    # Affiche le formulaire d'inscription pour le premier utilisateur.
+    # Affiche le formulaire d'inscription uniquement si aucun utilisateur n'existe.
     return render_template(
         "register.html",
         first_user=(user_count == 0),

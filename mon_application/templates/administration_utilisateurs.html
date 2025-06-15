@@ -22,7 +22,7 @@
 <nav>
     <ul>
         {% if current_user.is_authenticated and current_user.is_admin %}
-            <li><a href="{{ url_for('admin.page_sommaire') }}">Tableau de Bord</a></li>
+            <li><a href="{{ url_for('dashboard.page_sommaire') }}">Tableau de Bord</a></li>
             {# La ligne "Navigation par champ" a été retirée car redondante pour l'admin #}
             <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
             <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>

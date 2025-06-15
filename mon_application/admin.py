@@ -1,11 +1,12 @@
 # mon_application/admin.py
 """
-Ce module contient le Blueprint pour les routes d'administration et de tableau de bord.
+Ce module contient le Blueprint pour les routes d'administration des données.
 
-Il inclut les pages HTML et les points d'API RESTful pour les opérations qui
-nécessitent des privilèges élevés (administrateur ou observateur de tableau de bord).
-Les permissions sont gérées par des décorateurs spécifiques (`admin_required`,
-`dashboard_access_required`, etc.).
+Il inclut les pages HTML et les points d'API RESTful pour les opérations de
+création, modification et suppression des entités fondamentales de l'application
+(années, utilisateurs, cours, enseignants, etc.). L'accès est restreint aux
+utilisateurs avec des privilèges d'administrateur via les décorateurs
+`admin_required` et `admin_api_required`.
 """
 
 from typing import Any, cast
@@ -15,7 +16,6 @@ import psycopg2
 import psycopg2.extras
 from flask import (
     Blueprint,
-    Response,
     current_app,
     flash,
     g,
@@ -23,7 +23,6 @@ from flask import (
     redirect,
     render_template,
     request,
-    session,
     url_for,
 )
 from flask_login import current_user
@@ -33,200 +32,13 @@ from psycopg2.extensions import connection
 from werkzeug.security import generate_password_hash
 
 from . import database as db
-from . import exports
-from .utils import (
-    admin_api_required,
-    admin_required,
-    dashboard_access_required,
-    dashboard_api_access_required,
-)
+from .utils import admin_api_required, admin_required
 
 # Crée un Blueprint 'admin' avec un préfixe d'URL.
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
-# --- Fonctions utilitaires pour le sommaire (maintenant dépendantes de l'année) ---
-def calculer_donnees_sommaire(
-    annee_id: int,
-) -> tuple[
-    list[dict[str, Any]], dict[str, dict[str, Any]], float, float, dict[str, float]
-]:
-    """
-    Calcule les données agrégées pour la page sommaire globale pour une année donnée.
-
-    Cette fonction adopte une approche "centrée sur le champ" pour garantir que tous
-    les champs sont listés, même ceux sans enseignant pour l'année active.
-
-    Args:
-        annee_id: L'ID de l'année scolaire pour laquelle calculer les données.
-
-    Returns:
-        Un tuple contenant :
-        - La liste des enseignants groupés par champ (pour la page de détail).
-        - Un dictionnaire des moyennes et totaux par champ, incluant les statuts.
-        - La moyenne générale des périodes pour les enseignants à temps plein.
-        - La moyenne "Préliminaire confirmée" (enseignants TP des champs confirmés).
-        - Un dictionnaire contenant les totaux globaux pour le pied de tableau.
-    """
-    # Étape 1 : Récupérer toutes les données brutes nécessaires.
-    tous_les_champs = db.get_all_champs()
-    statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
-    tous_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
-
-    # Étape 2 : Initialiser les structures de données en se basant sur TOUS les champs.
-    moyennes_par_champ_calculees: dict[str, Any] = {}
-    for champ in tous_les_champs:
-        champ_no = str(champ["champno"])
-        statut = statuts_champs.get(
-            champ_no, {"est_verrouille": False, "est_confirme": False}
-        )
-        moyennes_par_champ_calculees[champ_no] = {
-            "champ_nom": champ["champnom"],
-            "est_verrouille": statut["est_verrouille"],
-            "est_confirme": statut["est_confirme"],
-            "nb_enseignants_tp": 0,
-            "periodes_choisies_tp": 0.0,
-            "moyenne": 0.0,
-            "periodes_magiques": 0.0,
-        }
-
-    enseignants_par_champ_temp: dict[str, Any] = {
-        str(champ["champno"]): {
-            "champno": str(champ["champno"]),
-            "champnom": champ["champnom"],
-            "enseignants": [],
-            "est_verrouille": moyennes_par_champ_calculees[str(champ["champno"])][
-                "est_verrouille"
-            ],
-            "est_confirme": moyennes_par_champ_calculees[str(champ["champno"])][
-                "est_confirme"
-            ],
-        }
-        for champ in tous_les_champs
-    }
-
-    # Étape 3 : Parcourir les enseignants pour peupler les structures initialisées.
-    for ens in tous_enseignants_details:
-        champ_no = ens["champno"]
-        if champ_no in enseignants_par_champ_temp:
-            enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
-
-        if ens["compte_pour_moyenne_champ"] and champ_no in moyennes_par_champ_calculees:
-            moyennes_par_champ_calculees[champ_no]["nb_enseignants_tp"] += 1
-            moyennes_par_champ_calculees[champ_no]["periodes_choisies_tp"] += ens[
-                "total_periodes"
-            ]
-
-    # Étape 4 : Calculer les moyennes, totaux et agrégats finaux.
-    total_periodes_global_tp = 0.0
-    nb_enseignants_tp_global = 0
-    total_periodes_confirme_tp = 0.0
-    nb_enseignants_confirme_tp = 0
-    total_enseignants_tp_etablissement = 0
-    total_periodes_choisies_tp_etablissement = 0.0
-    total_periodes_magiques_etablissement = 0.0
-
-    for data in moyennes_par_champ_calculees.values():
-        nb_ens_tp = data["nb_enseignants_tp"]
-        periodes_choisies_tp = data["periodes_choisies_tp"]
-
-        data["moyenne"] = (periodes_choisies_tp / nb_ens_tp) if nb_ens_tp > 0 else 0.0
-        data["periodes_magiques"] = periodes_choisies_tp - (nb_ens_tp * 24)
-
-        total_enseignants_tp_etablissement += nb_ens_tp
-        total_periodes_choisies_tp_etablissement += periodes_choisies_tp
-        total_periodes_magiques_etablissement += data["periodes_magiques"]
-
-        if nb_ens_tp > 0:
-            total_periodes_global_tp += periodes_choisies_tp
-            nb_enseignants_tp_global += nb_ens_tp
-            if data["est_confirme"]:
-                total_periodes_confirme_tp += periodes_choisies_tp
-                nb_enseignants_confirme_tp += nb_ens_tp
-
-    moyenne_generale_calculee = (
-        (total_periodes_global_tp / nb_enseignants_tp_global)
-        if nb_enseignants_tp_global > 0
-        else 0.0
-    )
-    moyenne_prelim_conf = (
-        (total_periodes_confirme_tp / nb_enseignants_confirme_tp)
-        if nb_enseignants_confirme_tp > 0
-        else 0.0
-    )
-
-    grand_totals = {
-        "total_enseignants_tp": total_enseignants_tp_etablissement,
-        "total_periodes_choisies_tp": total_periodes_choisies_tp_etablissement,
-        "total_periodes_magiques": total_periodes_magiques_etablissement,
-    }
-
-    return (
-        list(enseignants_par_champ_temp.values()),
-        moyennes_par_champ_calculees,
-        moyenne_generale_calculee,
-        moyenne_prelim_conf,
-        grand_totals,
-    )
-
-
 # --- ROUTES DES PAGES (HTML) ---
-
-
-@bp.route("/sommaire")
-@dashboard_access_required
-def page_sommaire() -> str:
-    """Affiche la page du sommaire global des moyennes pour l'année active."""
-    if not g.annee_active:
-        flash(
-            "Aucune année scolaire n'est disponible. Veuillez en créer une "
-            "dans la section 'Données'.",
-            "warning",
-        )
-        return render_template(
-            "page_sommaire.html",
-            moyennes_par_champ={},
-            moyenne_generale=0.0,
-            moyenne_preliminaire_confirmee=0.0,
-            grand_totals={
-                "total_enseignants_tp": 0,
-                "total_periodes_choisies_tp": 0.0,
-                "total_periodes_magiques": 0.0,
-            },
-        )
-
-    annee_id = g.annee_active["annee_id"]
-    _, moyennes_champs, moyenne_gen, moyenne_prelim_conf, grand_totals_data = (
-        calculer_donnees_sommaire(annee_id)
-    )
-
-    return render_template(
-        "page_sommaire.html",
-        moyennes_par_champ=moyennes_champs,
-        moyenne_generale=moyenne_gen,
-        moyenne_preliminaire_confirmee=moyenne_prelim_conf,
-        grand_totals=grand_totals_data,
-    )
-
-
-@bp.route("/detail_taches")
-@dashboard_access_required
-def page_detail_taches() -> str:
-    """Affiche la page de détail des tâches par enseignant pour l'année active."""
-    if not g.annee_active:
-        flash(
-            "Aucune année scolaire n'est disponible. Les détails ne peuvent "
-            "être affichés.",
-            "warning",
-        )
-        return render_template("detail_taches.html", enseignants_par_champ=[])
-
-    annee_id = g.annee_active["annee_id"]
-    enseignants_par_champ_data, _, _, _, _ = calculer_donnees_sommaire(annee_id)
-
-    return render_template(
-        "detail_taches.html", enseignants_par_champ=enseignants_par_champ_data
-    )
 
 
 @bp.route("/donnees")
@@ -282,9 +94,14 @@ def api_creer_annee() -> Any:
             400,
         )
 
+    # g.annee_courante n'est pas défini dans le contexte d'une requête API.
+    # Il faut vérifier directement dans la base.
+    annee_courante_existante = db.get_annee_courante()
+
     new_annee = db.create_annee_scolaire(libelle)
     if new_annee:
-        if not g.annee_courante:
+        # Si aucune année n'était définie comme courante, la nouvelle le devient.
+        if not annee_courante_existante:
             db.set_annee_courante(new_annee["annee_id"])
             new_annee["est_courante"] = True
         current_app.logger.info(
@@ -292,7 +109,11 @@ def api_creer_annee() -> Any:
         )
         return (
             jsonify(
-                {"success": True, "message": f"Année '{libelle}' créée.", "annee": new_annee}
+                {
+                    "success": True,
+                    "message": f"Année '{libelle}' créée.",
+                    "annee": new_annee,
+                }
             ),
             201,
         )
@@ -301,27 +122,6 @@ def api_creer_annee() -> Any:
         jsonify({"success": False, "message": f"L'année '{libelle}' existe déjà."}),
         409,
     )
-
-
-@bp.route("/api/annees/changer_active", methods=["POST"])
-@dashboard_api_access_required
-def api_changer_annee_active() -> Any:
-    """API pour changer l'année de travail (stockée en session)."""
-    data = request.get_json()
-    if not data or not (annee_id := data.get("annee_id")):
-        return jsonify({"success": False, "message": "ID de l'année manquant."}), 400
-
-    session["annee_scolaire_id"] = annee_id
-    annee_selectionnee = next(
-        (annee for annee in g.toutes_les_annees if annee["annee_id"] == annee_id),
-        None,
-    )
-    if annee_selectionnee:
-        current_app.logger.info(
-            f"Année de travail changée pour l'utilisateur '{current_user.username}' : "
-            f"'{annee_selectionnee['libelle_annee']}'."
-        )
-    return jsonify({"success": True, "message": "Année de travail changée."})
 
 
 @bp.route("/api/annees/set_courante", methods=["POST"])
@@ -333,10 +133,8 @@ def api_set_annee_courante() -> Any:
         return jsonify({"success": False, "message": "ID de l'année manquant."}), 400
 
     if db.set_annee_courante(annee_id):
-        annee_maj = next(
-            (annee for annee in g.toutes_les_annees if annee["annee_id"] == annee_id),
-            None,
-        )
+        # On ne peut pas se fier à g.toutes_les_annees ici, on récupère l'année directement.
+        annee_maj = db.get_annee_by_id(annee_id)
         if annee_maj:
             current_app.logger.info(
                 "Année courante de l'application définie sur : "
@@ -347,46 +145,6 @@ def api_set_annee_courante() -> Any:
     return (
         jsonify({"success": False, "message": "Erreur lors de la mise à jour."}),
         500,
-    )
-
-
-# --- API pour les tableaux de bord (année-dépendantes) ---
-
-
-@bp.route("/api/sommaire/donnees", methods=["GET"])
-@dashboard_api_access_required
-def api_get_donnees_sommaire() -> Any:
-    """API pour récupérer les données du sommaire pour l'année active."""
-    if not g.annee_active:
-        current_app.logger.warning(
-            "API sommaire: Aucune année active, retour de données vides."
-        )
-        return jsonify(
-            enseignants_par_champ=[],
-            moyennes_par_champ={},
-            moyenne_generale=0.0,
-            moyenne_preliminaire_confirmee=0.0,
-            grand_totals={
-                "total_enseignants_tp": 0,
-                "total_periodes_choisies_tp": 0.0,
-                "total_periodes_magiques": 0.0,
-            },
-        )
-
-    annee_id = g.annee_active["annee_id"]
-    (
-        enseignants_groupes,
-        moyennes_champs,
-        moyenne_gen,
-        moyenne_prelim_conf,
-        grand_totals_data,
-    ) = calculer_donnees_sommaire(annee_id)
-    return jsonify(
-        enseignants_par_champ=enseignants_groupes,
-        moyennes_par_champ=moyennes_champs,
-        moyenne_generale=moyenne_gen,
-        moyenne_preliminaire_confirmee=moyenne_prelim_conf,
-        grand_totals=grand_totals_data,
     )
 
 
@@ -474,7 +232,10 @@ def api_basculer_confirmation_champ(champ_no: str) -> Any:
 def api_create_cours() -> Any:
     """API pour créer un nouveau cours dans l'année active."""
     if not g.annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+        return (
+            jsonify({"success": False, "message": "Aucune année scolaire active."}),
+            400,
+        )
     data = request.get_json()
     required_keys = [
         "codecours",
@@ -519,11 +280,16 @@ def api_create_cours() -> Any:
 def api_get_cours_details(code_cours: str) -> Any:
     """API pour récupérer les détails d'un cours de l'année active."""
     if not g.annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 404
+        return (
+            jsonify({"success": False, "message": "Aucune année scolaire active."}),
+            404,
+        )
     cours = db.get_cours_details(code_cours, g.annee_active["annee_id"])
     if not cours:
         return (
-            jsonify({"success": False, "message": "Cours non trouvé pour cette année."}),
+            jsonify(
+                {"success": False, "message": "Cours non trouvé pour cette année."}
+            ),
             404,
         )
     return jsonify({"success": True, "cours": cours})
@@ -534,7 +300,10 @@ def api_get_cours_details(code_cours: str) -> Any:
 def api_update_cours(code_cours: str) -> Any:
     """API pour modifier un cours de l'année active."""
     if not g.annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+        return (
+            jsonify({"success": False, "message": "Aucune année scolaire active."}),
+            400,
+        )
     data = request.get_json()
     required_keys = [
         "champno",
@@ -574,7 +343,10 @@ def api_update_cours(code_cours: str) -> Any:
 def api_delete_cours(code_cours: str) -> Any:
     """API pour supprimer un cours de l'année active."""
     if not g.annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+        return (
+            jsonify({"success": False, "message": "Aucune année scolaire active."}),
+            400,
+        )
     success, message = db.delete_cours(code_cours, g.annee_active["annee_id"])
     status_code = 200 if success else 400
     if success:
@@ -590,7 +362,10 @@ def api_delete_cours(code_cours: str) -> Any:
 def api_create_enseignant() -> Any:
     """API pour créer un nouvel enseignant dans l'année active."""
     if not g.annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+        return (
+            jsonify({"success": False, "message": "Aucune année scolaire active."}),
+            400,
+        )
     data = request.get_json()
     if not data or not all(
         k in data for k in ["nom", "prenom", "champno", "esttempsplein"]
@@ -769,7 +544,9 @@ def api_importer_cours_excel() -> Any:
             est_autre_raw = values[6] if len(values) > 6 else None
             financement_code_raw = values[7] if len(values) > 7 else None
 
-            if not all([champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw]):
+            if not all(
+                [champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw]
+            ):
                 flash(f"Ligne {row_idx}: Données manquantes.", "warning")
                 continue
 
@@ -791,7 +568,9 @@ def api_importer_cours_excel() -> Any:
                         "champno": str(champ_no_raw).strip(),
                         "coursdescriptif": str(desc_raw).strip(),
                         "nbperiodes": float(str(nb_per_raw).replace(",", ".")),
-                        "nbgroupeinitial": int(float(str(nb_grp_raw).replace(",", "."))),
+                        "nbgroupeinitial": int(
+                            float(str(nb_grp_raw).replace(",", "."))
+                        ),
                         "estcoursautre": est_autre,
                         "financement_code": financement_code,
                     }
@@ -887,7 +666,9 @@ def api_importer_enseignants_excel() -> Any:
                 values[3],
             )
 
-            if not all([champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]):
+            if not all(
+                [champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]
+            ):
                 flash(f"Ligne enseignant {row_idx}: Données manquantes.", "warning")
                 continue
 
@@ -952,181 +733,6 @@ def api_importer_enseignants_excel() -> Any:
     return redirect(url_for("admin.page_administration_donnees"))
 
 
-@bp.route("/exporter_taches_excel")
-@dashboard_access_required
-def exporter_taches_excel() -> Any:
-    """Exporte toutes les tâches attribuées pour l'année active dans un fichier Excel."""
-    if not g.annee_active:
-        flash("Exportation impossible : aucune année scolaire n'est active.", "error")
-        return redirect(url_for("admin.page_sommaire"))
-
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
-    attributions_raw = db.get_all_attributions_for_export(annee_id)
-
-    if not attributions_raw:
-        flash(f"Aucune tâche attribuée pour '{annee_libelle}'.", "warning")
-        return redirect(url_for("admin.page_sommaire"))
-
-    attributions_par_champ: dict[str, dict[str, Any]] = {}
-    for attr in attributions_raw:
-        champ_no = attr["champno"]
-        if champ_no not in attributions_par_champ:
-            attributions_par_champ[champ_no] = {
-                "nom": attr["champnom"],
-                "attributions": [],
-            }
-        attributions_par_champ[champ_no]["attributions"].append(attr)
-
-    mem_file = exports.generer_export_taches(attributions_par_champ)
-    filename = f"export_taches_{annee_libelle}.xlsx"
-    current_app.logger.info(f"Génération du fichier d'export '{filename}'.")
-
-    return Response(
-        mem_file,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
-
-
-@bp.route("/exporter_periodes_restantes_excel")
-@dashboard_access_required
-def exporter_periodes_restantes_excel() -> Any:
-    """Exporte les périodes non attribuées (restantes) pour l'année active."""
-    if not g.annee_active:
-        flash("Exportation impossible : aucune année scolaire n'est active.", "error")
-        return redirect(url_for("admin.page_sommaire"))
-
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
-    periodes_restantes_raw = db.get_periodes_restantes_for_export(annee_id)
-
-    if not periodes_restantes_raw:
-        flash(f"Aucune période restante pour '{annee_libelle}'.", "warning")
-        return redirect(url_for("admin.page_sommaire"))
-
-    periodes_par_champ: dict[str, dict[str, Any]] = {}
-    for periode in periodes_restantes_raw:
-        champ_no = periode["champno"]
-        if champ_no not in periodes_par_champ:
-            periodes_par_champ[champ_no] = {
-                "nom": periode["champnom"],
-                "periodes": [],
-            }
-        periodes_par_champ[champ_no]["periodes"].append(periode)
-
-    mem_file = exports.generer_export_periodes_restantes(periodes_par_champ)
-    filename = f"export_periodes_restantes_{annee_libelle}.xlsx"
-    current_app.logger.info(f"Génération de l'export '{filename}'.")
-
-    return Response(
-        mem_file,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
-
-
-@bp.route("/exporter_org_scolaire_excel")
-@dashboard_access_required
-def exporter_org_scolaire_excel() -> Any:
-    """Exporte les données pour l'organisation scolaire pour l'année active."""
-    if not g.annee_active:
-        flash("Exportation impossible : aucune année scolaire n'est active.", "error")
-        return redirect(url_for("admin.page_sommaire"))
-
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
-
-    # Étape 1: Mapper le libellé du financement à l'en-tête de colonne Excel.
-    tous_les_financements = db.get_all_financements()
-    libelle_to_header_map = {
-        f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}"
-        for f in tous_les_financements
-    }
-    libelle_to_header_map["SOUTIEN EN SPORT-ÉTUDES"] = "PÉRIODES SOUTIEN SPORT-ÉTUDES"
-
-    code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
-
-    # Étape 2: Récupérer les données brutes
-    donnees_raw = db.get_data_for_org_scolaire_export(annee_id)
-    if not donnees_raw:
-        flash(f"Aucune donnée à exporter pour '{annee_libelle}'.", "warning")
-        return redirect(url_for("admin.page_sommaire"))
-
-    # Étape 3: Pivoter les données
-    pivot_data: dict[str, dict[str, Any]] = {}
-    ALL_HEADERS = [
-        "PÉRIODES RÉGULIER",
-        "PÉRIODES ADAPTATION SCOLAIRE",
-        "PÉRIODES SPORT-ÉTUDES",
-        "PÉRIODES ENSEIGNANT RESSOURCE",
-        "PÉRIODES AIDESEC",
-        "PÉRIODES DIPLÔMA",
-        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
-        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
-        "PÉRIODES MESURE SEUIL (POUR FABLAB)",
-        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
-        "PÉRIODES ALTERNE",
-        "PÉRIODES FORMANUM",
-        "PÉRIODES MENTORAT",
-        "PÉRIODES COORDINATION SPORT-ÉTUDES",
-        "PÉRIODES SOUTIEN SPORT-ÉTUDES",
-    ]
-
-    for item in donnees_raw:
-        champ_no = item["champno"]
-        enseignant_key = (
-            f"fictif-{item['nomcomplet']}"
-            if item["estfictif"]
-            else f"reel-{item['nom']}-{item['prenom']}"
-        )
-
-        if enseignant_key not in pivot_data.setdefault(champ_no, {}):
-            pivot_data[champ_no][enseignant_key] = {
-                "nom": item["nom"],
-                "prenom": item["prenom"],
-                "nomcomplet": item["nomcomplet"],
-                "estfictif": item["estfictif"],
-                "champnom": item["champnom"],
-                **{header: 0.0 for header in ALL_HEADERS},
-            }
-
-        total_p = float(item["total_periodes"] or 0.0)
-        financement_code = item["financement_code"]
-        target_col = "PÉRIODES RÉGULIER"
-
-        if financement_code and financement_code in code_to_libelle_map:
-            libelle_upper = code_to_libelle_map[financement_code]
-            if libelle_upper in libelle_to_header_map:
-                target_col = libelle_to_header_map[libelle_upper]
-
-        if target_col in pivot_data[champ_no][enseignant_key]:
-            pivot_data[champ_no][enseignant_key][target_col] += total_p
-        else:
-            current_app.logger.warning(
-                f"L'en-tête de colonne '{target_col}' n'a pas été trouvé. "
-                f"Les périodes pour le code '{financement_code}' sont ignorées."
-            )
-
-    donnees_par_champ: dict[str, dict[str, Any]] = {}
-    for champ_no, enseignants in pivot_data.items():
-        donnees_par_champ[champ_no] = {
-            "nom": next(iter(enseignants.values()))["champnom"],
-            "donnees": list(enseignants.values()),
-        }
-
-    # Étape 4: Générer le fichier Excel
-    mem_file = exports.generer_export_org_scolaire(donnees_par_champ)
-    filename = f"export_org_scolaire_{annee_libelle}.xlsx"
-    current_app.logger.info(f"Génération de l'export '{filename}'.")
-
-    return Response(
-        mem_file,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
-
-
 # --- API pour la gestion des Types de Financement (admin seulement) ---
 
 
@@ -1165,7 +771,9 @@ def api_create_financement() -> Any:
         )
     except psycopg2.errors.UniqueViolation:
         return (
-            jsonify({"success": False, "message": "Ce code de financement existe déjà."}),
+            jsonify(
+                {"success": False, "message": "Ce code de financement existe déjà."}
+            ),
             409,
         )
     except psycopg2.Error as e:
@@ -1238,7 +846,10 @@ def api_create_user() -> Any:
     ):
         return (
             jsonify(
-                {"success": False, "message": "Nom d'utilisateur, mdp et rôle requis."}
+                {
+                    "success": False,
+                    "message": "Nom d'utilisateur, mdp et rôle requis.",
+                }
             ),
             400,
         )
@@ -1255,7 +866,9 @@ def api_create_user() -> Any:
     user = db.create_user(username, generate_password_hash(password))
     if not user:
         return (
-            jsonify({"success": False, "message": "Ce nom d'utilisateur est déjà pris."}),
+            jsonify(
+                {"success": False, "message": "Ce nom d'utilisateur est déjà pris."}
+            ),
             409,
         )
 
@@ -1263,7 +876,9 @@ def api_create_user() -> Any:
     role = data.get("role")
     is_admin = role == "admin"
     is_dashboard_only = role == "dashboard_only"
-    allowed_champs = data.get("allowed_champs", []) if role == "specific_champs" else []
+    allowed_champs = (
+        data.get("allowed_champs", []) if role == "specific_champs" else []
+    )
 
     if not db.update_user_role_and_access(
         user["id"], is_admin, is_dashboard_only, allowed_champs
@@ -1271,10 +886,13 @@ def api_create_user() -> Any:
         # En cas d'échec, on annule la création.
         db.delete_user_data(user["id"])
         current_app.logger.error(
-            f"Échec de l'attribution du rôle/accès pour le nouvel utilisateur {username}."
+            "Échec de l'attribution du rôle/accès pour le nouvel utilisateur "
+            f"{username}."
         )
         return (
-            jsonify({"success": False, "message": "Erreur lors de la définition du rôle."}),
+            jsonify(
+                {"success": False, "message": "Erreur lors de la définition du rôle."}
+            ),
             500,
         )
 
@@ -1308,7 +926,9 @@ def api_update_user_role(user_id: int) -> Any:
     role = data["role"]
     is_admin = role == "admin"
     is_dashboard_only = role == "dashboard_only"
-    allowed_champs = data.get("allowed_champs", []) if role == "specific_champs" else []
+    allowed_champs = (
+        data.get("allowed_champs", []) if role == "specific_champs" else []
+    )
 
     if db.update_user_role_and_access(
         user_id, is_admin, is_dashboard_only, allowed_champs
@@ -1317,7 +937,10 @@ def api_update_user_role(user_id: int) -> Any:
         return jsonify({"success": True, "message": "Rôle et accès mis à jour."})
 
     current_app.logger.error(f"Échec MAJ rôle/accès pour l'user ID {user_id}.")
-    return jsonify({"success": False, "message": "Erreur lors de la mise à jour."}), 500
+    return (
+        jsonify({"success": False, "message": "Erreur lors de la mise à jour."}),
+        500,
+    )
 
 
 @bp.route("/api/utilisateurs/<int:user_id>/delete", methods=["POST"])
@@ -1337,14 +960,18 @@ def api_delete_user(user_id: int) -> Any:
     if target_user["is_admin"] and db.get_admin_count() <= 1:
         return (
             jsonify(
-                {"success": False, "message": "Impossible de supprimer le dernier admin."}
+                {
+                    "success": False,
+                    "message": "Impossible de supprimer le dernier admin.",
+                }
             ),
             403,
         )
 
     if db.delete_user_data(user_id):
         current_app.logger.info(
-            f"User ID {user_id} ('{target_user['username']}') supprimé par '{current_user.username}'."
+            f"User ID {user_id} ('{target_user['username']}') supprimé par "
+            f"'{current_user.username}'."
         )
         return jsonify({"success": True, "message": "Utilisateur supprimé."})
 
@@ -1357,7 +984,10 @@ def api_delete_user(user_id: int) -> Any:
 def api_reassigner_cours_champ() -> Any:
     """API pour réassigner un cours à un nouveau champ, pour l'année active."""
     if not g.annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+        return (
+            jsonify({"success": False, "message": "Aucune année scolaire active."}),
+            400,
+        )
 
     data = request.get_json()
     if (
@@ -1395,7 +1025,10 @@ def api_reassigner_cours_champ() -> Any:
 def api_reassigner_cours_financement() -> Any:
     """API pour réassigner un cours à un nouveau type de financement, pour l'année active."""
     if not g.annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+        return (
+            jsonify({"success": False, "message": "Aucune année scolaire active."}),
+            400,
+        )
 
     data = request.get_json()
     if not data or not (code_cours := data.get("code_cours")):
