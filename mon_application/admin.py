@@ -9,9 +9,8 @@ utilisateurs avec des privilèges d'administrateur via les décorateurs
 `admin_required` et `admin_api_required`.
 """
 
-from typing import Any, cast
+from typing import Any
 
-import openpyxl
 import psycopg2
 import psycopg2.extras
 from flask import (
@@ -27,11 +26,10 @@ from flask import (
 )
 from flask_login import current_user
 from openpyxl.utils.exceptions import InvalidFileException
-from openpyxl.worksheet.worksheet import Worksheet
-from psycopg2.extensions import connection
 from werkzeug.security import generate_password_hash
 
 from . import database as db
+from . import services
 from .utils import admin_api_required, admin_required
 
 # Crée un Blueprint 'admin' avec un préfixe d'URL.
@@ -497,16 +495,19 @@ def api_delete_enseignant(enseignant_id: int) -> Any:
     return jsonify({"success": False, "message": "Échec de la suppression."}), 500
 
 
+# --- ROUTES DE GESTION DE FORMULAIRES (HTML) ---
+
+
 @bp.route("/importer_cours_excel", methods=["POST"])
 @admin_required
-def api_importer_cours_excel() -> Any:
-    """Importe les cours depuis Excel pour l'année active, en écrasant les données."""
+def importer_cours_excel() -> Any:
+    """
+    Traite l'upload d'un fichier Excel de cours.
+    La logique de parsing et de sauvegarde est déléguée à la couche de services.
+    """
     if not g.annee_active:
         flash("Importation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
-
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
 
     if "fichier_cours" not in request.files:
         flash("Aucun fichier sélectionné.", "warning")
@@ -521,118 +522,46 @@ def api_importer_cours_excel() -> Any:
         flash("Format de fichier invalide. Utilisez un fichier .xlsx.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
-    nouveaux_cours = []
     try:
-        workbook = openpyxl.load_workbook(file.stream)
-        sheet = cast(Worksheet, workbook.active)
-        if sheet.max_row <= 1:
-            raise ValueError("Fichier Excel vide ou ne contenant que l'en-tête.")
+        # Étape 1: Déléguer le parsing du fichier au service
+        cours_data = services.process_courses_excel(file.stream)
 
-        for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
-            values = [cell.value for cell in row]
-            # Colonnes: 0:champ, 1:code, 2:N/A, 3:desc, 4:grp, 5:per, 6:autre, 7:financement
-            if not any(v is not None and str(v).strip() != "" for v in values[:7]):
-                continue
-
-            (
-                champ_no_raw,
-                code_cours_raw,
-                desc_raw,
-                nb_grp_raw,
-                nb_per_raw,
-            ) = (values[0], values[1], values[3], values[4], values[5])
-            est_autre_raw = values[6] if len(values) > 6 else None
-            financement_code_raw = values[7] if len(values) > 7 else None
-
-            if not all(
-                [champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw]
-            ):
-                flash(f"Ligne {row_idx}: Données manquantes.", "warning")
-                continue
-
-            try:
-                est_autre = str(est_autre_raw).strip().upper() in (
-                    "VRAI",
-                    "TRUE",
-                    "OUI",
-                    "YES",
-                    "1",
-                )
-                financement_code = (
-                    str(financement_code_raw).strip() if financement_code_raw else None
-                )
-
-                nouveaux_cours.append(
-                    {
-                        "codecours": str(code_cours_raw).strip(),
-                        "champno": str(champ_no_raw).strip(),
-                        "coursdescriptif": str(desc_raw).strip(),
-                        "nbperiodes": float(str(nb_per_raw).replace(",", ".")),
-                        "nbgroupeinitial": int(
-                            float(str(nb_grp_raw).replace(",", "."))
-                        ),
-                        "estcoursautre": est_autre,
-                        "financement_code": financement_code,
-                    }
-                )
-            except (ValueError, TypeError) as ve:
-                flash(f"Ligne {row_idx}: Erreur de type de données ({ve}).", "warning")
-                continue
-
-    except InvalidFileException:
-        flash("Fichier Excel corrompu ou invalide.", "error")
-        return redirect(url_for("admin.page_administration_donnees"))
-    except ValueError as e_val:
-        flash(str(e_val), "error")
-        return redirect(url_for("admin.page_administration_donnees"))
-    except Exception as e_gen:
-        current_app.logger.error(
-            f"Erreur imprévue lecture Excel cours: {e_gen}", exc_info=True
+        # Étape 2: Déléguer la sauvegarde transactionnelle au service
+        stats = services.save_imported_courses(
+            cours_data, g.annee_active["annee_id"]
         )
-        flash(f"Erreur inattendue: {e_gen}", "error")
-        return redirect(url_for("admin.page_administration_donnees"))
 
-    if not nouveaux_cours:
-        flash("Aucun cours valide trouvé dans le fichier.", "warning")
-        return redirect(url_for("admin.page_administration_donnees"))
-
-    conn = cast(connection | None, db.get_db())
-    if not conn:
-        flash("Erreur de connexion à la base de données.", "error")
-        return redirect(url_for("admin.page_administration_donnees"))
-
-    try:
-        with conn.cursor():
-            nb_attr_supp = db.delete_all_attributions_for_year(annee_id)
-            nb_cours_supp = db.delete_all_cours_for_year(annee_id)
-            for cours in nouveaux_cours:
-                # La création se fait via la fonction DAO pour centraliser la logique
-                db.create_cours(cours, annee_id)
-            conn.commit()
         flash(
-            f"{len(nouveaux_cours)} cours importés pour '{annee_libelle}'. "
-            f"Anciens cours ({nb_cours_supp}) et attributions ({nb_attr_supp}) "
-            "supprimés.",
+            f"{stats.imported_count} cours importés pour '{g.annee_active['libelle_annee']}'. "
+            f"Anciens cours ({stats.deleted_main_entities_count}) et "
+            f"attributions ({stats.deleted_attributions_count}) supprimés.",
             "success",
         )
+
+    except (InvalidFileException, ValueError) as e:
+        flash(str(e), "error")
     except psycopg2.Error as e_db:
-        conn.rollback()
         current_app.logger.error(f"Erreur DB importation cours: {e_db}", exc_info=True)
         flash(f"Erreur base de données: {e_db}. Importation annulée.", "error")
+    except Exception as e_gen:
+        current_app.logger.error(
+            f"Erreur imprévue importation cours: {e_gen}", exc_info=True
+        )
+        flash(f"Erreur inattendue: {e_gen}", "error")
 
     return redirect(url_for("admin.page_administration_donnees"))
 
 
 @bp.route("/importer_enseignants_excel", methods=["POST"])
 @admin_required
-def api_importer_enseignants_excel() -> Any:
-    """Importe les enseignants depuis Excel pour l'année active, en écrasant les données."""
+def importer_enseignants_excel() -> Any:
+    """
+    Traite l'upload d'un fichier Excel d'enseignants.
+    La logique de parsing et de sauvegarde est déléguée à la couche de services.
+    """
     if not g.annee_active:
         flash("Importation impossible : aucune année scolaire n'est active.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
-
-    annee_id = g.annee_active["annee_id"]
-    annee_libelle = g.annee_active["libelle_annee"]
 
     if "fichier_enseignants" not in request.files:
         flash("Aucun fichier sélectionné.", "warning")
@@ -647,88 +576,34 @@ def api_importer_enseignants_excel() -> Any:
         flash("Format de fichier invalide. Utilisez un fichier .xlsx.", "error")
         return redirect(url_for("admin.page_administration_donnees"))
 
-    nouveaux_enseignants = []
     try:
-        workbook = openpyxl.load_workbook(file.stream)
-        sheet = cast(Worksheet, workbook.active)
-        if sheet.max_row <= 1:
-            raise ValueError("Fichier Excel vide ou ne contenant que l'en-tête.")
+        # Étape 1: Déléguer le parsing du fichier au service
+        enseignants_data = services.process_teachers_excel(file.stream)
 
-        for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
-            values = [cell.value for cell in row]
-            if not any(v is not None and str(v).strip() != "" for v in values[:4]):
-                continue
+        # Étape 2: Déléguer la sauvegarde transactionnelle au service
+        stats = services.save_imported_teachers(
+            enseignants_data, g.annee_active["annee_id"]
+        )
 
-            champ_no_raw, nom_raw, prenom_raw, temps_plein_raw = (
-                values[0],
-                values[1],
-                values[2],
-                values[3],
-            )
-
-            if not all(
-                [champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]
-            ):
-                flash(f"Ligne enseignant {row_idx}: Données manquantes.", "warning")
-                continue
-
-            try:
-                nom_clean, prenom_clean = str(nom_raw).strip(), str(prenom_raw).strip()
-                if not nom_clean or not prenom_clean:
-                    continue
-                nouveaux_enseignants.append(
-                    {
-                        "nomcomplet": f"{prenom_clean} {nom_clean}",
-                        "nom": nom_clean,
-                        "prenom": prenom_clean,
-                        "champno": str(champ_no_raw).strip(),
-                        "esttempsplein": str(temps_plein_raw).strip().upper()
-                        in ("VRAI", "TRUE", "OUI", "YES", "1"),
-                    }
-                )
-            except (ValueError, TypeError) as ve_ens:
-                flash(f"Ligne {row_idx}: Erreur de conversion ({ve_ens}).", "warning")
-                continue
-
-    except InvalidFileException:
-        flash("Fichier Excel des enseignants corrompu ou invalide.", "error")
-        return redirect(url_for("admin.page_administration_donnees"))
-    except ValueError as e_val_ens:
-        flash(str(e_val_ens), "error")
-        return redirect(url_for("admin.page_administration_donnees"))
-    except Exception as e_gen_ens:
-        current_app.logger.error(f"Erreur lecture Excel: {e_gen_ens}", exc_info=True)
-        flash(f"Erreur inattendue: {e_gen_ens}", "error")
-        return redirect(url_for("admin.page_administration_donnees"))
-
-    if not nouveaux_enseignants:
-        flash("Aucun enseignant valide trouvé dans le fichier.", "warning")
-        return redirect(url_for("admin.page_administration_donnees"))
-
-    conn = cast(connection | None, db.get_db())
-    if not conn:
-        flash("Erreur de connexion à la base de données.", "error")
-        return redirect(url_for("admin.page_administration_donnees"))
-
-    try:
-        with conn.cursor():
-            nb_attr_supp_ens = db.delete_all_attributions_for_year(annee_id)
-            nb_ens_supp = db.delete_all_enseignants_for_year(annee_id)
-            for ens in nouveaux_enseignants:
-                db.create_enseignant(ens, annee_id)
-            conn.commit()
         flash(
-            f"{len(nouveaux_enseignants)} enseignants importés pour '{annee_libelle}'. "
-            f"Anciens enseignants ({nb_ens_supp}) et attributions ({nb_attr_supp_ens}) "
-            "supprimés.",
+            f"{stats.imported_count} enseignants importés pour '{g.annee_active['libelle_annee']}'. "
+            f"Anciens enseignants ({stats.deleted_main_entities_count}) et "
+            f"attributions ({stats.deleted_attributions_count}) supprimés.",
             "success",
         )
-    except psycopg2.Error as e_db_ens:
-        conn.rollback()
+
+    except (InvalidFileException, ValueError) as e:
+        flash(str(e), "error")
+    except psycopg2.Error as e_db:
         current_app.logger.error(
-            f"Erreur DB importation enseignants: {e_db_ens}", exc_info=True
+            f"Erreur DB importation enseignants: {e_db}", exc_info=True
         )
-        flash(f"Erreur base de données: {e_db_ens}. Importation annulée.", "error")
+        flash(f"Erreur base de données: {e_db}. Importation annulée.", "error")
+    except Exception as e_gen:
+        current_app.logger.error(
+            f"Erreur imprévue importation enseignants: {e_gen}", exc_info=True
+        )
+        flash(f"Erreur inattendue: {e_gen}", "error")
 
     return redirect(url_for("admin.page_administration_donnees"))
 
@@ -1037,7 +912,7 @@ def api_reassigner_cours_financement() -> Any:
     # nouveau_financement_code peut être une chaîne vide, ce qui est valide (pour 'Aucun')
     nouveau_financement_code = data.get("nouveau_financement_code")
     # Une chaîne vide en JS doit devenir NULL en base de données.
-    financement_a_stocker = nouveau_financement_code if nouveau_financement_code else None
+    financement_a_stocker = nouveau_financement_code or None
 
     result = db.reassign_cours_to_financement(
         code_cours, g.annee_active["annee_id"], financement_a_stocker

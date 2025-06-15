@@ -239,7 +239,8 @@
     <div style="display: flex; gap: 2rem; margin-top: 1.5rem; flex-wrap: wrap;">
         <div style="flex: 1; min-width: 300px;">
             <h4>Importer des Enseignants</h4>
-            <form method="POST" action="{{ url_for('admin.api_importer_enseignants_excel') }}" enctype="multipart/form-data">
+            <!-- CORRECTION: 'api_importer_enseignants_excel' a été renommé 'importer_enseignants_excel' -->
+            <form method="POST" action="{{ url_for('admin.importer_enseignants_excel') }}" enctype="multipart/form-data">
                 <div class="form-group">
                     <input type="file" id="fichier_enseignants" name="fichier_enseignants" accept=".xlsx" required>
                 </div>
@@ -248,7 +249,8 @@
         </div>
         <div style="flex: 1; min-width: 300px;">
             <h4>Importer des Cours</h4>
-            <form method="POST" action="{{ url_for('admin.api_importer_cours_excel') }}" enctype="multipart/form-data">
+            <!-- CORRECTION: 'api_importer_cours_excel' a été renommé 'importer_cours_excel' -->
+            <form method="POST" action="{{ url_for('admin.importer_cours_excel') }}" enctype="multipart/form-data">
                 <div class="form-group">
                     <input type="file" id="fichier_cours" name="fichier_cours" accept=".xlsx" required>
                 </div>
@@ -405,6 +407,7 @@
     // On expose les URLs nécessaires au script externe.
     const PAGE_URLS = {
         creerAnnee: "{{ url_for('admin.api_creer_annee') }}",
+        // CORRECTION: La route pour changer l'année active est bien dans 'dashboard'
         changerAnneeActive: "{{ url_for('dashboard.api_changer_annee_active') }}",
         setAnneeCourante: "{{ url_for('admin.api_set_annee_courante') }}",
         createFinancement: "{{ url_for('admin.api_create_financement') }}",
