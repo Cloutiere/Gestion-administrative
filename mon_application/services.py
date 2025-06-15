@@ -9,6 +9,7 @@ règles de gestion et l'orchestration des appels à la couche d'accès aux
 données (DAO).
 """
 
+from collections import defaultdict
 from typing import Any, cast
 
 import openpyxl
@@ -192,7 +193,6 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
     return nouveaux_enseignants
 
 
-
 def save_imported_teachers(teachers_data: list[dict[str, Any]], annee_id: int) -> ImportationStats:
     """Sauvegarde les enseignants importés dans une transaction atomique."""
     # ... (code inchangé avec la petite correction sur nomcomplet)
@@ -219,7 +219,73 @@ def save_imported_teachers(teachers_data: list[dict[str, Any]], annee_id: int) -
     return stats
 
 
+# --- Nouveaux Services - Années Scolaires ---
+def get_all_annees_service() -> list[dict[str, Any]]:
+    """Récupère toutes les années scolaires."""
+    return db.get_all_annees()
+
+
+def create_annee_scolaire_service(libelle: str) -> dict[str, Any]:
+    """Crée une nouvelle année scolaire et la définit comme courante si aucune autre ne l'est."""
+    conn = cast(PgConnection | None, db.get_db())
+    if not conn:
+        raise ServiceException("Pas de connexion à la base de données.")
+    try:
+        with conn.cursor():
+            annee_courante_existante = db.get_annee_courante() is not None
+            new_annee = db.create_annee_scolaire(libelle)
+            if not new_annee:
+                raise DuplicateEntityError(f"L'année '{libelle}' existe déjà.")
+
+            if not annee_courante_existante:
+                db.set_annee_courante(new_annee["annee_id"])
+                new_annee["est_courante"] = True
+            conn.commit()
+            return new_annee
+    except psycopg2.Error as e:
+        if conn:
+            conn.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la création de l'année: {e}")
+
+
+def set_annee_courante_service(annee_id: int) -> None:
+    """Définit une année scolaire comme étant la courante."""
+    if not db.get_annee_by_id(annee_id):
+        raise EntityNotFoundError("Année non trouvée.")
+    if not db.set_annee_courante(annee_id):
+        raise ServiceException("La mise à jour de l'année courante a échoué.")
+
+
+# --- Nouveaux Services - Champs & Statuts ---
+def get_all_champs_service() -> list[dict[str, Any]]:
+    """Récupère tous les champs."""
+    return db.get_all_champs()
+
+
+def toggle_champ_lock_service(champ_no: str, annee_id: int) -> bool:
+    """Bascule le statut de verrouillage d'un champ pour l'année active."""
+    nouveau_statut = db.toggle_champ_annee_lock_status(champ_no, annee_id)
+    if nouveau_statut is None:
+        raise ServiceException(f"Impossible de modifier le verrou du champ {champ_no}.")
+    return nouveau_statut
+
+
+def toggle_champ_confirm_service(champ_no: str, annee_id: int) -> bool:
+    """Bascule le statut de confirmation d'un champ pour l'année active."""
+    nouveau_statut = db.toggle_champ_annee_confirm_status(champ_no, annee_id)
+    if nouveau_statut is None:
+        raise ServiceException(f"Impossible de modifier la confirmation du champ {champ_no}.")
+    return nouveau_statut
+
+
 # --- Services CRUD - Cours ---
+def get_course_details_service(code_cours: str, annee_id: int) -> dict[str, Any]:
+    """Récupère les détails d'un cours spécifique."""
+    cours = db.get_cours_details(code_cours, annee_id)
+    if not cours:
+        raise EntityNotFoundError("Cours non trouvé pour cette année.")
+    return cours
+
 
 def create_course_service(data: dict[str, Any], annee_id: int) -> dict[str, Any]:
     """Crée un cours après validation."""
@@ -277,6 +343,13 @@ def reassign_course_to_financement_service(code_cours: str, annee_id: int, code_
 
 
 # --- Services CRUD - Enseignants ---
+def get_teacher_details_service(enseignant_id: int) -> dict[str, Any]:
+    """Récupère les détails d'un enseignant non fictif."""
+    enseignant = db.get_enseignant_details(enseignant_id)
+    if not enseignant or enseignant["estfictif"]:
+        raise EntityNotFoundError("Enseignant non trouvé ou non modifiable.")
+    return enseignant
+
 
 def create_teacher_service(data: dict[str, Any], annee_id: int) -> dict[str, Any]:
     """Crée un enseignant après validation."""
@@ -340,6 +413,10 @@ def create_fictitious_teacher_service(champ_no: str, annee_id: int) -> dict[str,
 
 
 # --- Services CRUD - Financements ---
+def get_all_financements_service() -> list[dict[str, Any]]:
+    """Récupère tous les types de financement."""
+    return db.get_all_financements()
+
 
 def create_financement_service(code: str, libelle: str) -> dict[str, Any]:
     """Crée un type de financement."""
@@ -377,30 +454,57 @@ def delete_financement_service(code: str) -> None:
 
 
 # --- Services - Utilisateurs et Rôles ---
+def get_all_users_with_details_service() -> dict[str, Any]:
+    """Récupère tous les utilisateurs avec le décompte des admins."""
+    return {"users": db.get_all_users_with_access_info(), "admin_count": db.get_admin_count()}
+
 
 def create_user_service(username: str, password: str, role: str, allowed_champs: list[str]) -> dict[str, Any]:
     """Crée un utilisateur complet avec son rôle et ses accès."""
     if len(password) < 6:
         raise BusinessRuleValidationError("Le mot de passe doit faire au moins 6 caractères.")
+
     password_hash = generate_password_hash(password)
     conn = cast(PgConnection | None, db.get_db())
     if not conn:
         raise ServiceException("Pas de connexion à la base de données.")
+
+    user = None  # Correction: Initialisation de la variable à None
     try:
+        # Note: La fonction DAO db.create_user() committe sa propre transaction.
+        # Idéalement, elle ne le ferait pas et la transaction serait gérée ici.
         user = db.create_user(username, password_hash)
         if not user:
+            # Cette branche est atteinte si la contrainte d'unicité de la DB est violée
             raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
+
         is_admin = role == "admin"
         is_dashboard_only = role == "dashboard_only"
         champs_for_role = allowed_champs if role == "specific_champs" else []
-        if not db.update_user_role_and_access(user["id"], is_admin, is_dashboard_only, champs_for_role):
+
+        # Cette fonction DAO committe aussi sa propre transaction.
+        db.update_user_role_and_access(user["id"], is_admin, is_dashboard_only, champs_for_role)
+
+        conn.commit()  # Commit final de la transaction de service
+
+        user_complet = db.get_user_by_id(user["id"])
+        if not user_complet:
+            raise ServiceException("Erreur lors de la récupération de l'utilisateur après création.")
+        return user_complet
+    except Exception as e:
+        if conn:
+            conn.rollback()
+
+        # Logique de nettoyage : si l'utilisateur a été créé mais qu'une étape ultérieure a échoué
+        if user:
             db.delete_user_data(user["id"])
-            conn.commit()
-            raise ServiceException("Erreur lors de la définition du rôle pour le nouvel utilisateur.")
-        conn.commit()
-        return user
-    except psycopg2.Error as e:
-        conn.rollback()
+            if conn:
+                conn.commit()
+
+        if isinstance(e, psycopg2.errors.UniqueViolation):
+            raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
+        if isinstance(e, ServiceException):
+            raise e # Fait remonter les exceptions de service déjà levées
         raise ServiceException(f"Erreur base de données lors de la création de l'utilisateur: {e}")
 
 
@@ -408,11 +512,22 @@ def update_user_role_service(user_id: int, role: str, allowed_champs: list[str])
     """Met à jour le rôle et les accès d'un utilisateur."""
     if not db.get_user_by_id(user_id):
         raise EntityNotFoundError("Utilisateur non trouvé.")
+
     is_admin = role == "admin"
     is_dashboard_only = role == "dashboard_only"
     champs_for_role = allowed_champs if role == "specific_champs" else []
-    if not db.update_user_role_and_access(user_id, is_admin, is_dashboard_only, champs_for_role):
-        raise ServiceException("La mise à jour du rôle a échoué.")
+
+    conn = cast(PgConnection | None, db.get_db())
+    if not conn:
+        raise ServiceException("Pas de connexion à la base de données.")
+    try:
+        with conn.cursor():
+            db.update_user_role_and_access(user_id, is_admin, is_dashboard_only, champs_for_role)
+        conn.commit()
+    except psycopg2.Error as e:
+        if conn:
+            conn.rollback()
+        raise ServiceException(f"La mise à jour du rôle a échoué: {e}")
 
 
 def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
@@ -429,7 +544,6 @@ def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
 
 
 # --- Services - Attributions ---
-
 def add_attribution_service(enseignant_id: int, code_cours: str, annee_id: int) -> int:
     """Ajoute une attribution en validant les règles métier."""
     verrou_info = db.get_verrou_info_enseignant(enseignant_id)
@@ -463,3 +577,133 @@ def delete_attribution_service(attribution_id: int) -> dict[str, Any]:
         return attr_info
     except psycopg2.Error as e:
         raise ServiceException(f"Erreur de base de données: {e}")
+
+
+# --- Nouveaux Services - Page Data Aggregation ---
+def get_data_for_admin_page_service(annee_id: int) -> dict[str, Any]:
+    """Récupère toutes les données nécessaires pour la page d'administration des données."""
+    return {
+        "cours_par_champ": db.get_all_cours_grouped_by_champ(annee_id),
+        "enseignants_par_champ": db.get_all_enseignants_grouped_by_champ(annee_id),
+        "tous_les_champs": db.get_all_champs(),
+        "tous_les_financements": db.get_all_financements(),
+    }
+
+
+def get_data_for_user_admin_page_service() -> dict[str, Any]:
+    """Récupère toutes les données nécessaires pour la page d'administration des utilisateurs."""
+    return {
+        "users": db.get_all_users_with_access_info(),
+        "all_champs": db.get_all_champs(),
+    }
+
+
+# --- Nouveaux Services - Dashboard & Exports ---
+def get_dashboard_summary_service(annee_id: int) -> dict[str, Any]:
+    """Récupère les données agrégées pour la page du sommaire."""
+    return db.get_dashboard_summary_data(annee_id)
+
+
+def get_detailed_tasks_data_service(annee_id: int) -> list[dict[str, Any]]:
+    """Récupère et formate les données pour la page de détail des tâches."""
+    tous_les_enseignants_details = db.get_all_enseignants_avec_details(annee_id)
+    tous_les_champs = db.get_all_champs()
+    statuts_champs = db.get_all_champ_statuses_for_year(annee_id)
+
+    enseignants_par_champ_temp: dict[str, dict[str, Any]] = {
+        str(champ["champno"]): {
+            "champno": str(champ["champno"]),
+            "champnom": champ["champnom"],
+            "enseignants": [],
+            "est_verrouille": statuts_champs.get(str(champ["champno"]), {}).get("est_verrouille", False),
+            "est_confirme": statuts_champs.get(str(champ["champno"]), {}).get("est_confirme", False),
+        }
+        for champ in tous_les_champs
+    }
+    for ens in tous_les_enseignants_details:
+        champ_no = ens["champno"]
+        if champ_no in enseignants_par_champ_temp:
+            enseignants_par_champ_temp[champ_no]["enseignants"].append(ens)
+    return list(enseignants_par_champ_temp.values())
+
+
+def get_attributions_for_export_service(annee_id: int) -> dict[str, dict[str, Any]]:
+    """Récupère et groupe les attributions pour l'export Excel."""
+    attributions_raw = db.get_all_attributions_for_export(annee_id)
+    if not attributions_raw:
+        return {}
+    attributions_par_champ: dict[str, dict[str, Any]] = {}
+    for attr in attributions_raw:
+        champ_no = attr["champno"]
+        if champ_no not in attributions_par_champ:
+            attributions_par_champ[champ_no] = {"nom": attr["champnom"], "attributions": []}
+        attributions_par_champ[champ_no]["attributions"].append(attr)
+    return attributions_par_champ
+
+
+def get_remaining_periods_for_export_service(annee_id: int) -> dict[str, dict[str, Any]]:
+    """Récupère et groupe les périodes restantes pour l'export Excel."""
+    periodes_restantes_raw = db.get_periodes_restantes_for_export(annee_id)
+    if not periodes_restantes_raw:
+        return {}
+    periodes_par_champ: dict[str, dict[str, Any]] = {}
+    for periode in periodes_restantes_raw:
+        champ_no = periode["champno"]
+        if champ_no not in periodes_par_champ:
+            periodes_par_champ[champ_no] = {"nom": periode["champnom"], "periodes": []}
+        periodes_par_champ[champ_no]["periodes"].append(periode)
+    return periodes_par_champ
+
+
+def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, Any]]:
+    """Prépare les données pivotées pour l'export 'Organisation Scolaire'."""
+    tous_les_financements = db.get_all_financements()
+    libelle_to_header_map = {f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}" for f in tous_les_financements}
+    libelle_to_header_map["SOUTIEN EN SPORT-ÉTUDES"] = "PÉRIODES SOUTIEN SPORT-ÉTUDES"
+    code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
+
+    donnees_raw = db.get_data_for_org_scolaire_export(annee_id)
+    if not donnees_raw:
+        return {}
+
+    pivot_data: dict[str, dict[str, Any]] = {}
+    ALL_HEADERS = [
+        "PÉRIODES RÉGULIER", "PÉRIODES ADAPTATION SCOLAIRE", "PÉRIODES SPORT-ÉTUDES",
+        "PÉRIODES ENSEIGNANT RESSOURCE", "PÉRIODES AIDESEC", "PÉRIODES DIPLÔMA",
+        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)", "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
+        "PÉRIODES MESURE SEUIL (POUR FABLAB)", "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
+        "PÉRIODES ALTERNE", "PÉRIODES FORMANUM", "PÉRIODES MENTORAT", "PÉRIODES COORDINATION SPORT-ÉTUDES",
+        "PÉRIODES SOUTIEN SPORT-ÉTUDES",
+    ]
+
+    for item in donnees_raw:
+        champ_no = item["champno"]
+        enseignant_key = f"fictif-{item['nomcomplet']}" if item["estfictif"] else f"reel-{item['nom']}-{item['prenom']}"
+
+        if enseignant_key not in pivot_data.setdefault(champ_no, {}):
+            pivot_data[champ_no][enseignant_key] = {
+                "nom": item["nom"], "prenom": item["prenom"], "nomcomplet": item["nomcomplet"],
+                "estfictif": item["estfictif"], "champnom": item["champnom"],
+                **{header: 0.0 for header in ALL_HEADERS},
+            }
+
+        total_p = float(item["total_periodes"] or 0.0)
+        financement_code = item["financement_code"]
+        target_col = "PÉRIODES RÉGULIER"
+
+        if financement_code and financement_code in code_to_libelle_map:
+            libelle_upper = code_to_libelle_map[financement_code]
+            if libelle_upper in libelle_to_header_map:
+                target_col = libelle_to_header_map[libelle_upper]
+
+        if target_col in pivot_data[champ_no][enseignant_key]:
+            pivot_data[champ_no][enseignant_key][target_col] += total_p
+
+    donnees_par_champ: dict[str, dict[str, Any]] = {}
+    for champ_no, enseignants in pivot_data.items():
+        if enseignants:
+            donnees_par_champ[champ_no] = {
+                "nom": next(iter(enseignants.values()))["champnom"],
+                "donnees": list(enseignants.values()),
+            }
+    return donnees_par_champ
