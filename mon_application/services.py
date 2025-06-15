@@ -4,7 +4,9 @@ Ce module contient la logique métier de l'application (couche de services).
 
 Il a pour but de découpler la logique complexe des routes Flask (contrôleurs).
 Les fonctions ici gèrent des tâches comme le traitement de fichiers, les
-opérations de base de données transactionnelles complexes, etc.
+opérations de base de données transactionnelles complexes, l'application des
+règles de gestion et l'orchestration des appels à la couche d'accès aux
+données (DAO).
 """
 
 from typing import Any, cast
@@ -14,9 +16,49 @@ import psycopg2
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 from psycopg2.extensions import connection as PgConnection
+from werkzeug.security import generate_password_hash
 
 from . import database as db
 
+
+# --- Exceptions Personnalisées pour la Couche de Service ---
+class ServiceException(Exception):
+    """Exception de base pour les erreurs de la couche de service."""
+
+    def __init__(self, message="Une erreur est survenue."):
+        self.message = message
+        super().__init__(self.message)
+
+
+class EntityNotFoundError(ServiceException):
+    """Levée lorsqu'une entité n'est pas trouvée."""
+
+    def __init__(self, message="L'entité n'a pas été trouvée."):
+        super().__init__(message)
+
+
+class DuplicateEntityError(ServiceException):
+    """Levée lors d'une tentative de création d'une entité qui existe déjà."""
+
+    def __init__(self, message="Cette entité existe déjà."):
+        super().__init__(message)
+
+
+class BusinessRuleValidationError(ServiceException):
+    """Levée lorsqu'une règle métier est violée."""
+
+    def __init__(self, message="Opération non autorisée par les règles de gestion."):
+        super().__init__(message)
+
+
+class ForeignKeyError(ServiceException):
+    """Levée lorsqu'une suppression est bloquée par une contrainte de clé étrangère."""
+
+    def __init__(self, message="Impossible de supprimer, cette entité est en cours d'utilisation."):
+        super().__init__(message)
+
+
+# --- Services liés à l'importation de fichiers ---
 
 class ImportationStats:
     """Classe de données pour stocker les statistiques d'une importation."""
@@ -28,19 +70,8 @@ class ImportationStats:
 
 
 def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
-    """
-    Traite un fichier Excel de cours.
-
-    Args:
-        file_stream: Le flux du fichier Excel (.xlsx).
-
-    Returns:
-        Une liste de dictionnaires, où chaque dictionnaire représente un cours.
-
-    Raises:
-        ValueError: Si le fichier est invalide, vide, ou si une ligne contient des données invalides.
-        InvalidFileException: Si le fichier est corrompu.
-    """
+    """Traite un fichier Excel de cours."""
+    # ... (code inchangé)
     nouveaux_cours: list[dict[str, Any]] = []
     try:
         workbook = openpyxl.load_workbook(file_stream)
@@ -89,23 +120,13 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
     return nouveaux_cours
 
 
-def save_imported_courses(
-    courses_data: list[dict[str, Any]], annee_id: int
-) -> ImportationStats:
-    """
-    Sauvegarde les cours importés dans une transaction atomique.
-
-    Args:
-        courses_data: La liste des cours à insérer.
-        annee_id: L'ID de l'année scolaire concernée.
-
-    Returns:
-        Un objet ImportationStats avec les comptes des opérations.
-    """
+def save_imported_courses(courses_data: list[dict[str, Any]], annee_id: int) -> ImportationStats:
+    """Sauvegarde les cours importés dans une transaction atomique."""
+    # ... (code inchangé)
     stats = ImportationStats()
     conn = cast(PgConnection | None, db.get_db())
     if not conn:
-        raise psycopg2.Error("Impossible d'obtenir une connexion à la base de données.")
+        raise ServiceException("Impossible d'obtenir une connexion à la base de données.")
 
     try:
         with conn.cursor():
@@ -117,23 +138,16 @@ def save_imported_courses(
             stats.imported_count = len(courses_data)
 
             conn.commit()
-    except psycopg2.Error:
+    except psycopg2.Error as e:
         conn.rollback()
-        raise
+        raise ServiceException(f"Erreur de base de données lors de l'importation des cours: {e}")
 
     return stats
 
 
 def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
-    """
-    Traite un fichier Excel d'enseignants.
-
-    Args:
-        file_stream: Le flux du fichier Excel (.xlsx).
-
-    Returns:
-        Une liste de dictionnaires, où chaque dictionnaire représente un enseignant.
-    """
+    """Traite un fichier Excel d'enseignants."""
+    # ... (code inchangé)
     nouveaux_enseignants: list[dict[str, Any]] = []
     try:
         workbook = openpyxl.load_workbook(file_stream)
@@ -178,23 +192,14 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
     return nouveaux_enseignants
 
 
-def save_imported_teachers(
-    teachers_data: list[dict[str, Any]], annee_id: int
-) -> ImportationStats:
-    """
-    Sauvegarde les enseignants importés dans une transaction atomique.
 
-    Args:
-        teachers_data: La liste des enseignants à insérer.
-        annee_id: L'ID de l'année scolaire concernée.
-
-    Returns:
-        Un objet ImportationStats avec les comptes des opérations.
-    """
+def save_imported_teachers(teachers_data: list[dict[str, Any]], annee_id: int) -> ImportationStats:
+    """Sauvegarde les enseignants importés dans une transaction atomique."""
+    # ... (code inchangé avec la petite correction sur nomcomplet)
     stats = ImportationStats()
     conn = cast(PgConnection | None, db.get_db())
     if not conn:
-        raise psycopg2.Error("Impossible d'obtenir une connexion à la base de données.")
+        raise ServiceException("Impossible d'obtenir une connexion à la base de données.")
 
     try:
         with conn.cursor():
@@ -202,12 +207,259 @@ def save_imported_teachers(
             stats.deleted_main_entities_count = db.delete_all_enseignants_for_year(annee_id)
 
             for ens in teachers_data:
+                ens["nomcomplet"] = f"{ens['prenom']} {ens['nom']}"
                 db.create_enseignant(ens, annee_id)
             stats.imported_count = len(teachers_data)
 
             conn.commit()
-    except psycopg2.Error:
+    except psycopg2.Error as e:
         conn.rollback()
-        raise
+        raise ServiceException(f"Erreur de base de données lors de l'importation des enseignants: {e}")
 
     return stats
+
+
+# --- Services CRUD - Cours ---
+
+def create_course_service(data: dict[str, Any], annee_id: int) -> dict[str, Any]:
+    """Crée un cours après validation."""
+    try:
+        new_cours = db.create_cours(data, annee_id)
+        if not new_cours:
+            raise ServiceException("La création du cours a échoué pour une raison inconnue.")
+        return new_cours
+    except psycopg2.errors.UniqueViolation:
+        raise DuplicateEntityError("Un cours avec ce code existe déjà pour cette année.")
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def update_course_service(code_cours: str, annee_id: int, data: dict[str, Any]) -> dict[str, Any]:
+    """Met à jour un cours après validation."""
+    try:
+        updated_course = db.update_cours(code_cours, annee_id, data)
+        if not updated_course:
+            raise EntityNotFoundError("Cours non trouvé pour cette année.")
+        return updated_course
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def delete_course_service(code_cours: str, annee_id: int) -> None:
+    """Supprime un cours et gère les erreurs de dépendance."""
+    try:
+        if not db.delete_cours(code_cours, annee_id):
+            raise EntityNotFoundError("Cours non trouvé pour cette année.")
+    except psycopg2.errors.ForeignKeyViolation:
+        raise ForeignKeyError("Impossible de supprimer : ce cours est attribué à un ou plusieurs enseignants.")
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def reassign_course_to_champ_service(code_cours: str, annee_id: int, nouveau_champ_no: str) -> dict[str, Any]:
+    """Réassigne un cours à un nouveau champ."""
+    try:
+        result = db.reassign_cours_to_champ(code_cours, annee_id, nouveau_champ_no)
+        if not result:
+            raise ServiceException("Impossible de réassigner le cours (champ invalide ou cours non trouvé).")
+        return result
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def reassign_course_to_financement_service(code_cours: str, annee_id: int, code_financement: str | None) -> None:
+    """Réassigne un cours à un nouveau type de financement."""
+    try:
+        if not db.reassign_cours_to_financement(code_cours, annee_id, code_financement):
+            raise ServiceException("Impossible de réassigner le financement (cours non trouvé).")
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+# --- Services CRUD - Enseignants ---
+
+def create_teacher_service(data: dict[str, Any], annee_id: int) -> dict[str, Any]:
+    """Crée un enseignant après validation."""
+    try:
+        data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
+        new_teacher = db.create_enseignant(data, annee_id)
+        if not new_teacher:
+            raise ServiceException("La création de l'enseignant a échoué.")
+        return new_teacher
+    except psycopg2.errors.UniqueViolation:
+        raise DuplicateEntityError("Un enseignant avec ce nom/prénom existe déjà pour cette année.")
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def update_teacher_service(enseignant_id: int, data: dict[str, Any]) -> dict[str, Any]:
+    """Met à jour un enseignant après validation."""
+    try:
+        data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
+        updated_teacher = db.update_enseignant(enseignant_id, data)
+        if not updated_teacher:
+            raise EntityNotFoundError("Enseignant non trouvé ou non modifiable (fictif).")
+        return updated_teacher
+    except psycopg2.errors.UniqueViolation:
+        raise DuplicateEntityError("Un autre enseignant avec ce nom/prénom existe déjà.")
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def delete_teacher_service(enseignant_id: int) -> list[dict[str, Any]]:
+    """Supprime un enseignant (réel ou fictif) et retourne les cours affectés."""
+    if not db.get_enseignant_details(enseignant_id):
+        raise EntityNotFoundError("Enseignant non trouvé.")
+
+    cours_affectes = db.get_affected_cours_for_enseignant(enseignant_id)
+    try:
+        if not db.delete_enseignant(enseignant_id):
+            raise ServiceException("La suppression de l'enseignant a échoué en base de données.")
+        return cours_affectes
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données lors de la suppression: {e}")
+
+
+def create_fictitious_teacher_service(champ_no: str, annee_id: int) -> dict[str, Any]:
+    """Crée une nouvelle tâche restante (enseignant fictif) pour un champ/année."""
+    try:
+        fictifs_existants = db.get_fictif_enseignants_by_champ(champ_no, annee_id)
+        numeros = [
+            int(f["nomcomplet"].split("-")[-1])
+            for f in fictifs_existants
+            if f["nomcomplet"].startswith(f"{champ_no}-Tâche restante-") and f["nomcomplet"].split("-")[-1].isdigit()
+        ]
+        next_num = max(numeros) + 1 if numeros else 1
+        nom_tache = f"{champ_no}-Tâche restante-{next_num}"
+        nouveau_fictif = db.create_fictif_enseignant(nom_tache, champ_no, annee_id)
+        if not nouveau_fictif:
+            raise ServiceException("La création de la tâche restante a échoué.")
+        return nouveau_fictif
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+# --- Services CRUD - Financements ---
+
+def create_financement_service(code: str, libelle: str) -> dict[str, Any]:
+    """Crée un type de financement."""
+    try:
+        new_financement = db.create_financement(code, libelle)
+        if not new_financement:
+            raise ServiceException("La création du financement a échoué.")
+        return new_financement
+    except psycopg2.errors.UniqueViolation:
+        raise DuplicateEntityError("Ce code de financement existe déjà.")
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def update_financement_service(code: str, libelle: str) -> dict[str, Any]:
+    """Met à jour un type de financement."""
+    try:
+        updated = db.update_financement(code, libelle)
+        if not updated:
+            raise EntityNotFoundError("Financement non trouvé.")
+        return updated
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def delete_financement_service(code: str) -> None:
+    """Supprime un type de financement."""
+    try:
+        if not db.delete_financement(code):
+            raise EntityNotFoundError("Type de financement non trouvé.")
+    except psycopg2.errors.ForeignKeyViolation:
+        raise ForeignKeyError("Impossible de supprimer : ce financement est utilisé par des cours.")
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+# --- Services - Utilisateurs et Rôles ---
+
+def create_user_service(username: str, password: str, role: str, allowed_champs: list[str]) -> dict[str, Any]:
+    """Crée un utilisateur complet avec son rôle et ses accès."""
+    if len(password) < 6:
+        raise BusinessRuleValidationError("Le mot de passe doit faire au moins 6 caractères.")
+    password_hash = generate_password_hash(password)
+    conn = cast(PgConnection | None, db.get_db())
+    if not conn:
+        raise ServiceException("Pas de connexion à la base de données.")
+    try:
+        user = db.create_user(username, password_hash)
+        if not user:
+            raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
+        is_admin = role == "admin"
+        is_dashboard_only = role == "dashboard_only"
+        champs_for_role = allowed_champs if role == "specific_champs" else []
+        if not db.update_user_role_and_access(user["id"], is_admin, is_dashboard_only, champs_for_role):
+            db.delete_user_data(user["id"])
+            conn.commit()
+            raise ServiceException("Erreur lors de la définition du rôle pour le nouvel utilisateur.")
+        conn.commit()
+        return user
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise ServiceException(f"Erreur base de données lors de la création de l'utilisateur: {e}")
+
+
+def update_user_role_service(user_id: int, role: str, allowed_champs: list[str]) -> None:
+    """Met à jour le rôle et les accès d'un utilisateur."""
+    if not db.get_user_by_id(user_id):
+        raise EntityNotFoundError("Utilisateur non trouvé.")
+    is_admin = role == "admin"
+    is_dashboard_only = role == "dashboard_only"
+    champs_for_role = allowed_champs if role == "specific_champs" else []
+    if not db.update_user_role_and_access(user_id, is_admin, is_dashboard_only, champs_for_role):
+        raise ServiceException("La mise à jour du rôle a échoué.")
+
+
+def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
+    """Supprime un utilisateur en respectant les règles métier."""
+    if user_id_to_delete == current_user_id:
+        raise BusinessRuleValidationError("Vous ne pouvez pas vous supprimer vous-même.")
+    target_user = db.get_user_by_id(user_id_to_delete)
+    if not target_user:
+        raise EntityNotFoundError("Utilisateur non trouvé.")
+    if target_user["is_admin"] and db.get_admin_count() <= 1:
+        raise BusinessRuleValidationError("Impossible de supprimer le dernier administrateur.")
+    if not db.delete_user_data(user_id_to_delete):
+        raise ServiceException("La suppression de l'utilisateur a échoué.")
+
+
+# --- Services - Attributions ---
+
+def add_attribution_service(enseignant_id: int, code_cours: str, annee_id: int) -> int:
+    """Ajoute une attribution en validant les règles métier."""
+    verrou_info = db.get_verrou_info_enseignant(enseignant_id)
+    if not verrou_info:
+        raise EntityNotFoundError("Enseignant non trouvé.")
+    if verrou_info.get("est_verrouille") and not verrou_info.get("estfictif"):
+        raise BusinessRuleValidationError("Les modifications sont désactivées car le champ est verrouillé.")
+    if db.get_groupes_restants_pour_cours(code_cours, annee_id) < 1:
+        raise BusinessRuleValidationError("Plus de groupes disponibles pour ce cours.")
+
+    try:
+        new_id = db.add_attribution(enseignant_id, code_cours, annee_id)
+        if new_id is None:
+            raise ServiceException("Erreur de base de données lors de l'attribution.")
+        return new_id
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")
+
+
+def delete_attribution_service(attribution_id: int) -> dict[str, Any]:
+    """Supprime une attribution en validant les règles métier."""
+    attr_info = db.get_attribution_info(attribution_id)
+    if not attr_info:
+        raise EntityNotFoundError("Attribution non trouvée.")
+    if attr_info.get("est_verrouille") and not attr_info.get("estfictif"):
+        raise BusinessRuleValidationError("Les modifications sont désactivées car le champ est verrouillé.")
+
+    try:
+        if not db.delete_attribution(attribution_id):
+            raise ServiceException("Échec de la suppression de l'attribution.")
+        return attr_info
+    except psycopg2.Error as e:
+        raise ServiceException(f"Erreur de base de données: {e}")

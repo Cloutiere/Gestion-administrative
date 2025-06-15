@@ -2,11 +2,10 @@
 """
 Ce module gère toutes les interactions avec la base de données PostgreSQL.
 
-Il inclut la configuration de la connexion, qui s'adapte à l'environnement
-(production ou développement) via la variable d'environnement APP_ENV.
-Il contient aussi les fonctions pour gérer le cycle de vie de la connexion
-dans le contexte de l'application Flask, ainsi que toutes les fonctions DAO
-(Data Access Object) pour manipuler les données.
+Il constitue la couche d'accès aux données (DAO) de l'application.
+Ses fonctions se limitent à exécuter des requêtes SQL et à retourner des
+données brutes, sans aucune logique métier. La gestion des transactions
+complexes et des règles métier est déléguée à la couche de services.
 """
 
 import os
@@ -547,28 +546,23 @@ def update_financement(code: str, libelle: str) -> dict[str, Any] | None:
         raise
 
 
-def delete_financement(code: str) -> tuple[bool, str]:
-    """Supprime un type de financement."""
+def delete_financement(code: str) -> bool:
+    """
+    Supprime un type de financement.
+    REFACTOR: Ne gère plus l'erreur FK. Laisse remonter l'exception.
+    """
     db_conn = get_db()
     if not db_conn:
-        return False, "Erreur de connexion."
+        return False
     try:
         with db_conn.cursor() as cur:
             cur.execute("DELETE FROM typesfinancement WHERE code = %s;", (code,))
             db_conn.commit()
-            if cur.rowcount > 0:
-                return True, "Type de financement supprimé."
-            return False, "Type de financement non trouvé."
-    except psycopg2.errors.ForeignKeyViolation:
+            return cur.rowcount > 0
+    except psycopg2.Error:
         if db_conn:
             db_conn.rollback()
-        msg = "Impossible de supprimer : ce financement est utilisé par des cours."
-        return False, msg
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_financement pour {code}: {e}")
-        return False, "Erreur base de données."
+        raise
 
 
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---
@@ -865,21 +859,16 @@ def delete_attribution(attribution_id: int) -> bool:
         return False
 
 
-def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | None:
-    """Crée un enseignant fictif pour une année donnée."""
+def create_fictif_enseignant(nom_tache: str, champ_no: str, annee_id: int) -> dict[str, Any] | None:
+    """
+    Crée un enseignant fictif pour une année donnée.
+    REFACTOR: La logique de nommage a été retirée et doit être gérée par la couche service.
+    """
     db_conn = get_db()
     if not db_conn:
         return None
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                "SELECT NomComplet FROM Enseignants WHERE ChampNo = %s AND EstFictif = TRUE AND NomComplet LIKE %s AND annee_id = %s;",
-                (champ_no, f"{champ_no}-Tâche restante-%", annee_id),
-            )
-            numeros = [int(r["nomcomplet"].split("-")[-1]) for r in cur.fetchall() if r["nomcomplet"].split("-")[-1].isdigit()]
-            next_num = max(numeros) + 1 if numeros else 1
-            nom_tache = f"{champ_no}-Tâche restante-{next_num}"
-
             cur.execute(
                 """
                 INSERT INTO Enseignants (NomComplet, ChampNo, annee_id, EstTempsPlein, EstFictif)
@@ -898,6 +887,23 @@ def create_fictif_enseignant(champ_no: str, annee_id: int) -> dict[str, Any] | N
         return None
 
 
+def get_fictif_enseignants_by_champ(champ_no: str, annee_id: int) -> list[dict[str, Any]]:
+    """Récupère tous les enseignants fictifs (tâches) pour un champ/année."""
+    db_conn = get_db()
+    if not db_conn:
+        return []
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                "SELECT NomComplet FROM Enseignants WHERE ChampNo = %s AND annee_id = %s AND EstFictif = TRUE;",
+                (champ_no, annee_id),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_fictif_enseignants_by_champ pour champ {champ_no}, annee {annee_id}: {e}")
+        return []
+
+
 def get_affected_cours_for_enseignant(enseignant_id: int) -> list[dict[str, Any]]:
     """Récupère les cours affectés à un enseignant (code et année)."""
     db_conn = get_db()
@@ -913,7 +919,10 @@ def get_affected_cours_for_enseignant(enseignant_id: int) -> list[dict[str, Any]
 
 
 def delete_enseignant(enseignant_id: int) -> bool:
-    """Supprime un enseignant (et ses attributions par CASCADE)."""
+    """
+    Supprime un enseignant (et ses attributions par CASCADE).
+    REFACTOR: Ne gère plus d'erreur métier, juste la suppression.
+    """
     db_conn = get_db()
     if not db_conn:
         return False
@@ -922,11 +931,10 @@ def delete_enseignant(enseignant_id: int) -> bool:
             cur.execute("DELETE FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
             db_conn.commit()
             return cur.rowcount > 0
-    except psycopg2.Error as e:
+    except psycopg2.Error:
         if db_conn:
             db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_enseignant pour enseignant {enseignant_id}: {e}")
-        return False
+        raise
 
 
 def reassign_cours_to_champ(code_cours: str, annee_id: int, nouveau_champ_no: str) -> dict[str, Any] | None:
@@ -1030,28 +1038,23 @@ def update_cours(code_cours: str, annee_id: int, data: dict[str, Any]) -> dict[s
         raise
 
 
-def delete_cours(code_cours: str, annee_id: int) -> tuple[bool, str]:
-    """Supprime un cours pour une année."""
+def delete_cours(code_cours: str, annee_id: int) -> bool:
+    """
+    Supprime un cours pour une année.
+    REFACTOR: Ne gère plus l'erreur FK. Laisse remonter l'exception.
+    """
     db_conn = get_db()
     if not db_conn:
-        return False, "Erreur de connexion."
+        return False
     try:
         with db_conn.cursor() as cur:
             cur.execute("DELETE FROM Cours WHERE CodeCours = %s AND annee_id = %s;", (code_cours, annee_id))
             db_conn.commit()
-            if cur.rowcount > 0:
-                return True, "Cours supprimé."
-            return False, "Cours non trouvé."
-    except psycopg2.errors.ForeignKeyViolation:
+            return cur.rowcount > 0
+    except psycopg2.Error:
         if db_conn:
             db_conn.rollback()
-        msg = "Impossible de supprimer: cours attribué à un ou plusieurs enseignants."
-        return False, msg
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_cours pour {code_cours}, annee {annee_id}: {e}")
-        return False, "Erreur base de données."
+        raise
 
 
 def reassign_cours_to_financement(code_cours: str, annee_id: int, nouveau_financement_code: str | None) -> bool:
@@ -1079,13 +1082,15 @@ def reassign_cours_to_financement(code_cours: str, annee_id: int, nouveau_financ
 
 
 def create_enseignant(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
-    """Crée un nouvel enseignant pour une année."""
+    """
+    Crée un nouvel enseignant pour une année.
+    REFACTOR: La logique de construction de 'nomcomplet' a été retirée.
+    """
     db_conn = get_db()
     if not db_conn:
         return None
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
             cur.execute(
                 """
                 INSERT INTO Enseignants (annee_id, NomComplet, Nom, Prenom,
@@ -1120,13 +1125,15 @@ def get_enseignant_details(enseignant_id: int) -> dict[str, Any] | None:
 
 
 def update_enseignant(enseignant_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
-    """Met à jour un enseignant."""
+    """
+    Met à jour un enseignant.
+    REFACTOR: La logique de construction de 'nomcomplet' a été retirée.
+    """
     db_conn = get_db()
     if not db_conn:
         return None
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
             cur.execute(
                 """
                 UPDATE Enseignants
