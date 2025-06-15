@@ -35,7 +35,7 @@ from .services import (
     ForeignKeyError,
     ServiceException,
 )
-from .utils import admin_api_required, admin_required
+from .utils import admin_api_required, admin_required, annee_active_required
 
 # Crée un Blueprint 'admin' avec un préfixe d'URL.
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -153,12 +153,9 @@ def api_set_annee_courante() -> tuple[Response, int]:
 
 @bp.route("/api/champs/<string:champ_no>/basculer_verrou", methods=["POST"])
 @admin_api_required
-def api_basculer_verrou_champ(champ_no: str) -> tuple[Response, int]:
+@annee_active_required
+def api_basculer_verrou_champ(champ_no: str, annee_active: dict[str, Any]) -> tuple[Response, int]:
     """Bascule le statut de verrouillage d'un champ pour l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
-
     nouveau_statut = db.toggle_champ_annee_lock_status(champ_no, annee_active["annee_id"])
 
     if nouveau_statut is None:
@@ -171,12 +168,9 @@ def api_basculer_verrou_champ(champ_no: str) -> tuple[Response, int]:
 
 @bp.route("/api/champs/<string:champ_no>/basculer_confirmation", methods=["POST"])
 @admin_api_required
-def api_basculer_confirmation_champ(champ_no: str) -> tuple[Response, int]:
+@annee_active_required
+def api_basculer_confirmation_champ(champ_no: str, annee_active: dict[str, Any]) -> tuple[Response, int]:
     """Bascule le statut de confirmation d'un champ pour l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
-
     nouveau_statut = db.toggle_champ_annee_confirm_status(champ_no, annee_active["annee_id"])
 
     if nouveau_statut is None:
@@ -189,11 +183,9 @@ def api_basculer_confirmation_champ(champ_no: str) -> tuple[Response, int]:
 
 @bp.route("/api/cours/creer", methods=["POST"])
 @admin_api_required
-def api_create_cours() -> tuple[Response, int]:
+@annee_active_required
+def api_create_cours(annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour créer un nouveau cours dans l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     data = request.get_json()
     required_keys = ["codecours", "champno", "coursdescriptif", "nbperiodes", "nbgroupeinitial", "estcoursautre"]
     if not data or not all(k in data for k in required_keys):
@@ -212,11 +204,9 @@ def api_create_cours() -> tuple[Response, int]:
 
 @bp.route("/api/cours/<path:code_cours>", methods=["GET"])
 @admin_api_required
-def api_get_cours_details(code_cours: str) -> tuple[Response, int]:
+@annee_active_required
+def api_get_cours_details(code_cours: str, annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour récupérer les détails d'un cours de l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 404
     cours = db.get_cours_details(code_cours, annee_active["annee_id"])
     if not cours:
         return jsonify({"success": False, "message": "Cours non trouvé pour cette année."}), 404
@@ -225,11 +215,9 @@ def api_get_cours_details(code_cours: str) -> tuple[Response, int]:
 
 @bp.route("/api/cours/<path:code_cours>/modifier", methods=["POST"])
 @admin_api_required
-def api_update_cours(code_cours: str) -> tuple[Response, int]:
+@annee_active_required
+def api_update_cours(code_cours: str, annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour modifier un cours de l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     data = request.get_json()
     required_keys = ["champno", "coursdescriptif", "nbperiodes", "nbgroupeinitial", "estcoursautre"]
     if not data or not all(k in data for k in required_keys):
@@ -250,12 +238,9 @@ def api_update_cours(code_cours: str) -> tuple[Response, int]:
 
 @bp.route("/api/cours/<path:code_cours>/supprimer", methods=["POST"])
 @admin_api_required
-def api_delete_cours(code_cours: str) -> tuple[Response, int]:
+@annee_active_required
+def api_delete_cours(code_cours: str, annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour supprimer un cours de l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
-
     try:
         # REFACTOR: Appel à la couche de service
         services.delete_course_service(code_cours, annee_active["annee_id"])
@@ -271,11 +256,9 @@ def api_delete_cours(code_cours: str) -> tuple[Response, int]:
 
 @bp.route("/api/enseignants/creer", methods=["POST"])
 @admin_api_required
-def api_create_enseignant() -> tuple[Response, int]:
+@annee_active_required
+def api_create_enseignant(annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour créer un nouvel enseignant dans l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     data = request.get_json()
     if not data or not all(k in data for k in ["nom", "prenom", "champno", "esttempsplein"]):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
@@ -544,11 +527,9 @@ def api_delete_user(user_id: int) -> tuple[Response, int]:
 
 @bp.route("/api/cours/reassigner_champ", methods=["POST"])
 @admin_api_required
-def api_reassigner_cours_champ() -> tuple[Response, int]:
+@annee_active_required
+def api_reassigner_cours_champ(annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour réassigner un cours à un nouveau champ, pour l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     data = request.get_json()
     if not data or not (code_cours := data.get("code_cours")) or not (nouveau_champ_no := data.get("nouveau_champ_no")):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
@@ -565,11 +546,9 @@ def api_reassigner_cours_champ() -> tuple[Response, int]:
 
 @bp.route("/api/cours/reassigner_financement", methods=["POST"])
 @admin_api_required
-def api_reassigner_cours_financement() -> tuple[Response, int]:
+@annee_active_required
+def api_reassigner_cours_financement(annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour réassigner un cours à un nouveau type de financement, pour l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     data = request.get_json()
     if not data or not (code_cours := data.get("code_cours")):
         return jsonify({"success": False, "message": "Données manquantes."}), 400

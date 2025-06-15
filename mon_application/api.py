@@ -7,9 +7,9 @@ couche de services. Il gère la réception des requêtes API, la validation des
 permissions de base et le formatage des réponses JSON.
 """
 
-from typing import Any, cast
+from typing import Any
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 from werkzeug.wrappers import Response
 
@@ -20,6 +20,8 @@ from .services import (
     EntityNotFoundError,
     ServiceException,
 )
+from .utils import annee_active_required
+
 
 # Crée un Blueprint 'api' avec un préfixe d'URL.
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -27,12 +29,9 @@ bp = Blueprint("api", __name__, url_prefix="/api")
 
 @bp.route("/attributions/ajouter", methods=["POST"])
 @login_required
-def api_ajouter_attribution() -> tuple[Response, int]:
+@annee_active_required
+def api_ajouter_attribution(annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour ajouter une attribution de cours à un enseignant pour l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
-
     data = request.get_json()
     if not data or not (eid := data.get("enseignant_id")) or not (cc := data.get("code_cours")):
         return jsonify({"success": False, "message": "Données manquantes."}), 400
@@ -114,11 +113,9 @@ def api_supprimer_attribution() -> tuple[Response, int]:
 
 @bp.route("/champs/<string:champ_no>/taches_restantes/creer", methods=["POST"])
 @login_required
-def api_creer_tache_restante(champ_no: str) -> tuple[Response, int]:
+@annee_active_required
+def api_creer_tache_restante(champ_no: str, annee_active: dict[str, Any]) -> tuple[Response, int]:
     """API pour créer une nouvelle tâche restante (enseignant fictif) pour l'année active."""
-    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
-    if not annee_active:
-        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
     if not current_user.can_access_champ(champ_no):
         return jsonify({"success": False, "message": "Accès non autorisé à ce champ."}), 403
 

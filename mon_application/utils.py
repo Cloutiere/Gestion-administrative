@@ -8,11 +8,31 @@ et le paquet principal (__init__.py) dépendent les uns des autres.
 """
 
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
-from flask import flash, jsonify, redirect, url_for
+from flask import g, jsonify, flash, redirect, url_for
 from flask_login import current_user
 from werkzeug.wrappers import Response
+
+
+def annee_active_required(f: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    Décorateur pour les routes d'API qui nécessitent une année scolaire active.
+
+    Vérifie si `g.annee_active` est défini. Si ce n'est pas le cas, il retourne
+    une erreur JSON 400. Sinon, il injecte l'année active en tant qu'argument
+    nommé `annee_active` dans la fonction de la vue.
+    """
+
+    @wraps(f)
+    def decorated_function(*args: Any, **kwargs: Any) -> tuple[Response, int] | Any:
+        annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+        if not annee_active:
+            return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+        # Injecte l'année active dans les arguments de la fonction décorée
+        return f(*args, annee_active=annee_active, **kwargs)
+
+    return decorated_function
 
 
 def api_login_required(f: Callable[..., Any]) -> Callable[..., Any]:
