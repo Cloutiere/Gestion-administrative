@@ -454,6 +454,39 @@ def delete_financement_service(code: str) -> None:
 
 
 # --- Services - Utilisateurs et Rôles ---
+
+def register_first_admin_service(username: str, password: str, confirm_password: str) -> dict[str, Any]:
+    """
+    Gère la logique d'inscription du premier utilisateur (administrateur).
+    Lève des exceptions en cas de violation des règles métier.
+    """
+    # Règle 1: Il ne doit y avoir aucun utilisateur existant.
+    if db.get_users_count() > 0:
+        raise BusinessRuleValidationError("L'inscription n'est autorisée que pour le premier utilisateur.")
+
+    # Règle 2: Validation des entrées.
+    if not all([username, password, confirm_password]):
+        raise BusinessRuleValidationError("Tous les champs sont requis.")
+    if password != confirm_password:
+        raise BusinessRuleValidationError("Les mots de passe ne correspondent pas.")
+    if len(password) < 6:
+        raise BusinessRuleValidationError("Le mot de passe doit contenir au moins 6 caractères.")
+
+    # Processus de création
+    password_hash = generate_password_hash(password)
+    try:
+        # On crée l'utilisateur en tant qu'administrateur
+        user = db.create_user(username, password_hash, is_admin=True)
+        if not user:
+            # Ce cas peut arriver dans une situation de "race condition" si deux requêtes arrivent
+            # en même temps, ou si la contrainte unique est violée pour une autre raison.
+            raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
+        return user
+    except psycopg2.Error as e:
+        # Gérer une erreur DB inattendue
+        raise ServiceException(f"Erreur de base de données lors de la création de l'admin: {e}")
+
+
 def get_all_users_with_details_service() -> dict[str, Any]:
     """Récupère tous les utilisateurs avec le décompte des admins."""
     return {"users": db.get_all_users_with_access_info(), "admin_count": db.get_admin_count()}

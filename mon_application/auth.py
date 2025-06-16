@@ -7,10 +7,12 @@ Il gère la connexion, la déconnexion et l'inscription des utilisateurs.
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_user, logout_user
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 from werkzeug.wrappers import Response
 
 from . import database as db
+from . import services
+from .services import BusinessRuleValidationError, DuplicateEntityError, ServiceException
 
 # Crée un Blueprint nommé 'auth'.
 bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -63,7 +65,7 @@ def register() -> str | Response:
     """
     user_count = db.get_users_count()
 
-    if user_count > 0:
+    if user_count > 0 and not (current_app.config.get("TESTING") and user_count == 0):
         flash(
             "L'inscription publique est désactivée. " "Un administrateur doit créer les nouveaux comptes.",
             "warning",
@@ -75,21 +77,20 @@ def register() -> str | Response:
         password = request.form["password"].strip()
         confirm_password = request.form["confirm_password"].strip()
 
-        if not all([username, password, confirm_password]):
-            flash("Tous les champs sont requis.", "error")
-        elif password != confirm_password:
-            flash("Les mots de passe ne correspondent pas.", "error")
-        elif len(password) < 6:
-            flash("Le mot de passe doit contenir au moins 6 caractères.", "error")
-        else:
-            user = db.create_user(username, generate_password_hash(password), is_admin=True)
-            if user:
-                flash(
-                    f"Compte admin '{username}' créé avec succès! " "Vous pouvez maintenant vous connecter.",
-                    "success",
-                )
-                return redirect(url_for("auth.login"))
-            flash("Ce nom d'utilisateur est déjà pris.", "error")
+        try:
+            user = services.register_first_admin_service(username, password, confirm_password)
+            flash(
+                f"Compte admin '{user['username']}' créé avec succès! " "Vous pouvez maintenant vous connecter.",
+                "success",
+            )
+            return redirect(url_for("auth.login"))
+        except (BusinessRuleValidationError, DuplicateEntityError) as e:
+            # Erreurs attendues liées aux entrées utilisateur
+            flash(e.message, "error")
+        except ServiceException as e:
+            # Autres erreurs de la couche service
+            current_app.logger.error(f"Erreur de service lors de l'inscription: {e}")
+            flash("Une erreur inattendue est survenue lors de l'inscription.", "error")
 
     return render_template(
         "register.html",
