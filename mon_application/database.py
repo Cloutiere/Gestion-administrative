@@ -24,24 +24,28 @@ from .models import User
 # --- Gestion de la connexion à la base de données ---
 def get_db_connection_string() -> str:
     """
-    Construit la chaîne de connexion à la base de données en fonction de l'environnement.
+    Construit la chaîne de connexion à la BDD en fonction de l'environnement.
 
-    Utilise la variable d'environnement 'APP_ENV'. Si 'APP_ENV' est 'production',
-    il utilise les variables préfixées par 'PROD_'. Sinon, il utilise par défaut
-    les variables préfixées par 'DEV_' pour l'environnement de développement.
-
-    Returns:
-        La chaîne de connexion pour psycopg2, ou une chaîne vide si les
-        informations de connexion requises sont manquantes.
+    Utilise la variable d'environnement 'APP_ENV'.
+    - 'production' : utilise les variables préfixées par 'PROD_'.
+    - 'test' : utilise les variables préfixées par 'TEST_'.
+    - Par défaut ('development') : utilise les variables préfixées par 'DEV_'.
+    Cette fonction est stricte et ne se rabat PAS sur des variables génériques.
     """
     app_env = os.environ.get("APP_ENV", "development")
-    prefix = "PROD_" if app_env == "production" else "DEV_"
+
+    if app_env == "production":
+        prefix = "PROD_"
+    elif app_env == "test":
+        prefix = "TEST_"
+    else:
+        prefix = "DEV_"
 
     if current_app:
-        current_app.logger.info(
-            f"Configuration de la base de données pour l'environnement : {app_env.upper()}"
-        )
+        current_app.logger.info(f"Configuration de la base de données pour l'environnement : {app_env.upper()} avec le préfixe '{prefix}'")
 
+    # On utilise exclusivement les variables préfixées pour éviter les conflits
+    # avec les injections automatiques de l'environnement (ex: Replit).
     db_host = os.environ.get(f"{prefix}PGHOST")
     db_name = os.environ.get(f"{prefix}PGDATABASE")
     db_user = os.environ.get(f"{prefix}PGUSER")
@@ -59,18 +63,15 @@ def get_db_connection_string() -> str:
             }.items()
             if not val
         ]
-        log_message = (
-            "Variables de connexion à la base de données manquantes pour "
-            f"l'environnement '{app_env}': {', '.join(missing_vars)}"
-        )
+        log_message = f"Variables de connexion à la base de données préfixées manquantes pour l'environnement '{app_env}': {', '.join(missing_vars)}"
         if current_app:
             current_app.logger.critical(log_message)
         return ""
 
-    return (
-        f"dbname='{db_name}' user='{db_user}' host='{db_host}' "
-        f"password='{db_pass}' port='{db_port}'"
-    )
+    # Pour Neon/Replit, il faut souvent forcer le SSL
+    ssl_mode = "require" if "neon.tech" in db_host else "prefer"
+
+    return f"dbname='{db_name}' user='{db_user}' host='{db_host}' password='{db_pass}' port='{db_port}' sslmode='{ssl_mode}'"
 
 
 def get_db() -> PgConnection | None:
@@ -109,9 +110,7 @@ def get_all_annees() -> list[dict[str, Any]]:
         return []
     try:
         with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                "SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires ORDER BY libelle_annee DESC;"
-            )
+            cur.execute("SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires ORDER BY libelle_annee DESC;")
             return [dict(row) for row in cur.fetchall()]
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_all_annees: {e}")

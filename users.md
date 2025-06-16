@@ -14,3 +14,7 @@ Couet Couette
 Demers Demerse
 Dubois Dubeau
 Fafard Faitfort
+pgdatabase
+postgresql://neondb_owner:npg_rGF8m1MDhcHZ@ep-orange-base-a6wsb37i.us-west-2.aws.neon.tech/neondb?sslmode=require
+Pghost
+ep-orange-base-a6wsb37i.us-west-2.aws.neon.tech

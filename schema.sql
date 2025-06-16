@@ -1,3 +1,28 @@
+-- schema.sql
+
+-- ====================================================================
+-- SECTION DE NETTOYAGE
+-- Supprime toutes les tables existantes dans l'ordre inverse des dépendances
+-- pour éviter les erreurs de clés étrangères. C'est plus portable que
+-- de changer session_replication_role.
+-- ====================================================================
+
+DROP TABLE IF EXISTS public.user_champ_access CASCADE;
+DROP TABLE IF EXISTS public.attributionscours CASCADE;
+DROP TABLE IF EXISTS public.cours CASCADE;
+DROP TABLE IF EXISTS public.enseignants CASCADE;
+DROP TABLE IF EXISTS public.champ_annee_statuts CASCADE;
+DROP TABLE IF EXISTS public.typesfinancement CASCADE;
+DROP TABLE IF EXISTS public.champs CASCADE;
+DROP TABLE IF EXISTS public.anneesscolaires CASCADE;
+DROP TABLE IF EXISTS public.users CASCADE;
+
+
+-- ====================================================================
+-- SECTION DE CRÉATION
+-- Structure originale du fichier schema.sql
+-- ====================================================================
+
 --
 -- PostgreSQL database dump
 --
@@ -504,14 +529,15 @@ ALTER TABLE public.user_champ_access
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: cloud_admin
 --
 
-ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO neon_superuser WITH GRANT OPTION;
+-- Les commandes ALTER DEFAULT PRIVILEGES ont été retirées car non autorisées
+-- ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO neon_superuser WITH GRANT OPTION;
 
 
 --
 -- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: cloud_admin
 --
 
-ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON TABLES TO neon_superuser WITH GRANT OPTION;
+-- ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON TABLES TO neon_superuser WITH GRANT OPTION;
 
 
 --

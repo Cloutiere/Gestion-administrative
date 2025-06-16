@@ -1,38 +1,25 @@
 # mon_application/__init__.py
 """
 Ce module est le cœur de l'application (paquet).
-
-Il contient la factory `create_app`, qui est responsable de l'initialisation
-et de la configuration de l'instance Flask, de la base de données, du gestionnaire
-de connexion, des commandes CLI et de l'enregistrement des "Blueprints".
-Il gère également la détermination de l'année scolaire active pour chaque requête.
+...
 """
 
 import datetime
 import os
 from typing import Any, cast
 
+# Pas besoin de dotenv ici, on le retire
 from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
 from flask_login import LoginManager, current_user
 from werkzeug.wrappers import Response
 
 from .models import User
 
-
+# ... (la fonction determine_active_school_year reste la même)
 def determine_active_school_year(
     toutes_les_annees: list[dict[str, Any]], has_dashboard_access: bool, annee_id_session: int | None
 ) -> dict[str, Any] | None:
-    """
-    Détermine l'année scolaire active en fonction du contexte utilisateur et de la session.
-
-    Args:
-        toutes_les_annees: La liste de toutes les années scolaires disponibles.
-        has_dashboard_access: Booléen indiquant si l'utilisateur a accès au tableau de bord.
-        annee_id_session: L'ID de l'année stocké dans la session, ou None.
-
-    Returns:
-        Le dictionnaire de l'année active, ou None si aucune année n'existe.
-    """
+    # ...
     from . import database as db
 
     annee_active: dict[str, Any] | None = None
@@ -57,19 +44,28 @@ def determine_active_school_year(
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     """
     Crée et configure une instance de l'application Flask (Application Factory).
-
-    Args:
-        test_config: Configuration à utiliser pour les tests. Defaults to None.
-
-    Returns:
-        L'instance de l'application Flask configurée.
+    ...
     """
-    app = Flask(__name__, instance_relative_config=False)
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        os.environ["APP_ENV"] = "test"
+
+    # MODIFICATION ICI : On spécifie explicitement les chemins des templates et des fichiers statiques.
+    # __file__ est le chemin vers ce fichier (__init__.py)
+    # os.path.dirname(__file__) est le chemin vers le dossier 'mon_application'
+    project_root = os.path.dirname(os.path.abspath(__file__))
+
+    app = Flask(
+        __name__,
+        instance_relative_config=False,
+        template_folder=os.path.join(project_root, "templates"),
+        static_folder=os.path.join(project_root, "static")
+    )
 
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY", os.urandom(24)),
+        SECRET_KEY=os.environ.get("SECRET_KEY", os.urandom(24).hex()),
         UPLOAD_FOLDER=os.path.join(app.root_path, "uploads"),
         ALLOWED_EXTENSIONS={"xlsx"},
+        TESTING=os.environ.get("APP_ENV") == "test",
     )
 
     if test_config:
@@ -80,7 +76,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     except OSError as e:
         app.logger.error(f"Erreur lors de la création du dossier d'upload: {e}")
 
-    # --- Initialisation des extensions et services ---
+    # --- Le reste du fichier est inchangé ---
     from . import database
 
     database.init_app(app)
@@ -94,10 +90,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @login_manager.unauthorized_handler
     def unauthorized_callback() -> tuple[Response, int] | Response:
-        """
-        Gère les accès non authentifiés.
-        Renvoie du JSON pour les requêtes API et redirige pour les autres.
-        """
         if request.path.startswith(("/api/", "/admin/api/")):
             return jsonify({"success": False, "message": "Authentification requise."}), 401
         flash("Veuillez vous connecter pour accéder à cette page.", "info")
@@ -105,31 +97,22 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @login_manager.user_loader
     def load_user(user_id: str) -> User | None:
-        """Fonction pour recharger l'objet utilisateur à partir de l'ID stocké en session."""
         from .database import get_user_obj_by_id
-
         return get_user_obj_by_id(int(user_id))
 
     @app.before_request
     def load_active_school_year() -> None:
-        """
-        Détermine l'année scolaire active pour la requête et la stocke dans `g`.
-        """
         from . import database as db
-
         g.toutes_les_annees = db.get_all_annees()
         has_dashboard_access = current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only)
         annee_id_session = session.get("annee_scolaire_id")
-
         g.annee_active = determine_active_school_year(
             cast(list[dict[str, Any]], g.toutes_les_annees),
             has_dashboard_access,
             annee_id_session,
         )
 
-    # --- Filtres Jinja2 et Context Processors ---
     def format_periodes_filter(value: float | None) -> str:
-        """Filtre Jinja pour formater joliment les nombres de périodes."""
         if value is None:
             return ""
         return f"{float(value):g}"
@@ -138,7 +121,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @app.context_processor
     def inject_global_data() -> dict[str, Any]:
-        """Rend des variables globales disponibles dans tous les templates."""
         return {
             "current_user": current_user,
             "SCRIPT_YEAR": datetime.datetime.now().year,
@@ -146,9 +128,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             "toutes_les_annees": getattr(g, "toutes_les_annees", []),
         }
 
-    # --- Enregistrement des Blueprints ---
     from . import admin, api, auth, dashboard, views
-
     app.register_blueprint(auth.bp)
     app.register_blueprint(views.bp)
     app.add_url_rule("/", endpoint="index")
@@ -156,9 +136,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(api.bp)
 
-    # --- Enregistrement des commandes CLI ---
     from . import commands
-
     commands.init_app(app)
 
     return app
