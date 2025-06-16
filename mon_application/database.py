@@ -71,8 +71,11 @@ def get_db_connection_string() -> str:
     # Pour Neon/Replit, il faut souvent forcer le SSL
     ssl_mode = "require" if "neon.tech" in db_host else "prefer"
 
-    return f"dbname='{db_name}' user='{db_user}' host='{db_host}' password='{db_pass}' port='{db_port}' sslmode='{ssl_mode}'"
+    # ON DÉFINIT LA VARIABLE ICI
+    connection_string = f"dbname='{db_name}' user='{db_user}' host='{db_host}' password='{db_pass}' port='{db_port}' sslmode='{ssl_mode}'"
 
+
+    return connection_string
 
 def get_db() -> PgConnection | None:
     """Ouvre et réutilise une connexion à la base de données pour la durée d'une requête."""
