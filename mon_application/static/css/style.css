@@ -356,8 +356,6 @@ button:disabled,
     background-color: var(--color-secondary-hover);
 }
 
-/* NOUVELLE RÈGLE AJOUTÉE ICI */
-/* Nouvelle classe spécifique pour les boutons d'export Excel */
 .btn-export-excel {
     background-color: #1D6F42; /* Un vert foncé classique d'Excel */
     color: var(--color-text-on-primary);
@@ -366,7 +364,6 @@ button:disabled,
     background-color: #185E38; /* Une teinte légèrement plus foncée pour le survol */
     color: var(--color-text-on-primary);
 }
-/* Modificateur pour des boutons plus petits, idéal pour les tableaux */
 .btn-sm {
     padding: 0.25rem 0.6rem;
     font-size: 0.85rem;
@@ -394,7 +391,6 @@ th {
 tbody tr:nth-of-type(odd) {
     background-color: color-mix(in srgb, var(--color-surface) 95%, var(--color-background));
 }
-/* Éviter le hover sur les sous-titres */
 tbody tr:hover:not(.sous-titre-attributions-row) {
     background-color: var(--color-table-hover);
 }
@@ -403,7 +399,6 @@ tfoot td {
     background-color: var(--color-header-bg);
 }
 
-/* Conteneur pour les boutons d'action dans les tableaux */
 .action-buttons {
     display: flex;
     gap: 0.5rem;
@@ -412,12 +407,11 @@ tfoot td {
     justify-content: flex-start;
 }
 td.col-actions .action-buttons {
-    justify-content: flex-end; /* Aligne à droite spécifiquement dans la colonne d'actions */
+    justify-content: flex-end;
 }
 
 
 /* --- Composants spécifiques --- */
-/* Formulaires d'authentification */
 .auth-form-container {
     max-width: 450px;
     margin: 3rem auto;
@@ -447,7 +441,7 @@ td.col-actions .action-buttons {
 
 /* --- Fenêtres Modales --- */
 .modal-backdrop {
-    display: none; /* Caché par défaut */
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
@@ -457,7 +451,7 @@ td.col-actions .action-buttons {
     z-index: 1050;
     justify-content: center;
     align-items: center;
-    padding: 1rem; /* Espace pour éviter que la modale touche les bords de l'écran */
+    padding: 1rem;
 }
 
 .modal-backdrop.visible {
@@ -474,7 +468,7 @@ td.col-actions .action-buttons {
     position: relative;
     display: flex;
     flex-direction: column;
-    max-height: 90vh; /* Limite la hauteur */
+    max-height: 90vh;
 }
 
 .modal-header {
@@ -506,12 +500,12 @@ td.col-actions .action-buttons {
 .modal-close-btn:hover {
     color: var(--color-text-primary);
     opacity: 1;
-    transform: none; /* Annule l'effet de hover des boutons généraux */
+    transform: none;
 }
 
 .modal-body {
     padding: 1.5rem;
-    overflow-y: auto; /* Permet le défilement si le contenu est trop long */
+    overflow-y: auto;
     flex-grow: 1;
 }
 
@@ -817,8 +811,7 @@ html.theme-dark .enseignant-card.detail-visible {
 .container-principal-sommaire {
     display: flex;
     gap: 1.5rem;
-    flex-wrap: wrap; /* Permet aux colonnes de s'empiler sur les petits écrans */
-    align-items: flex-start; /* Aligne les colonnes en haut */
+    flex-wrap: wrap;
 }
 .colonne-sommaire {
     display: flex;
@@ -844,15 +837,14 @@ html.theme-dark .enseignant-card.detail-visible {
     background-color: var(--color-background);
     border: 1px solid var(--color-border);
 }
-/* Style spécifique pour la section moyenne générale pour éviter un double encadrement */
 .section-moyenne-generale {
     background-color: transparent;
     border: none;
     padding: 0;
     margin-bottom: 0.5rem;
 }
-#table-moyennes-par-champ td:nth-child(3), /* Colonne statut */
-#table-moyennes-par-champ td:last-child { /* Colonne moyenne */
+#table-moyennes-par-champ td:nth-child(3),
+#table-moyennes-par-champ td:last-child {
     text-align: center;
     vertical-align: middle;
 }
@@ -881,14 +873,13 @@ html.theme-dark .enseignant-card.detail-visible {
 .column-header-row th {
     background-color: var(--color-header-bg);
     position: sticky;
-    top: 48px; /* Hauteur de la ligne d'en-tête du champ */
+    top: 48px;
     z-index: 1;
 }
 .statut-non-compte {
     color: var(--color-text-secondary);
     font-style: italic;
 }
-/* NOUVELLE RÈGLE : Applique un style gras à toute la ligne pour un champ verrouillé */
 .champ-verrouille-row {
     font-weight: bold;
 }
@@ -1014,141 +1005,100 @@ html.theme-dark .enseignant-temps-partiel-sommaire {
 
 /* --- Styles d'impression --- */
 @media print {
-    /* Règles de base pour l'impression */
-    .no-print,
-    header,
-    nav,
-    footer,
-    .theme-switcher,
-    .button-group,
-    .year-switcher {
-        display: none !important;
-    }
-    .print-only {
-        display: block !important;
-    }
-    body {
-        margin: 0;
-        padding: 0.5rem;
-        background-color: #fff !important;
-        display: block;
-        color: #000 !important;
-        font-size: 10pt;
-    }
-    main,
-    .page-champ-container,
-    .enseignants-section {
-        display: block !important;
-        width: 100%;
-        max-height: none;
-        overflow: visible;
-        border: none;
-        padding: 0;
-        box-shadow: none;
-        background-color: transparent !important;
-        gap: 0;
-        margin: 0;
-    }
-    a {
-        text-decoration: none;
-        color: #000;
-    }
-    .signature-line {
-        display: block !important;
-        border-color: #000 !important;
-    }
-    .arrow-indicator {
-        display: none !important;
-    }
-    .entete-enseignant {
-        cursor: auto;
-    }
-    .titre-enseignant-bascule {
-        margin-bottom: 10px;
-        color: #000 !important;
-    }
-    h2.section-title {
-        font-size: 14pt;
-        border-color: #000 !important;
-    }
+    .no-print, header, nav, footer, .theme-switcher, .button-group, .year-switcher { display: none !important; }
+    .print-only { display: block !important; }
+    body { margin: 0; padding: 0.5rem; background-color: #fff !important; display: block; color: #000 !important; font-size: 10pt; }
+    main, .page-champ-container, .enseignants-section { display: block !important; width: 100%; max-height: none; overflow: visible; border: none; padding: 0; box-shadow: none; background-color: transparent !important; gap: 0; margin: 0; }
+    a { text-decoration: none; color: #000; }
+    .signature-line { display: block !important; border-color: #000 !important; }
+    .arrow-indicator { display: none !important; }
+    .entete-enseignant { cursor: auto; }
+    .titre-enseignant-bascule { margin-bottom: 10px; color: #000 !important; }
+    h2.section-title { font-size: 14pt; border-color: #000 !important; }
+    table { font-size: 9pt; width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; }
+    th, td { border: 1px solid #000; padding: 4px; background-color: transparent !important; }
+    th { background-color: #e0e0e0 !important; }
+    tbody tr:nth-of-type(odd) { background-color: #f9f9f9 !important; }
+    .total-attributions-row, tfoot tr { border-top: 2px solid #000; font-weight: bold; }
+    .sous-titre-attributions-row td, .sous-titre-attributions { background-color: #f0f0f0 !important; }
+    .enseignant-card { border: 1px solid #888 !important; padding: 10px; margin-bottom: 15px; page-break-inside: avoid; background-color: transparent !important; box-shadow: none !important; border-left: 1px solid #888 !important; }
+    #print-summary-page { display: none; }
+    html.printing-champ .enseignant-card.enseignant-fictif { display: none !important; }
+    html.printing-champ #print-summary-page { display: block !important; }
+    html.printing-champ .enseignants-section { display: block !important; }
+    html.printing-champ .enseignant-card:not(.enseignant-fictif) { display: block !important; }
+    html.printing-champ #tableau-sommaire-champ-print { page-break-after: always; }
+    html.printing-champ #tableau-cours-restants-print { page-break-after: always; }
+    html.printing-taches-restantes .enseignant-card:not(.enseignant-fictif) { display: none !important; }
+    html.printing-taches-restantes #print-summary-page { display: none !important; }
+    html.printing-taches-restantes .enseignants-section { display: block !important; }
+    html.printing-taches-restantes .enseignant-card.enseignant-fictif { display: block !important; }
+}
 
-    /* Styles des tableaux à l'impression */
-    table {
-        font-size: 9pt;
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 20px;
-        page-break-inside: auto;
-    }
-    th,
-    td {
-        border: 1px solid #000;
-        padding: 4px;
-        background-color: transparent !important;
-    }
-    th {
-        background-color: #e0e0e0 !important;
-    }
-    tbody tr:nth-of-type(odd) {
-        background-color: #f9f9f9 !important;
-    }
-    .total-attributions-row,
-    tfoot tr {
-        border-top: 2px solid #000;
-        font-weight: bold;
-    }
-    .sous-titre-attributions-row td,
-    .sous-titre-attributions {
-        background-color: #f0f0f0 !important;
-    }
 
-    /* Style des cartes enseignant */
-    .enseignant-card {
-        border: 1px solid #888 !important;
-        padding: 10px;
-        margin-bottom: 15px;
-        page-break-inside: avoid;
-        background-color: transparent !important;
-        box-shadow: none !important;
-        border-left: 1px solid #888 !important;
-    }
-    #print-summary-page {
-        display: none;
-    } /* Caché par défaut */
+/* --- PAGE PRÉPARATION HORAIRE (INTERACTIF) --- */
 
-    /* --- Impression Spécifique : Mode "Imprimer le champ" --- */
-    html.printing-champ .enseignant-card.enseignant-fictif {
-        display: none !important;
-    }
-    html.printing-champ #print-summary-page {
-        display: block !important;
-    }
-    html.printing-champ .enseignants-section {
-        display: block !important;
-    }
-    html.printing-champ .enseignant-card:not(.enseignant-fictif) {
-        display: block !important;
-    }
-    /* Saut de page après le sommaire des tâches */
-    html.printing-champ #tableau-sommaire-champ-print {
-        page-break-after: always;
-    }
-    /* Saut de page après les périodes restantes */
-    html.printing-champ #tableau-cours-restants-print {
-        page-break-after: always;
-    }
+.preparation-horaire-container {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    box-shadow: var(--box-shadow);
+    overflow-x: auto;
+}
 
-    /* --- Impression Spécifique : Mode "Imprimer les tâches restantes" --- */
-    html.printing-taches-restantes .enseignant-card:not(.enseignant-fictif) {
-        display: none !important;
-    }
-    html.printing-taches-restantes #print-summary-page {
-        display: none !important;
-    }
-    html.printing-taches-restantes .enseignants-section {
-        display: block !important;
-    }
-    html.printing-taches-restantes .enseignant-card.enseignant-fictif {
-        display: block !important;
-    }
+.action-buttons-container {
+    margin-top: 1.5rem;
+}
+
+#table-horaire-preparation {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+#table-horaire-preparation th,
+#table-horaire-preparation td {
+    border: 1px solid var(--color-border);
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+#table-horaire-preparation thead th {
+    background-color: var(--color-header-bg);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    white-space: nowrap;
+}
+
+#table-horaire-preparation select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+    border-radius: var(--border-radius);
+    min-width: 150px;
+}
+#table-horaire-preparation select:disabled {
+    background-color: var(--color-header-bg);
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+#table-horaire-preparation .teacher-cell {
+    background-color: var(--color-background);
+    font-weight: 500;
+    text-align: center;
+    min-width: 160px;
+    white-space: nowrap;
+    padding: 0.75rem;
+    cursor: grab;
+}
+
+#table-horaire-preparation .teacher-cell:hover {
+    background-color: var(--color-table-hover);
 }

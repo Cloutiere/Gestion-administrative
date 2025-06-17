@@ -1,0 +1,205 @@
+{% extends "_layout.html" %}
+
+{% block title %}Préparation de l'horaire{% endblock %}
+
+{% block head_extra %}
+<style>
+    .tabs-container {
+        margin-top: 1rem;
+    }
+    .tabs-nav {
+        display: flex;
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        border-bottom: 2px solid #ccc;
+    }
+    .tabs-nav li {
+        padding: 10px 20px;
+        cursor: pointer;
+        background-color: #f1f1f1;
+        border: 1px solid #ccc;
+        border-bottom: none;
+        margin-right: 5px;
+        border-radius: 5px 5px 0 0;
+    }
+    .tabs-nav li.active {
+        background-color: #fff;
+        border-bottom: 2px solid #fff;
+        position: relative;
+        top: 2px;
+        font-weight: bold;
+    }
+    .tab-content {
+        display: none;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-top: none;
+    }
+    .tab-content.active {
+        display: block;
+    }
+    table.preparation-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed; /* Important pour les colonnes de même largeur */
+    }
+    .preparation-table th, .preparation-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+        vertical-align: top; /* Aligner le contenu en haut */
+        overflow: hidden;
+        white-space: nowrap;
+    }
+    .preparation-table th {
+        background-color: #f2f2f2;
+    }
+    .preparation-table select {
+        width: 100%;
+    }
+    .teachers-container {
+        min-height: 40px; /* Hauteur minimale pour la zone de dépôt */
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 4px;
+        align-items: flex-start; /* Aligner les pastilles en haut */
+        justify-content: center;
+        height: 100%;
+        transition: background-color 0.2s ease-in-out; /* Pour la surbrillance */
+    }
+    .teacher-item {
+        background-color: #e0eafc;
+        border: 1px solid #a4bdf1;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 0.8em;
+        cursor: grab;
+        user-select: none; /* Empêche la sélection de texte lors du drag */
+    }
+    /* Style pour l'élément en cours de déplacement */
+    .teacher-item.dragging {
+        opacity: 0.5;
+        cursor: grabbing;
+    }
+    /* Style pour la zone de dépôt lors du survol */
+    .teachers-container.drag-over {
+        background-color: #d8e8ff;
+        border: 2px dashed #6b9cff;
+    }
+    .page-actions {
+        margin-bottom: 1rem;
+        display: flex;
+        gap: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block header_content %}
+<h1>
+    Préparation de l'horaire
+    {% if annee_active %}
+        <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
+    {% endif %}
+</h1>
+{% endblock %}
+
+{% block content %}
+{% if annee_active %}
+    <div class="page-actions no-print">
+        <button id="btn-save-schedule" class="btn btn-primary">Sauvegarder l'horaire</button>
+        <button id="btn-add-row" class="btn">Ajouter une ligne</button>
+    </div>
+
+    <div class="tabs-container">
+        <ul class="tabs-nav" id="tabs-navigation">
+            <li class="active" data-level="1">Secondaire 1</li>
+            <li data-level="2">Secondaire 2</li>
+            <li data-level="3">Secondaire 3</li>
+            <li data-level="4">Secondaire 4</li>
+            <li data-level="5">Secondaire 5</li>
+        </ul>
+
+        {% for level in range(1, 6) %}
+        <div id="tab-content-{{ level }}" class="tab-content {% if level == 1 %}active{% endif %}" data-level="{{ level }}">
+            <table class="preparation-table">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">Champ</th>
+                        <th style="width: 20%;">Cours</th>
+                        <th>PSC</th>
+                        <th>PSC2</th>
+                        <th>PSE</th>
+                        <th>DLTA</th>
+                        <th>DLTA3</th>
+                        <th>PSA</th>
+                        <th>PSA2</th>
+                        <th>PSA3</th>
+                        <th>PAP</th>
+                        <th>PAP2</th>
+                        <th style="width: 5%;"></th>
+                    </tr>
+                </thead>
+                <tbody id="schedule-body-{{ level }}">
+                    <!-- Les lignes seront insérées ici par JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Modèle pour les nouvelles lignes (caché) -->
+    <template id="row-template">
+        <tr>
+            <td>
+                <select class="select-champ">
+                    <option value="">Choisir un champ...</option>
+                </select>
+            </td>
+            <td>
+                <select class="select-cours" disabled>
+                    <option value="">Choisir un cours...</option>
+                </select>
+            </td>
+            <td data-col-name="PSC"><div class="teachers-container"></div></td>
+            <td data-col-name="PSC2"><div class="teachers-container"></div></td>
+            <td data-col-name="PSE"><div class="teachers-container"></div></td>
+            <td data-col-name="DLTA"><div class="teachers-container"></div></td>
+            <td data-col-name="DLTA3"><div class="teachers-container"></div></td>
+            <td data-col-name="PSA"><div class="teachers-container"></div></td>
+            <td data-col-name="PSA2"><div class="teachers-container"></div></td>
+            <td data-col-name="PSA3"><div class="teachers-container"></div></td>
+            <td data-col-name="PAP"><div class="teachers-container"></div></td>
+            <td data-col-name="PAP2"><div class="teachers-container"></div></td>
+            <td>
+                <button class="btn btn-danger btn-delete-row">X</button>
+            </td>
+        </tr>
+    </template>
+
+{% else %}
+    <div class="flash-messages">
+        <li class="warning">Aucune année scolaire n'est active. Les données ne peuvent pas être affichées.</li>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<!-- Passerelle de données de Jinja2 vers JavaScript -->
+<script>
+    const PAGE_DATA = {
+        anneeId: {{ annee_active.annee_id | tojson }},
+        allChamps: {{ preparation_data.all_champs | tojson }},
+        coursParChamp: {{ preparation_data.cours_par_champ | tojson }},
+        enseignantsParCours: {{ preparation_data.enseignants_par_cours | tojson }},
+        savedAssignments: {{ preparation_data.saved_assignments | tojson }},
+        urls: {
+            saveSchedule: "{{ url_for('admin.api_sauvegarder_preparation_horaire') }}"
+        }
+    };
+</script>
+
+<!-- Chargement du script externe spécifique à la page -->
+<script src="{{ url_for('static', filename='js/preparation_horaire.js') }}" defer></script>
+{% endblock %}

@@ -740,3 +740,67 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
                 "donnees": list(enseignants.values()),
             }
     return donnees_par_champ
+
+
+# --- SERVICES POUR PRÉPARATION HORAIRE ---
+
+def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
+    """
+    Récupère et structure les données nécessaires pour la page de préparation de l'horaire.
+    """
+    try:
+        # 1. Récupérer toutes les briques de données brutes en parallèle
+        all_champs = db.get_all_champs()
+        all_cours_raw = db.get_all_cours_for_preparation(annee_id)
+        all_assignments_raw = db.get_assignments_for_preparation(annee_id)
+        saved_assignments_raw = db.get_saved_preparation_horaire(annee_id)
+
+        # 2. Structurer les cours par champ pour les listes déroulantes
+        cours_par_champ: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        for cours in all_cours_raw:
+            cours_par_champ[cours["champno"]].append(
+                {"codecours": cours["codecours"], "annee_id": cours["annee_id"]}
+            )
+
+        # 3. Structurer les enseignants par cours pour affichage
+        enseignants_par_cours: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        for assignment in all_assignments_raw:
+            enseignants_par_cours[assignment["codecours"]].append(
+                {"enseignantid": assignment["enseignantid"], "nomcomplet": assignment["nomcomplet"]}
+            )
+
+        # 4. Structurer les assignations sauvegardées pour reconstruire l'état
+        saved_assignments_structured = defaultdict(list)
+        for saved in saved_assignments_raw:
+            level = saved['secondaire_level']
+            saved_assignments_structured[level].append(saved)
+
+
+        # 5. Retourner le dictionnaire final structuré
+        return {
+            "all_champs": all_champs,
+            "cours_par_champ": dict(cours_par_champ),
+            "enseignants_par_cours": dict(enseignants_par_cours),
+            "saved_assignments": dict(saved_assignments_structured),
+        }
+    except Exception as e:
+        # Log l'erreur pour le débogage
+        # current_app.logger.error(...)
+        raise ServiceException(f"Erreur lors de la préparation des données pour l'horaire : {e}")
+
+
+def save_preparation_horaire_service(annee_id: int, assignments_data: list[dict[str, Any]]) -> None:
+    """
+    Valide et sauvegarde les données de préparation de l'horaire.
+    """
+    # Validation basique de la structure des données reçues
+    required_keys = ["secondaire_level", "codecours", "annee_id_cours", "enseignant_id", "colonne_assignee"]
+    for item in assignments_data:
+        if not all(key in item for key in required_keys):
+            raise BusinessRuleValidationError("Données de sauvegarde invalides ou incomplètes.")
+
+    try:
+        if not db.save_preparation_horaire_data(annee_id, assignments_data):
+            raise ServiceException("La sauvegarde en base de données a échoué.")
+    except Exception as e:
+        raise ServiceException(f"Erreur lors de la sauvegarde de la préparation de l'horaire : {e}")

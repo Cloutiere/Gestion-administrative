@@ -1473,3 +1473,134 @@ def get_dashboard_summary_data(annee_id: int) -> dict[str, Any]:
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_dashboard_summary_data pour annee {annee_id}: {e}", exc_info=True)
         return {}
+
+
+# --- FONCTIONS DAO POUR PRÉPARATION HORAIRE ---
+
+def get_all_cours_for_preparation(annee_id: int) -> list[dict[str, Any]]:
+    """
+    Récupère tous les cours pour une année donnée, y compris le nom du champ,
+    pour la préparation de l'horaire.
+    """
+    db_conn = get_db()
+    if not db_conn:
+        return []
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.CodeCours,
+                    c.ChampNo,
+                    c.annee_id
+                FROM Cours c
+                WHERE c.annee_id = %s
+                ORDER BY c.ChampNo, c.CodeCours;
+                """,
+                (annee_id,),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_all_cours_for_preparation pour annee {annee_id}: {e}", exc_info=True)
+        return []
+
+def get_assignments_for_preparation(annee_id: int) -> list[dict[str, Any]]:
+    """
+    Récupère toutes les attributions (enseignant-cours) pour une année donnée
+    pour la préparation de l'horaire. Retourne une ligne pour CHAQUE groupe
+    attribué, même si c'est au même enseignant.
+    """
+    db_conn = get_db()
+    if not db_conn:
+        return []
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.CodeCours,
+                    e.NomComplet,
+                    e.EnseignantID
+                FROM AttributionsCours ac
+                CROSS JOIN LATERAL generate_series(1, ac.NbGroupesPris)
+                JOIN Enseignants e ON ac.EnseignantID = e.EnseignantID
+                JOIN Cours c ON ac.CodeCours = c.CodeCours AND ac.annee_id_cours = c.annee_id
+                WHERE e.annee_id = %s AND e.EstFictif = FALSE
+                ORDER BY c.CodeCours, e.NomComplet COLLATE "fr-CA-x-icu";
+                """,
+                (annee_id,),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_assignments_for_preparation pour annee {annee_id}: {e}", exc_info=True)
+        return []
+
+def get_saved_preparation_horaire(annee_id: int) -> list[dict[str, Any]]:
+    """
+    Récupère les données sauvegardées de la préparation de l'horaire pour une année.
+    """
+    db_conn = get_db()
+    if not db_conn:
+        return []
+    try:
+        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    secondaire_level,
+                    codecours,
+                    annee_id_cours,
+                    enseignant_id,
+                    colonne_assignee
+                FROM preparation_horaire
+                WHERE annee_id = %s;
+                """,
+                (annee_id,),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Erreur DAO get_saved_preparation_horaire pour annee {annee_id}: {e}", exc_info=True)
+        return []
+
+
+def save_preparation_horaire_data(annee_id: int, assignments: list[dict[str, Any]]) -> bool:
+    """
+    Sauvegarde (en remplaçant) les assignations de la préparation de l'horaire pour une année.
+    Opération transactionnelle.
+    """
+    db_conn = get_db()
+    if not db_conn:
+        return False
+    try:
+        with db_conn.cursor() as cur:
+            # 1. Supprimer toutes les anciennes données pour cette année scolaire
+            cur.execute("DELETE FROM preparation_horaire WHERE annee_id = %s;", (annee_id,))
+
+            # 2. Insérer les nouvelles données si la liste n'est pas vide
+            if assignments:
+                data_to_insert = [
+                    (
+                        annee_id,
+                        a["secondaire_level"],
+                        a["codecours"],
+                        a["annee_id_cours"],
+                        a["enseignant_id"],
+                        a["colonne_assignee"],
+                    )
+                    for a in assignments
+                ]
+                psycopg2.extras.execute_values(
+                    cur,
+                    """
+                    INSERT INTO preparation_horaire (annee_id, secondaire_level, codecours, annee_id_cours, enseignant_id, colonne_assignee)
+                    VALUES %s
+                    """,
+                    data_to_insert,
+                )
+        db_conn.commit()
+        return True
+    except psycopg2.Error as e:
+        if db_conn:
+            db_conn.rollback()
+        current_app.logger.error(f"Erreur DAO save_preparation_horaire_data pour annee {annee_id}: {e}", exc_info=True)
+        return False

@@ -1,4 +1,4 @@
--- schema.sql
+-- mon_application/schema.sql
 
 -- ====================================================================
 -- SECTION DE NETTOYAGE
@@ -7,6 +7,7 @@
 -- de changer session_replication_role.
 -- ====================================================================
 
+DROP TABLE IF EXISTS public.preparation_horaire CASCADE;
 DROP TABLE IF EXISTS public.user_champ_access CASCADE;
 DROP TABLE IF EXISTS public.attributionscours CASCADE;
 DROP TABLE IF EXISTS public.cours CASCADE;
@@ -279,6 +280,46 @@ CREATE TABLE public.user_champ_access (
 ALTER TABLE public.user_champ_access OWNER TO neondb_owner;
 
 --
+-- Name: preparation_horaire; Type: TABLE; Schema: public; Owner: neondb_owner
+--
+
+-- NOUVELLE TABLE pour la préparation de l'horaire
+CREATE TABLE public.preparation_horaire (
+    id integer NOT NULL,
+    annee_id integer NOT NULL,
+    secondaire_level integer NOT NULL,
+    codecours text NOT NULL,
+    annee_id_cours integer NOT NULL,
+    enseignant_id integer NOT NULL,
+    colonne_assignee text NOT NULL,
+    CONSTRAINT preparation_horaire_secondaire_level_check CHECK (((secondaire_level >= 1) AND (secondaire_level <= 5)))
+);
+
+ALTER TABLE public.preparation_horaire OWNER TO neondb_owner;
+
+--
+-- Name: preparation_horaire_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
+--
+
+CREATE SEQUENCE public.preparation_horaire_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.preparation_horaire_id_seq OWNER TO neondb_owner;
+
+
+--
+-- Name: preparation_horaire_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
+--
+
+ALTER SEQUENCE public.preparation_horaire_id_seq OWNED BY public.preparation_horaire.id;
+
+
+--
 -- Name: anneesscolaires annee_id; Type: DEFAULT; Schema: public; Owner: neondb_owner
 --
 
@@ -304,6 +345,12 @@ ALTER TABLE ONLY public.enseignants ALTER COLUMN enseignantid SET DEFAULT nextva
 --
 
 ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
+
+--
+-- Name: preparation_horaire id; Type: DEFAULT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.preparation_horaire ALTER COLUMN id SET DEFAULT nextval('public.preparation_horaire_id_seq'::regclass);
 
 
 --
@@ -400,6 +447,19 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_username_key UNIQUE (username);
+
+--
+-- Name: preparation_horaire preparation_horaire_pkey; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+
+ALTER TABLE ONLY public.preparation_horaire
+    ADD CONSTRAINT preparation_horaire_pkey PRIMARY KEY (id);
+
+--
+-- Name: preparation_horaire_unique_assignment; Type: CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+ALTER TABLE ONLY public.preparation_horaire
+    ADD CONSTRAINT preparation_horaire_unique_assignment UNIQUE (annee_id, secondaire_level, enseignant_id, colonne_assignee);
 
 
 --
@@ -523,6 +583,26 @@ ALTER TABLE public.user_champ_access
 
 ALTER TABLE public.user_champ_access
     ADD CONSTRAINT user_champ_access_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: preparation_horaire preparation_horaire_annee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+ALTER TABLE ONLY public.preparation_horaire
+    ADD CONSTRAINT preparation_horaire_annee_id_fkey FOREIGN KEY (annee_id) REFERENCES public.anneesscolaires(annee_id) ON DELETE CASCADE;
+
+--
+-- Name: preparation_horaire preparation_horaire_cours_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+ALTER TABLE ONLY public.preparation_horaire
+    ADD CONSTRAINT preparation_horaire_cours_fkey FOREIGN KEY (codecours, annee_id_cours) REFERENCES public.cours(codecours, annee_id) ON DELETE CASCADE;
+
+--
+-- Name: preparation_horaire preparation_horaire_enseignant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: neondb_owner
+--
+ALTER TABLE ONLY public.preparation_horaire
+    ADD CONSTRAINT preparation_horaire_enseignant_id_fkey FOREIGN KEY (enseignant_id) REFERENCES public.enseignants(enseignantid) ON DELETE CASCADE;
+
 
 
 --

@@ -545,3 +545,25 @@ def api_reassigner_cours_financement(annee_active: dict[str, Any]) -> tuple[Resp
         return jsonify(success=True, message="Financement du cours mis à jour."), 200
     except ServiceException as e:
         return jsonify({"success": False, "message": e.message}), 500
+
+
+# --- API POUR LA PRÉPARATION DE L'HORAIRE ---
+
+@bp.route("/api/horaire/sauvegarder", methods=["POST"])
+@admin_api_required
+@annee_active_required
+def api_sauvegarder_preparation_horaire(annee_active: dict[str, Any]) -> tuple[Response, int]:
+    """API pour sauvegarder l'état de la préparation de l'horaire pour l'année active."""
+    data = request.get_json()
+    if not data or "assignments" not in data:
+        return jsonify({"success": False, "message": "Données d'assignation manquantes."}), 400
+
+    assignments = data["assignments"]
+    try:
+        services.save_preparation_horaire_service(annee_active["annee_id"], assignments)
+        current_app.logger.info(f"Préparation de l'horaire sauvegardée pour l'année ID {annee_active['annee_id']}.")
+        return jsonify({"success": True, "message": "Horaire sauvegardé avec succès."}), 200
+    except BusinessRuleValidationError as e:
+        return jsonify({"success": False, "message": e.message}), 400
+    except ServiceException as e:
+        return jsonify({"success": False, "message": e.message}), 500

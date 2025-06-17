@@ -14,6 +14,9 @@ from flask_login import current_user, login_required
 from werkzeug.wrappers import Response
 
 from . import database as db
+from . import services as svc
+from .admin import admin_required
+
 
 # Crée un Blueprint nommé 'views'.
 bp = Blueprint("views", __name__)
@@ -88,4 +91,33 @@ def page_champ(champ_no: str) -> str | Response:
         cours_enseignement_champ=cours_enseignement_champ,
         cours_autres_taches_champ=cours_autres_taches_champ,
         moyenne_champ_initiale=moyenne_champ,
+    )
+
+
+@bp.route("/admin/horaire_preparation")
+@login_required
+@admin_required
+def page_preparation_horaire() -> str | Response:
+    """
+    Affiche la page de préparation de l'horaire.
+    Accessible uniquement aux administrateurs.
+    """
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
+        flash("Impossible d'afficher la préparation de l'horaire : aucune année scolaire n'est active.", "error")
+        return redirect(url_for("dashboard.page_sommaire"))
+
+    annee_id = annee_active["annee_id"]
+
+    try:
+        # Appeler le service pour obtenir toutes les données structurées
+        preparation_data = svc.get_preparation_horaire_data_service(annee_id)
+    except svc.ServiceException as e:
+        flash(f"Erreur lors du chargement des données de préparation : {e.message}", "error")
+        return redirect(url_for("dashboard.page_sommaire"))
+
+    return render_template(
+        "preparation_horaire.html",
+        annee_active=annee_active,
+        preparation_data=preparation_data
     )

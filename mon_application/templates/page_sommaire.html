@@ -56,6 +56,7 @@
                 <li><a href="{{ url_for('dashboard.page_sommaire') }}">Tableau de Bord</a></li>
                 <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
                 <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
+                <li><a href="{{ url_for('views.page_preparation_horaire') }}">Préparation Horaire</a></li>
             {% elif current_user.is_dashboard_only %}
                 <li><a href="{{ url_for('dashboard.page_sommaire') }}">Tableau de Bord</a></li>
                 <li><a href="{{ url_for('dashboard.page_detail_taches') }}">Détail des Tâches</a></li>
