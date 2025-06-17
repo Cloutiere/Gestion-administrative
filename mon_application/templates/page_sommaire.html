@@ -1,3 +1,4 @@
+<!-- mon_application/templates/page_sommaire.html -->
 {% extends "_layout.html" %}
 
 {% block title %}Tableau de Bord Global{% endblock %}
@@ -9,11 +10,12 @@
         text-align: center;
     }
     .lock-icon, .confirm-icon {
-        cursor: pointer;
+        /* Le curseur sera géré par JS pour les non-admins */
         width: 24px;
         height: 24px;
         fill: #ccc; /* Couleur par défaut pour l'icône non confirmée */
         vertical-align: middle;
+        transition: fill 0.2s ease-in-out;
     }
     .lock-icon.locked {
         fill: var(--color-danger);
@@ -21,7 +23,12 @@
     .confirm-icon.confirmed {
         fill: var(--color-success);
     }
-    /* La classe `champ-verrouille-row` a été déplacée dans le CSS global */
+    /* La classe `champ-verrouille-row` est dans le CSS global */
+
+    /* Style pour les messages flash dynamiques */
+    .flash-dynamic {
+        transition: opacity 0.5s ease-in-out;
+    }
 </style>
 {% endblock %}
 
@@ -63,10 +70,6 @@
             </div>
 
             <div class="action-buttons">
-                {#
-                   CORRECTION : L'endpoint a été corrigé de 'dashboard.detail_taches'
-                   à 'dashboard.page_detail_taches' pour correspondre à la route réelle.
-                #}
                 <a href="{{ url_for('dashboard.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
                 <a href="{{ url_for('dashboard.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
                 <a href="{{ url_for('dashboard.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
@@ -74,7 +77,7 @@
             </div>
         </div>
 
-        {% if moyennes_par_champ %}
+        {% if moyennes_par_champ or true %} {# Laisser le JS gérer l'affichage #}
         <div style="overflow-x: auto;">
             <table id="table-moyennes-par-champ">
                 <thead>
@@ -132,12 +135,14 @@
     const PAGE_DATA = {
         IS_ADMIN: {{ current_user.is_admin | tojson }},
         ANNEE_ACTIVE: {{ annee_active is not none | tojson }},
+        // MODIFICATION : Utilisation de la variable passée depuis la vue Python
+        CSRF_TOKEN: {{ csrf_token_value | tojson }},
         URLS: {
             API_CHANGER_ANNEE: "{{ url_for('dashboard.api_changer_annee_active') }}",
             API_GET_DONNEES_SOMMAIRE: "{{ url_for('dashboard.api_get_donnees_sommaire') }}",
-            // AJOUT : Template d'URL pour la page de détail d'un champ.
-            // '__CHAMP_NO__' est un placeholder que le JS remplacera.
-            URL_CHAMP_TEMPLATE: "{{ url_for('views.page_champ', champ_no='__CHAMP_NO__') }}"
+            URL_CHAMP_TEMPLATE: "{{ url_for('views.page_champ', champ_no='__CHAMP_NO__') }}",
+            API_TOGGLE_LOCK_TEMPLATE: "{{ url_for('admin.api_basculer_verrou_champ', champ_no='__CHAMP_NO__') }}",
+            API_TOGGLE_CONFIRM_TEMPLATE: "{{ url_for('admin.api_basculer_confirmation_champ', champ_no='__CHAMP_NO__') }}"
         }
     };
 </script>

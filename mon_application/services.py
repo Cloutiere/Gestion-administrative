@@ -747,7 +747,6 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
     """
     Récupère et structure les données nécessaires pour la page de préparation de l'horaire.
-    Cette version est refactorisée pour préparer une grille complète pour le rendu Jinja2.
     """
     try:
         # 1. Récupérer toutes les briques de données brutes
@@ -767,54 +766,47 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
         for assignment in all_assignments_raw:
             enseignants_par_cours[assignment["codecours"]].append(assignment)
 
-        enseignants_by_id: dict[int, dict] = {
-            ens["enseignantid"]: ens
-            for assignments in enseignants_par_cours.values() for ens in assignments
-        }
-
-        # 3. Organiser les assignations sauvegardées par niveau et cours
-        saved_placements = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        # 3. Organiser les assignations sauvegardées
+        saved_placements = defaultdict(lambda: defaultdict(list))
         for saved in saved_assignments_raw:
-            saved_placements[saved['secondaire_level']][saved['codecours']][saved['colonne_assignee']].append(saved['enseignant_id'])
+            key = (saved['secondaire_level'], saved['codecours'])
+            saved_placements[key][saved['colonne_assignee']].append(saved['enseignant_id'])
 
         # 4. Construire la structure de la grille pour le template
         prepared_grid: dict[int, list] = {level: [] for level in range(1, 6)}
+        cours_traites = set()
 
-        for level, courses in saved_placements.items():
-            for codecours, columns in courses.items():
-                cours_info = cours_details.get(codecours)
-                if not cours_info:
-                    continue
+        for (level, codecours), columns in saved_placements.items():
+            cours_info = cours_details.get(codecours)
+            if not cours_info:
+                continue
 
-                all_possible_teachers = enseignants_par_cours.get(codecours, [])
-                placed_teacher_ids = set()
+            all_teachers_for_course = enseignants_par_cours.get(codecours, [])
+            placed_teacher_ids = {tid for teacher_ids in columns.values() for tid in teacher_ids}
+            unassigned_teachers = [t for t in all_teachers_for_course if t['enseignantid'] not in placed_teacher_ids]
 
-                assigned_teachers: defaultdict[str, list] = defaultdict(list)
-                for col_name, teacher_ids in columns.items():
-                    for teacher_id in teacher_ids:
-                        if teacher_id in enseignants_by_id:
-                            assigned_teachers[col_name].append(enseignants_by_id[teacher_id])
-                            placed_teacher_ids.add(teacher_id)
+            # MODIFIÉ : Création et ajout du dictionnaire de recherche
+            teachers_lookup = {t['enseignantid']: t for t in all_teachers_for_course}
 
-                unassigned_teachers = [
-                    teacher for teacher in all_possible_teachers
-                    if teacher['enseignantid'] not in placed_teacher_ids
-                ]
-
-                prepared_grid[level].append({
-                    "cours": cours_info,
-                    "assigned_teachers": dict(assigned_teachers),
-                    "unassigned_teachers": unassigned_teachers,
-                })
+            prepared_grid[level].append({
+                "cours": cours_info,
+                "all_teachers_for_course": all_teachers_for_course,
+                "unassigned_teachers": unassigned_teachers,
+                "assigned_teachers_by_col": columns,
+                "teachers_lookup": teachers_lookup,  # NOUVEAU: Ajout du lookup
+            })
+            cours_traites.add(codecours)
 
         # 5. Retourner le dictionnaire final structuré
         return {
             "all_champs": all_champs,
             "cours_par_champ": dict(cours_par_champ),
-            "enseignants_par_cours": dict(enseignants_par_cours), # Utile pour le JS (ajout de ligne)
+            "enseignants_par_cours": dict(enseignants_par_cours),
             "prepared_grid": prepared_grid,
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise ServiceException(f"Erreur lors de la préparation des données pour l'horaire : {e}")
 
 

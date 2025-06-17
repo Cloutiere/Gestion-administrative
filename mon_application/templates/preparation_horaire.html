@@ -1,3 +1,4 @@
+{# mon_application/templates/preparation_horaire.html #}
 {% extends "_layout.html" %}
 
 {% block title %}Préparation de l'horaire{% endblock %}
@@ -57,7 +58,6 @@
                     <tr>
                         <th style="width: 15%;">Champ</th>
                         <th style="width: 15%;">Cours</th>
-                        <th style="width: 20%;">Enseignants disponibles</th>
                         {% for col_name in column_names %}
                             <th>{{ col_name }}</th>
                         {% endfor %}
@@ -67,6 +67,7 @@
                 <tbody id="schedule-body-{{ level }}">
                     <!-- Lignes pré-rendues par Jinja2 -->
                     {% for row_data in preparation_data.prepared_grid[level] %}
+                    {% set unassigned_counter = [0] %}
                     <tr data-cours-code="{{ row_data.cours.codecours }}" data-annee-id="{{ row_data.cours.annee_id }}">
                         <td>
                             <select class="select-champ" disabled>
@@ -86,23 +87,33 @@
                                 {% endfor %}
                             </select>
                         </td>
-                        <td>
-                            <div class="teachers-container available-teachers">
-                                {% for teacher in row_data.unassigned_teachers %}
-                                <div class="teacher-item" data-enseignant-id="{{ teacher.enseignantid }}" draggable="true">
-                                    {{ teacher.nomcomplet }}
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </td>
+
                         {% for col_name in column_names %}
                         <td data-col-name="{{ col_name }}">
                             <div class="teachers-container assignment-droppable">
-                                {% for teacher in row_data.assigned_teachers.get(col_name, []) %}
-                                <div class="teacher-item" data-enseignant-id="{{ teacher.enseignantid }}" draggable="true">
-                                    {{ teacher.nomcomplet }}
-                                </div>
+                                {# MODIFIÉ : Nouvelle logique d'affichage pour éviter la duplication #}
+                                {# 1. Obtenir la liste unique des IDs assignés à cette colonne #}
+                                {% set assigned_ids = row_data.assigned_teachers_by_col.get(col_name, []) | unique | list %}
+
+                                {# 2. Boucler sur ces IDs uniques #}
+                                {% for teacher_id in assigned_ids %}
+                                    {# 3. Récupérer l'objet enseignant depuis le dictionnaire de recherche #}
+                                    {% set teacher = row_data.teachers_lookup.get(teacher_id) %}
+                                    {% if teacher %}
+                                    <div class="teacher-item" data-enseignant-id="{{ teacher.enseignantid }}" draggable="true">
+                                        {{ teacher.nomcomplet }}
+                                    </div>
+                                    {% endif %}
                                 {% endfor %}
+
+                                {# Logique pour placer les non-assignés dans les cellules vides (inchangée) #}
+                                {% if not assigned_ids and unassigned_counter[0] < row_data.unassigned_teachers|length %}
+                                    {% set teacher = row_data.unassigned_teachers[unassigned_counter[0]] %}
+                                     <div class="teacher-item" data-enseignant-id="{{ teacher.enseignantid }}" draggable="true">
+                                        {{ teacher.nomcomplet }}
+                                    </div>
+                                    {% set _ = unassigned_counter.append(unassigned_counter.pop() + 1) %}
+                                {% endif %}
                             </div>
                         </td>
                         {% endfor %}
@@ -134,11 +145,6 @@
                     <option value="">Choisir un cours...</option>
                 </select>
             </td>
-            <td>
-                <div class="teachers-container available-teachers">
-                    <!-- Les enseignants apparaîtront ici après sélection du cours -->
-                </div>
-            </td>
             {% for col_name in column_names %}
             <td data-col-name="{{ col_name }}"><div class="teachers-container assignment-droppable"></div></td>
             {% endfor %}
@@ -163,7 +169,6 @@
         allChamps: {{ preparation_data.all_champs | tojson }},
         coursParChamp: {{ preparation_data.cours_par_champ | tojson }},
         enseignantsParCours: {{ preparation_data.enseignants_par_cours | tojson }},
-        // L'ancienne clé `savedAssignments` n'est plus nécessaire côté JS
         urls: {
             saveSchedule: "{{ url_for('dashboard.api_sauvegarder_preparation_horaire') }}"
         }

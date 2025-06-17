@@ -24,6 +24,8 @@ from flask import (
     url_for,
 )
 from flask_login import current_user
+# AJOUT : Importation pour générer le jeton CSRF explicitement
+from flask_wtf.csrf import generate_csrf
 from werkzeug.wrappers import Response
 
 from . import exports, services
@@ -51,12 +53,14 @@ def page_sommaire() -> str:
         except ServiceException as e:
             flash(f"Erreur lors de la récupération du sommaire : {e.message}", "error")
 
+    # MODIFICATION : Passer le jeton CSRF explicitement au template
     return render_template(
         "page_sommaire.html",
         moyennes_par_champ=summary_data.get("moyennes_par_champ", {}),
         moyenne_generale=summary_data.get("moyenne_generale", 0.0),
         moyenne_preliminaire_confirmee=summary_data.get("moyenne_preliminaire_confirmee", 0.0),
         grand_totals=summary_data.get("grand_totals", {}),
+        csrf_token_value=generate_csrf(),  # Génère et passe le jeton
     )
 
 

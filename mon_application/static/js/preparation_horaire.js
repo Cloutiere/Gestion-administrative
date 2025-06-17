@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ScheduleManager = {
         activeLevel: 1,
         draggedItem: null,
+        originRow: null, // NOUVEAU : Pour mémoriser la ligne d'origine du drag
 
         init() {
             this.setupTabs();
@@ -60,38 +61,56 @@ document.addEventListener('DOMContentLoaded', () => {
             scheduleContainer.addEventListener('change', this.handleRowChange.bind(this));
         },
 
+        // MODIFICATION : Mémorise la ligne d'origine
         handleDragStart(e) {
             if (e.target.classList.contains('teacher-item')) {
                 this.draggedItem = e.target;
+                this.originRow = e.target.closest('tr'); // Mémoriser la ligne parente
                 setTimeout(() => e.target.classList.add('dragging'), 0);
             }
         },
 
-        handleDragEnd(e) {
+        // MODIFICATION : Nettoie les propriétés après le drag
+        handleDragEnd() {
             if (this.draggedItem) {
                 this.draggedItem.classList.remove('dragging');
-                this.draggedItem = null;
             }
+            // Nettoyage systématique des références
+            this.draggedItem = null;
+            this.originRow = null;
         },
 
+        // MODIFICATION : Ajout de la contrainte de ligne
         handleDragOver(e) {
-            const container = e.target.closest('.teachers-container');
-            if (container && this.draggedItem) {
-                e.preventDefault();
+            const container = e.target.closest('.teachers-container.assignment-droppable');
+            // Quitter si ce n'est pas une zone de dépôt valide ou si aucun item n'est glissé
+            if (!container || !this.draggedItem) {
+                return;
+            }
+
+            const targetRow = container.closest('tr');
+
+            // NOUVELLE RÈGLE : Autoriser le dépôt uniquement si la ligne cible est la même que l'origine
+            if (this.originRow === targetRow) {
+                e.preventDefault(); // Indique que la zone est une cible de dépôt valide
                 container.classList.add('drag-over');
             }
+            // Si la condition n'est pas remplie, preventDefault() n'est pas appelé,
+            // et le navigateur indiquera visuellement que le dépôt est interdit.
         },
 
         handleDragLeave(e) {
-            const container = e.target.closest('.teachers-container');
+            const container = e.target.closest('.teachers-container.assignment-droppable');
             if (container) {
                 container.classList.remove('drag-over');
             }
         },
 
         handleDrop(e) {
-            const container = e.target.closest('.teachers-container');
-            if (container && this.draggedItem) {
+            const container = e.target.closest('.teachers-container.assignment-droppable');
+
+            // La validation a déjà eu lieu dans `handleDragOver`, mais une double-vérification ne nuit pas
+            if (container && this.draggedItem && container.closest('tr') === this.originRow) {
                 e.preventDefault();
                 container.classList.remove('drag-over');
                 container.appendChild(this.draggedItem);
@@ -105,13 +124,15 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         handleRowChange(e) {
-            if (e.target.classList.contains('select-champ')) {
-                const row = e.target.closest('tr');
+            const target = e.target;
+            if (target.classList.contains('select-champ')) {
+                const row = target.closest('tr');
                 this.populateCoursSelect(row);
-                this.populateTeachers(row);
-            } else if (e.target.classList.contains('select-cours')) {
-                const row = e.target.closest('tr');
-                this.populateTeachers(row);
+                // Vider les cellules d'assignation si le champ change
+                this.populateRowWithTeachers(row);
+            } else if (target.classList.contains('select-cours')) {
+                const row = target.closest('tr');
+                this.populateRowWithTeachers(row);
             }
         },
 
@@ -138,30 +159,28 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
-        // CORRIGÉ : Distribue les enseignants dans les colonnes d'assignation
-        populateTeachers(row) {
-            // 1. Vider toutes les colonnes d'enseignants pour cette ligne
-            row.querySelectorAll('.teachers-container').forEach(c => c.innerHTML = '');
+        populateRowWithTeachers(row) {
+            const assignmentCells = Array.from(row.querySelectorAll('.assignment-droppable'));
+
+            assignmentCells.forEach(cell => cell.innerHTML = '');
 
             const selectCours = row.querySelector('.select-cours');
             const courseCode = selectCours.value;
 
             if (courseCode && enseignantsParCours[courseCode]) {
-                const teachers = enseignantsParCours[courseCode];
-                // 2. Récupérer les conteneurs de destination
-                const assignmentContainers = row.querySelectorAll('.assignment-droppable');
-                const availableContainer = row.querySelector('.available-teachers');
+                let teachers = [...enseignantsParCours[courseCode]];
+                for (let i = teachers.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [teachers[i], teachers[j]] = [teachers[j], teachers[i]];
+                }
 
-                // 3. Distribuer les enseignants
-                teachers.forEach((teacher, index) => {
-                    const teacherElement = this.createTeacherElement(teacher);
-                    // S'il y a une colonne d'assignation disponible pour cet enseignant
-                    if (assignmentContainers[index]) {
-                        assignmentContainers[index].appendChild(teacherElement);
+                let cellIndex = 0;
+                teachers.forEach(teacher => {
+                    if (cellIndex < assignmentCells.length) {
+                        assignmentCells[cellIndex].appendChild(this.createTeacherElement(teacher));
+                        cellIndex++;
                     } else {
-                        // Sinon (plus d'enseignants que de colonnes), le mettre dans les "disponibles"
-                        console.warn(`Plus d'enseignants que de colonnes, enseignant ${teacher.nomcomplet} placé dans "disponibles".`);
-                        availableContainer.appendChild(teacherElement);
+                        assignmentCells[0].appendChild(this.createTeacherElement(teacher));
                     }
                 });
             }
@@ -179,6 +198,12 @@ document.addEventListener('DOMContentLoaded', () => {
         async handleSave() {
             const btnSave = document.getElementById('btn-save-schedule');
             const assignments = this.collectAssignments();
+
+            if (assignments.length === 0) {
+                 alert("Aucune assignation à sauvegarder.");
+                 return;
+            }
+
             btnSave.disabled = true;
             btnSave.textContent = 'Sauvegarde...';
 
@@ -205,6 +230,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         collectAssignments() {
             const assignments = [];
+            const uniqueAssignments = new Set(); 
+
             document.querySelectorAll('.tab-content').forEach(tab => {
                 const level = parseInt(tab.dataset.level, 10);
                 tab.querySelectorAll('tbody tr').forEach(row => {
@@ -215,17 +242,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (courseCode && selectedOption && selectedOption.dataset.anneeId) {
                         const courseAnneeId = parseInt(selectedOption.dataset.anneeId, 10);
 
-                        // Collecter les enseignants depuis les colonnes d'assignation
                         row.querySelectorAll('.assignment-droppable').forEach(container => {
                             const colName = container.parentElement.dataset.colName;
                             container.querySelectorAll('.teacher-item').forEach(teacherItem => {
-                                assignments.push({
-                                    secondaire_level: level,
-                                    codecours: courseCode,
-                                    annee_id_cours: courseAnneeId,
-                                    enseignant_id: parseInt(teacherItem.dataset.enseignantId, 10),
-                                    colonne_assignee: colName
-                                });
+                                const enseignantId = parseInt(teacherItem.dataset.enseignantId, 10);
+                                const uniqueKey = `${level}-${enseignantId}-${colName}`;
+
+                                if (!uniqueAssignments.has(uniqueKey)) {
+                                    uniqueAssignments.add(uniqueKey);
+                                    assignments.push({
+                                        secondaire_level: level,
+                                        codecours: courseCode,
+                                        annee_id_cours: courseAnneeId,
+                                        enseignant_id: enseignantId,
+                                        colonne_assignee: colName
+                                    });
+                                }
                             });
                         });
                     }
