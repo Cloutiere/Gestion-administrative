@@ -1,50 +1,33 @@
 {% extends "_layout.html" %}
 
-{% block title %}Sommaire Global{% endblock %}
+{% block title %}Tableau de Bord Global{% endblock %}
 
 {% block head_extra %}
+{# Les styles locaux sont conservés pour la spécificité #}
 <style>
-    .champ-confirme {
-        font-weight: bold;
+    .icon-cell {
+        text-align: center;
     }
     .lock-icon, .confirm-icon {
-        display: inline-block;
-        vertical-align: middle;
+        cursor: pointer;
         width: 24px;
         height: 24px;
+        fill: #ccc; /* Couleur par défaut pour l'icône non confirmée */
+        vertical-align: middle;
     }
-    .lock-icon.admin-only, .confirm-icon.admin-only {
-        cursor: pointer;
+    .lock-icon.locked {
+        fill: var(--color-danger);
     }
-    .confirm-icon.confirmed path {
-        fill: green;
+    .confirm-icon.confirmed {
+        fill: var(--color-success);
     }
-    .confirm-icon.unconfirmed path {
-        fill: #ccc;
-    }
-    .details-link-container {
-        display: flex; /* Utilise flexbox pour aligner les éléments */
-        justify-content: flex-end; /* Aligne les éléments à droite */
-        gap: 1rem; /* Espace entre les boutons */
-        margin-bottom: 1rem;
-        flex-wrap: wrap; /* Permet aux boutons de passer à la ligne sur petits écrans */
-    }
-
-    /* Styles pour le solde final */
-    .solde-positif {
-        color: green;
-        font-weight: bold;
-    }
-    .solde-negatif {
-        color: red;
-        font-weight: bold;
-    }
+    /* La classe `champ-verrouille-row` a été déplacée dans le CSS global */
 </style>
 {% endblock %}
 
 {% block header_content %}
 <h1>
-    Sommaire Global
+    Tableau de Bord Global
     {% if annee_active %}
         <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
     {% endif %}
@@ -53,51 +36,57 @@
 
 {% block content %}
 {% if annee_active %}
-<!-- Conteneur principal simplifié -->
-<div class="container-principal-sommaire">
-    <!-- Colonne unique pour les moyennes -->
-    <div class="colonne-sommaire colonne-gauche" style="width: 100%; margin: auto; max-width: 1200px;">
-        <div class="moyenne-generale-contenu">
-            <span>Moyenne générale incluant tous les champs :</span>
-            <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
-        </div>
-        <div class="moyenne-generale-contenu">
-            <span>Moyenne générale avec les champs confirmés :</span>
-            <span id="moyenne-preliminaire-confirmee">{{ moyenne_preliminaire_confirmee | format_periodes }} périodes</span>
-        </div>
+<div class="admin-section" style="max-width: 1400px; margin: auto;">
 
-        <div>
-            <h2>Moyennes par champ (temps plein)</h2>
+    <div class="moyenne-generale-contenu">
+        <span>Moyenne générale incluant tous les champs :</span>
+        <span id="moyenne-generale-etablissement">{{ moyenne_generale | format_periodes }} périodes</span>
+    </div>
+    <div class="moyenne-generale-contenu">
+        <span>Moyenne générale avec les champs confirmés :</span>
+        <span id="moyenne-preliminaire-confirmee">{{ moyenne_preliminaire_confirmee | format_periodes }} périodes</span>
+    </div>
 
-            <!-- Liens d'action avec les classes de bouton standardisées -->
-            <div class="details-link-container no-print">
-                <div class="annee-selector">
-                    <label for="annee-scolaire-select">Année de travail :</label>
-                    <select id="annee-scolaire-select">
-                        {% for annee in toutes_les_annees %}
-                            <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
-                                {{ annee.libelle_annee }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <a href="{{ url_for('dashboard.exporter_taches_excel') }}" class="btn">Exporter Tâches</a>
-                <a href="{{ url_for('dashboard.exporter_periodes_restantes_excel') }}" class="btn">Exporter Périodes Restantes</a>
-                <a href="{{ url_for('dashboard.exporter_org_scolaire_excel') }}" class="btn">Exporter Org. Scolaire</a>
+    <div style="margin-top: 2rem;">
+        <h3>Moyennes par champ (temps plein)</h3>
+
+        <div class="button-group" style="justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+             <div class="year-switcher">
+                <label for="annee-selector" style="font-weight: 500; margin-right: 0.5rem;">Changer l'année de visualisation :</label>
+                <select id="annee-selector" name="annee_id" style="min-width: 200px;">
+                    {% for annee in toutes_les_annees %}
+                        <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
+                            {{ annee.libelle_annee }} {% if annee.annee_id == annee_courante_id %}(Courante){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
             </div>
 
-            {% if moyennes_par_champ %}
+            <div class="action-buttons">
+                {#
+                   CORRECTION : L'endpoint a été corrigé de 'dashboard.detail_taches'
+                   à 'dashboard.page_detail_taches' pour correspondre à la route réelle.
+                #}
+                <a href="{{ url_for('dashboard.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
+                <a href="{{ url_for('dashboard.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
+                <a href="{{ url_for('dashboard.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
+                <a href="{{ url_for('dashboard.exporter_org_scolaire_excel') }}" class="btn btn-export-excel">Exporter pour org. scolaire (Excel)</a>
+            </div>
+        </div>
+
+        {% if moyennes_par_champ %}
+        <div style="overflow-x: auto;">
             <table id="table-moyennes-par-champ">
                 <thead>
                     <tr>
                         <th>N° champ</th>
                         <th>Nom du champ</th>
-                        <th>Verrou</th>
+                        <th class="icon-cell">Verrou</th>
                         <th>Nb. Ens. TP</th>
                         <th>Périodes Choisies (TP)</th>
                         <th>Moyenne</th>
                         <th>Diff. / 24p</th>
-                        <th>Confirmé</th>
+                        <th class="icon-cell">Confirmé</th>
                         <th>Diff. Confirmé</th>
                     </tr>
                 </thead>
@@ -105,14 +94,14 @@
                     {# Le contenu de ce tbody sera trié et inséré par JavaScript. #}
                 </tbody>
                 <tfoot>
-                    <tr>
+                    <tr class="total-row">
                         <td colspan="3" style="text-align: right; font-weight: bold;">TOTAL</td>
-                        <td id="total-enseignants-tp" style="font-weight: bold;"></td>
-                        <td id="total-periodes-choisies-tp" style="font-weight: bold;"></td>
-                        <td></td> <!-- Cellule vide pour la colonne moyenne -->
-                        <td></td> <!-- Cellule vide pour le total de "Diff. / 24p" -->
-                        <td></td> <!-- Cellule vide pour la colonne Confirmé -->
-                        <td id="total-periodes-confirmees-magiques" style="font-weight: bold;"></td>
+                        <td id="total-enseignants-tp" style="font-weight: bold; text-align: left;"></td>
+                        <td id="total-periodes-choisies-tp" style="font-weight: bold; text-align: left;"></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td id="total-periodes-confirmees-magiques" style="font-weight: bold; text-align: left;"></td>
                     </tr>
                     <tr>
                         <td colspan="8" style="text-align: right; font-weight: bold;">Chiffre magique (Nb Ens. TP * 0.6)</td>
@@ -124,11 +113,10 @@
                     </tr>
                 </tfoot>
             </table>
-            <p id="aucune-moyenne-champ-message" style="display: none;">Aucune donnée de moyenne par champ disponible.</p>
-            {% else %}
-            <p>Aucune donnée de moyenne par champ disponible pour cette année.</p>
-            {% endif %}
         </div>
+        {% else %}
+        <p>Aucune donnée de moyenne par champ disponible pour cette année.</p>
+        {% endif %}
     </div>
 </div>
 {% else %}
@@ -144,10 +132,12 @@
     const PAGE_DATA = {
         IS_ADMIN: {{ current_user.is_admin | tojson }},
         ANNEE_ACTIVE: {{ annee_active is not none | tojson }},
-        initialData: {{ moyennes_par_champ | tojson }},
         URLS: {
             API_CHANGER_ANNEE: "{{ url_for('dashboard.api_changer_annee_active') }}",
-            API_GET_DONNEES_SOMMAIRE: "{{ url_for('dashboard.api_get_donnees_sommaire') }}"
+            API_GET_DONNEES_SOMMAIRE: "{{ url_for('dashboard.api_get_donnees_sommaire') }}",
+            // AJOUT : Template d'URL pour la page de détail d'un champ.
+            // '__CHAMP_NO__' est un placeholder que le JS remplacera.
+            URL_CHAMP_TEMPLATE: "{{ url_for('views.page_champ', champ_no='__CHAMP_NO__') }}"
         }
     };
 </script>
