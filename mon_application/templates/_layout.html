@@ -1,90 +1,123 @@
- <!DOCTYPE html>
- <html lang="fr">
- <head>
-     <meta charset="UTF-8">
-     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     {# Le titre de la page est défini par les templates enfants via ce bloc. #}
-     <title>{% block title %}Gestion des Tâches{% endblock %} - Marie-Rivier</title>
-     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# Le titre de la page est défini par les templates enfants via ce bloc. #}
+    <title>{% block title %}Gestion des Tâches{% endblock %} - Marie-Rivier</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-     {# Ce script est placé dans le <head> pour appliquer le thème immédiatement #}
-     {# et éviter le "Flash of Unstyled Content" (FOUC). #}
-     <script>
-         (function() {
-             const savedTheme = localStorage.getItem('appTheme') || 'light';
-             document.documentElement.className = `theme-${savedTheme}`;
-         })();
-     </script>
+    {# Ce script est placé dans le <head> pour appliquer le thème immédiatement #}
+    {# et éviter le "Flash of Unstyled Content" (FOUC). #}
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('appTheme') || 'light';
+            document.documentElement.className = `theme-${savedTheme}`;
+        })();
+    </script>
 
-     {# Bloc pour injecter des éléments supplémentaires dans le <head> (ex: balises <style>) #}
-     {% block head_extra %}{% endblock %}
- </head>
- <body class="{% block body_class %}{% endblock %}">
-     <header class="no-print">
-         {# Le contenu spécifique du header (titre, navigation) est fourni par les templates enfants. #}
-         {% block header_content %}{% endblock %}
+    {# Bloc pour injecter des éléments supplémentaires dans le <head> (ex: balises <style>) #}
+    {% block head_extra %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <header class="no-print">
+        <div class="header-container">
+            {# Le contenu spécifique du header (titre h1) est fourni par les templates enfants. #}
+            <div class="header-left">
+                {% block header_content %}{% endblock %}
+            </div>
 
-         {# Le sélecteur de thème est commun à toutes les pages et reste donc dans le layout de base. #}
-         <div class="theme-switcher no-print">
-             <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
-             <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
-         </div>
-     </header>
+            {# La barre de navigation est maintenant centralisée ici et conditionnelle. #}
+            {% if current_user.is_authenticated %}
+            <nav class="header-right">
+                <ul>
+                    {% if current_user.is_admin or current_user.is_dashboard_only %}
+                        {# Liens pour Admins et Gestionnaires #}
+                        <li><a href="{{ url_for('dashboard.page_sommaire') }}" class="{{ 'active' if request.endpoint == 'dashboard.page_sommaire' else '' }}">Sommaire</a></li>
+                        <li><a href="{{ url_for('dashboard.page_detail_taches') }}" class="{{ 'active' if request.endpoint == 'dashboard.page_detail_taches' else '' }}">Détail Tâches</a></li>
+                        <li><a href="{{ url_for('dashboard.page_preparation_horaire') }}" class="{{ 'active' if request.endpoint == 'dashboard.page_preparation_horaire' else '' }}">Préparation Horaire</a></li>
 
-     <main>
-         {# Les messages flash sont gérés de manière centralisée ici. #}
-         {% with messages = get_flashed_messages(with_categories=true) %}
-             {% if messages %}
-                 <ul class="flash-messages">
-                 {% for category, message in messages %}
-                     <li class="{{ category }}">{{ message }}</li>
-                 {% endfor %}
-                 </ul>
-             {% endif %}
-         {% endwith %}
+                        {% if current_user.is_admin %}
+                            {# Liens uniquement pour Admins #}
+                            <li><a href="{{ url_for('admin.page_administration_donnees') }}" class="{{ 'active' if request.endpoint == 'admin.page_administration_donnees' else '' }}">Données</a></li>
+                            <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}" class="{{ 'active'if request.endpoint == 'admin.page_administration_utilisateurs' else '' }}">Utilisateurs</a></li>
+                        {% endif %}
+                    {% endif %}
 
-         {# Le contenu principal et unique de chaque page est injecté ici. #}
-         {% block content %}{% endblock %}
-     </main>
+                    <li class="user-info">
+                        <span>{{ current_user.username }}</span>
+                        <a href="{{ url_for('auth.logout') }}" class="btn btn-logout" title="Déconnexion">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-right" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/>
+                                <path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/>
+                            </svg>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+        {# Le sélecteur de thème est commun à toutes les pages et reste donc dans le layout de base. #}
+        <div class="theme-switcher no-print">
+            <button id="theme-btn-light" data-theme="light" title="Activer le thème clair">Clair</button>
+            <button id="theme-btn-dark" data-theme="dark" title="Activer le thème sombre">Sombre</button>
+        </div>
+    </header>
 
-     <footer class="no-print">
-         <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
-     </footer>
+    <main>
+        {# Les messages flash sont gérés de manière centralisée ici. #}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
 
-     {# Le script de gestion du thème est commun à toutes les pages. #}
-     <script>
-         document.addEventListener('DOMContentLoaded', function() {
-             const themeSwitcher = document.querySelector('.theme-switcher');
-             if (themeSwitcher) {
-                 const themeButtons = themeSwitcher.querySelectorAll('button');
+        {# Le contenu principal et unique de chaque page est injecté ici. #}
+        {% block content %}{% endblock %}
+    </main>
 
-                 // Fonction corrigée : elle ne gère QUE le thème.
-                 function applyThemeUI(theme) {
-                     // Applique la classe de thème à l'élément racine <html>
-                     document.documentElement.className = `theme-${theme}`;
+    <footer class="no-print">
+        <p>© ⓚ {{ SCRIPT_YEAR }} Pour l'école Marie-Rivier</p>
+    </footer>
 
-                     // Met à jour l'état actif des boutons du sélecteur
-                     themeButtons.forEach(btn => btn.classList.remove('active'));
-                     const activeButton = document.getElementById(`theme-btn-${theme}`);
-                     if (activeButton) activeButton.classList.add('active');
-                 }
+    {# Le script de gestion du thème est commun à toutes les pages. #}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            if (themeSwitcher) {
+                const themeButtons = themeSwitcher.querySelectorAll('button');
 
-                 themeSwitcher.addEventListener('click', function(event) {
-                     if (event.target.tagName === 'BUTTON') {
-                         const theme = event.target.dataset.theme;
-                         localStorage.setItem('appTheme', theme);
-                         applyThemeUI(theme);
-                     }
-                 });
+                // Fonction corrigée : elle ne gère QUE le thème.
+                function applyThemeUI(theme) {
+                    // Applique la classe de thème à l'élément racine <html>
+                    document.documentElement.className = `theme-${theme}`;
 
-                 // Applique le thème initial au chargement
-                 const savedTheme = localStorage.getItem('appTheme') || 'light';
-                 applyThemeUI(savedTheme);
-             }
-         });
-     </script>
+                    // Met à jour l'état actif des boutons du sélecteur
+                    themeButtons.forEach(btn => btn.classList.remove('active'));
+                    const activeButton = document.getElementById(`theme-btn-${theme}`);
+                    if (activeButton) activeButton.classList.add('active');
+                }
 
-     {# Bloc pour les scripts JavaScript spécifiques à une page. #}
-     {% block scripts %}{% endblock %}
- </body>
- </html>
+                themeSwitcher.addEventListener('click', function(event) {
+                    if (event.target.tagName === 'BUTTON') {
+                        const theme = event.target.dataset.theme;
+                        localStorage.setItem('appTheme', theme);
+                        applyThemeUI(theme);
+                    }
+                });
+
+                // Applique le thème initial au chargement
+                const savedTheme = localStorage.getItem('appTheme') || 'light';
+                applyThemeUI(savedTheme);
+            }
+        });
+    </script>
+
+    {# Bloc pour les scripts JavaScript spécifiques à une page. #}
+    {% block scripts %}{% endblock %}
+</body>
+</html>

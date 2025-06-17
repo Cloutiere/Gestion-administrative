@@ -195,7 +195,7 @@
         enseignantsParCours: {{ preparation_data.enseignants_par_cours | tojson }},
         savedAssignments: {{ preparation_data.saved_assignments | tojson }},
         urls: {
-            saveSchedule: "{{ url_for('admin.api_sauvegarder_preparation_horaire') }}"
+            saveSchedule: "{{ url_for('dashboard.api_sauvegarder_preparation_horaire') }}"
         }
     };
 </script>

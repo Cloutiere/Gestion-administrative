@@ -749,7 +749,7 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
     Récupère et structure les données nécessaires pour la page de préparation de l'horaire.
     """
     try:
-        # 1. Récupérer toutes les briques de données brutes en parallèle
+        # 1. Récupérer toutes les briques de données brutes
         all_champs = db.get_all_champs()
         all_cours_raw = db.get_all_cours_for_preparation(annee_id)
         all_assignments_raw = db.get_assignments_for_preparation(annee_id)
@@ -770,7 +770,7 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
             )
 
         # 4. Structurer les assignations sauvegardées pour reconstruire l'état
-        saved_assignments_structured = defaultdict(list)
+        saved_assignments_structured: defaultdict[int, list[dict[str, Any]]] = defaultdict(list)
         for saved in saved_assignments_raw:
             level = saved['secondaire_level']
             saved_assignments_structured[level].append(saved)
@@ -784,7 +784,8 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
             "saved_assignments": dict(saved_assignments_structured),
         }
     except Exception as e:
-        # Log l'erreur pour le débogage
+        # Idéalement, on utiliserait le logger de Flask ici
+        # from flask import current_app
         # current_app.logger.error(...)
         raise ServiceException(f"Erreur lors de la préparation des données pour l'horaire : {e}")
 

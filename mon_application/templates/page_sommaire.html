@@ -1,6 +1,6 @@
 {% extends "_layout.html" %}
 
-{% block title %}Tableau de Bord Global{% endblock %}
+{% block title %}Sommaire Global{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -44,45 +44,11 @@
 
 {% block header_content %}
 <h1>
-    Tableau de Bord Global
+    Sommaire Global
     {% if annee_active %}
         <span class="annee-active-header">(Année : {{ annee_active.libelle_annee }})</span>
     {% endif %}
 </h1>
-<nav>
-    <ul>
-        {% if current_user.is_authenticated %}
-            {% if current_user.is_admin %}
-                <li><a href="{{ url_for('dashboard.page_sommaire') }}">Tableau de Bord</a></li>
-                <li><a href="{{ url_for('admin.page_administration_donnees') }}">Administration (Données)</a></li>
-                <li><a href="{{ url_for('admin.page_administration_utilisateurs') }}">Administration (Utilisateurs)</a></li>
-                <li><a href="{{ url_for('views.page_preparation_horaire') }}">Préparation Horaire</a></li>
-            {% elif current_user.is_dashboard_only %}
-                <li><a href="{{ url_for('dashboard.page_sommaire') }}">Tableau de Bord</a></li>
-                <li><a href="{{ url_for('dashboard.page_detail_taches') }}">Détail des Tâches</a></li>
-            {% else %}
-                 <li><a href="{{ url_for('views.index') }}">Navigation par champ</a></li>
-            {% endif %}
-            <li><a href="{{ url_for('auth.logout') }}">Déconnexion ({{ current_user.username }})</a></li>
-        {% else %}
-            <li><a href="{{ url_for('auth.login') }}">Connexion</a></li>
-        {% endif %}
-    </ul>
-</nav>
-
-<!-- Sélecteur d'année pour l'administrateur ou l'observateur -->
-{% if current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only) and toutes_les_annees %}
-<div class="year-switcher no-print">
-    <label for="annee-selector">Changer l'année de visualisation :</label>
-    <select id="annee-selector">
-        {% for annee in toutes_les_annees %}
-            <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
-                {{ annee.libelle_annee }} {% if annee.est_courante %}(Courante){% endif %}
-            </option>
-        {% endfor %}
-    </select>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -105,10 +71,19 @@
 
             <!-- Liens d'action avec les classes de bouton standardisées -->
             <div class="details-link-container no-print">
-                <a href="{{ url_for('dashboard.page_detail_taches') }}" class="btn btn-primary">Voir le détail des tâches</a>
-                <a href="{{ url_for('dashboard.exporter_taches_excel') }}" class="btn btn-export-excel">Exporter les tâches (Excel)</a>
-                <a href="{{ url_for('dashboard.exporter_periodes_restantes_excel') }}" class="btn btn-export-excel">Exporter les périodes restantes (Excel)</a>
-                <a href="{{ url_for('dashboard.exporter_org_scolaire_excel') }}" class="btn btn-export-excel">Exporter pour org. scolaire (Excel)</a>
+                <div class="annee-selector">
+                    <label for="annee-scolaire-select">Année de travail :</label>
+                    <select id="annee-scolaire-select">
+                        {% for annee in toutes_les_annees %}
+                            <option value="{{ annee.annee_id }}" {% if annee_active and annee.annee_id == annee_active.annee_id %}selected{% endif %}>
+                                {{ annee.libelle_annee }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <a href="{{ url_for('dashboard.exporter_taches_excel') }}" class="btn">Exporter Tâches</a>
+                <a href="{{ url_for('dashboard.exporter_periodes_restantes_excel') }}" class="btn">Exporter Périodes Restantes</a>
+                <a href="{{ url_for('dashboard.exporter_org_scolaire_excel') }}" class="btn">Exporter Org. Scolaire</a>
             </div>
 
             {% if moyennes_par_champ %}
@@ -169,6 +144,7 @@
     const PAGE_DATA = {
         IS_ADMIN: {{ current_user.is_admin | tojson }},
         ANNEE_ACTIVE: {{ annee_active is not none | tojson }},
+        initialData: {{ moyennes_par_champ | tojson }},
         URLS: {
             API_CHANGER_ANNEE: "{{ url_for('dashboard.api_changer_annee_active') }}",
             API_GET_DONNEES_SOMMAIRE: "{{ url_for('dashboard.api_get_donnees_sommaire') }}"

@@ -27,7 +27,7 @@ from flask_login import current_user
 from werkzeug.wrappers import Response
 
 from . import exports, services
-from .services import ServiceException
+from .services import BusinessRuleValidationError, ServiceException
 from .utils import dashboard_access_required, dashboard_api_access_required
 
 # Crée un Blueprint 'dashboard'.
@@ -77,6 +77,28 @@ def page_detail_taches() -> str:
     return render_template("detail_taches.html", enseignants_par_champ=enseignants_par_champ)
 
 
+@bp.route("/preparation_horaire")
+@dashboard_access_required
+def page_preparation_horaire() -> str | Response:
+    """Affiche la page de préparation de l'horaire."""
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
+        flash("Impossible d'afficher la préparation : aucune année scolaire n'est active.", "error")
+        return redirect(url_for("dashboard.page_sommaire"))
+
+    try:
+        annee_id = annee_active["annee_id"]
+        preparation_data = services.get_preparation_horaire_data_service(annee_id)
+        return render_template(
+            "preparation_horaire.html",
+            annee_active=annee_active,
+            preparation_data=preparation_data,
+        )
+    except ServiceException as e:
+        flash(f"Erreur lors du chargement des données de préparation : {e.message}", "error")
+        return redirect(url_for("dashboard.page_sommaire"))
+
+
 # --- API ENDPOINTS (JSON) ---
 
 
@@ -123,6 +145,34 @@ def api_get_donnees_sommaire() -> tuple[Response, int]:
         return jsonify(response_data), 200
     except ServiceException as e:
         return jsonify({"success": False, "message": e.message}), 500
+
+
+@bp.route("/api/preparation_horaire/sauvegarder", methods=["POST"])
+@dashboard_api_access_required
+def api_sauvegarder_preparation_horaire() -> tuple[Response, int]:
+    """API pour sauvegarder les données de la préparation de l'horaire."""
+    annee_active = cast(dict[str, Any] | None, getattr(g, "annee_active", None))
+    if not annee_active:
+        return jsonify({"success": False, "message": "Aucune année scolaire active."}), 400
+
+    data = request.get_json()
+    if not data or "assignments" not in data:
+        return jsonify({"success": False, "message": "Données de sauvegarde manquantes."}), 400
+
+    try:
+        annee_id = annee_active["annee_id"]
+        services.save_preparation_horaire_service(annee_id, data["assignments"])
+        current_app.logger.info(f"Préparation de l'horaire sauvegardée pour l'année {annee_id} par l'utilisateur '{current_user.username}'.")
+        return jsonify({"success": True, "message": "Préparation sauvegardée avec succès."}), 200
+    except (ServiceException, BusinessRuleValidationError) as e:
+        current_app.logger.error(f"Erreur lors de la sauvegarde de la préparation: {e.message}")
+        return jsonify({"success": False, "message": e.message}), 400
+    except Exception as e:
+        current_app.logger.error(f"Erreur inattendue lors de la sauvegarde de la préparation: {e}", exc_info=True)
+        return jsonify({"success": False, "message": "Une erreur serveur est survenue."}), 500
+
+
+# --- ROUTES D'EXPORT ---
 
 
 @bp.route("/exporter_taches_excel")
