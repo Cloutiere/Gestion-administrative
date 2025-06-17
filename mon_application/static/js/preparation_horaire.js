@@ -3,30 +3,24 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Vérifie si nous sommes sur la bonne page et si les données sont disponibles
     if (!document.body.contains(document.getElementById('tabs-navigation')) || typeof PAGE_DATA === 'undefined') {
-        console.error("Données de page ou conteneur de tabs introuvable. Script arrêté.");
+        console.warn("Script preparation_horaire.js chargé, mais les éléments requis ne sont pas sur la page.");
         return;
     }
 
     const {
-        anneeId,
-        allChamps,
         coursParChamp,
         enseignantsParCours,
-        savedAssignments,
         urls
     } = PAGE_DATA;
 
     const ScheduleManager = {
         activeLevel: 1,
         draggedItem: null,
-        sourceRow: null,
 
         init() {
             this.setupTabs();
-            this.setupAddRowButton();
-            this.setupSaveButton();
-            this.setupDragAndDrop();
-            this.populateInitialState();
+            this.setupActionButtons();
+            this.setupEventListeners();
         },
 
         setupTabs() {
@@ -45,156 +39,93 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         },
 
-        setupAddRowButton() {
-            const btnAddRow = document.getElementById('btn-add-row');
-            btnAddRow.addEventListener('click', () => {
-                this.createNewRow(this.activeLevel);
-            });
+        setupActionButtons() {
+            document.getElementById('btn-add-row').addEventListener('click', () => this.createNewRow(this.activeLevel));
+            document.getElementById('btn-save-schedule').addEventListener('click', this.handleSave.bind(this));
         },
 
-        setupSaveButton() {
-            const btnSave = document.getElementById('btn-save-schedule');
-            if (btnSave) {
-                btnSave.addEventListener('click', this.handleSave.bind(this));
+        // Utilisation de la délégation d'événements pour une gestion centralisée
+        setupEventListeners() {
+            const scheduleContainer = document.querySelector('.tabs-container');
+
+            // Écouteurs pour le Drag & Drop
+            scheduleContainer.addEventListener('dragstart', this.handleDragStart.bind(this));
+            scheduleContainer.addEventListener('dragend', this.handleDragEnd.bind(this));
+            scheduleContainer.addEventListener('dragover', this.handleDragOver.bind(this));
+            scheduleContainer.addEventListener('dragleave', this.handleDragLeave.bind(this));
+            scheduleContainer.addEventListener('drop', this.handleDrop.bind(this));
+
+            // Écouteurs pour les interactions sur les lignes (suppression, changement de select)
+            scheduleContainer.addEventListener('click', this.handleRowClick.bind(this));
+            scheduleContainer.addEventListener('change', this.handleRowChange.bind(this));
+        },
+
+        handleDragStart(e) {
+            if (e.target.classList.contains('teacher-item')) {
+                this.draggedItem = e.target;
+                setTimeout(() => e.target.classList.add('dragging'), 0);
             }
         },
 
-        setupDragAndDrop() {
-            document.querySelectorAll('.preparation-table tbody').forEach(tbody => {
-                tbody.addEventListener('dragstart', e => {
-                    if (e.target.classList.contains('teacher-item')) {
-                        this.draggedItem = e.target;
-                        this.sourceRow = e.target.closest('tr');
-                        setTimeout(() => e.target.classList.add('dragging'), 0);
-                    }
-                });
-
-                tbody.addEventListener('dragend', e => {
-                    if (this.draggedItem) {
-                        this.draggedItem.classList.remove('dragging');
-                    }
-                    this.draggedItem = null;
-                    this.sourceRow = null;
-                });
-
-                tbody.addEventListener('dragover', e => {
-                    const container = e.target.closest('.teachers-container');
-                    if (container && this.sourceRow && container.closest('tr') === this.sourceRow) {
-                        e.preventDefault();
-                        container.classList.add('drag-over');
-                    }
-                });
-
-                tbody.addEventListener('dragleave', e => {
-                    const container = e.target.closest('.teachers-container');
-                    if (container) {
-                        container.classList.remove('drag-over');
-                    }
-                });
-
-                tbody.addEventListener('drop', e => {
-                    const container = e.target.closest('.teachers-container');
-                    if (container && this.draggedItem && this.sourceRow && container.closest('tr') === this.sourceRow) {
-                        e.preventDefault();
-                        container.classList.remove('drag-over');
-                        container.appendChild(this.draggedItem);
-                    }
-                });
-            });
+        handleDragEnd(e) {
+            if (this.draggedItem) {
+                this.draggedItem.classList.remove('dragging');
+                this.draggedItem = null;
+            }
         },
 
-        populateInitialState() {
-            const assignmentsByCourseAndLevel = {};
-            Object.keys(savedAssignments).forEach(level => {
-                savedAssignments[level].forEach(assignment => {
-                    const key = `${level}-${assignment.codecours}`;
-                    if (!assignmentsByCourseAndLevel[key]) {
-                        assignmentsByCourseAndLevel[key] = {
-                            level: level,
-                            cours: {
-                                codecours: assignment.codecours,
-                                annee_id_cours: assignment.annee_id_cours
-                            },
-                            placements: []
-                        };
-                    }
-                    assignmentsByCourseAndLevel[key].placements.push({
-                        enseignant_id: assignment.enseignant_id,
-                        colonne_assignee: assignment.colonne_assignee
-                    });
-                });
-            });
-
-            Object.values(assignmentsByCourseAndLevel).forEach(data => {
-                const row = this.createNewRow(data.level, data.cours, true); // true = isInitialLoad
-                data.placements.forEach(placement => {
-                    const teachersForCourse = enseignantsParCours[data.cours.codecours] || [];
-                    const teacherData = teachersForCourse.find(t => t.enseignantid === placement.enseignant_id);
-                    if (teacherData) {
-                        const teacherElement = this.createTeacherElement(teacherData);
-                        const targetCell = row.querySelector(`td[data-col-name="${placement.colonne_assignee}"] .teachers-container`);
-                        if (targetCell) {
-                            // Pour éviter de replacer un prof déjà présent (cas de drag-drop puis resauvegarde)
-                            const alreadyExists = targetCell.querySelector(`[data-enseignant-id="${teacherData.enseignantid}"]`);
-                            if (!alreadyExists) {
-                                targetCell.appendChild(teacherElement);
-                            }
-                        }
-                    }
-                });
-            });
+        handleDragOver(e) {
+            const container = e.target.closest('.teachers-container');
+            if (container && this.draggedItem) {
+                e.preventDefault();
+                container.classList.add('drag-over');
+            }
         },
 
-        createNewRow(level, selectedCourseData = null, isInitialLoad = false) {
+        handleDragLeave(e) {
+            const container = e.target.closest('.teachers-container');
+            if (container) {
+                container.classList.remove('drag-over');
+            }
+        },
+
+        handleDrop(e) {
+            const container = e.target.closest('.teachers-container');
+            if (container && this.draggedItem) {
+                e.preventDefault();
+                container.classList.remove('drag-over');
+                container.appendChild(this.draggedItem);
+            }
+        },
+
+        handleRowClick(e) {
+            if (e.target.classList.contains('btn-delete-row')) {
+                e.target.closest('tr').remove();
+            }
+        },
+
+        handleRowChange(e) {
+            if (e.target.classList.contains('select-champ')) {
+                const row = e.target.closest('tr');
+                this.populateCoursSelect(row);
+                this.populateTeachers(row);
+            } else if (e.target.classList.contains('select-cours')) {
+                const row = e.target.closest('tr');
+                this.populateTeachers(row);
+            }
+        },
+
+        createNewRow(level) {
             const template = document.getElementById('row-template');
             const newRow = template.content.cloneNode(true).firstElementChild;
-            const tbody = document.getElementById(`schedule-body-${level}`);
-            tbody.appendChild(newRow);
-
-            const selectChamp = newRow.querySelector('.select-champ');
-            allChamps.forEach(champ => {
-                selectChamp.add(new Option(champ.champnom, champ.champno));
-            });
-
-            if (selectedCourseData) {
-                const champNo = Object.keys(coursParChamp).find(cn =>
-                    coursParChamp[cn].some(c => c.codecours === selectedCourseData.codecours)
-                );
-                if (champNo) {
-                    selectChamp.value = champNo;
-                    this.populateCoursSelect(newRow, champNo);
-                    const selectCours = newRow.querySelector('.select-cours');
-                    selectCours.value = selectedCourseData.codecours;
-                }
-            }
-
-            if (!isInitialLoad) {
-                this.handleCoursChange(newRow);
-            }
-
-            this.setupRowEvents(newRow);
-            return newRow;
+            document.getElementById(`schedule-body-${level}`).appendChild(newRow);
         },
 
-        setupRowEvents(row) {
+        populateCoursSelect(row) {
             const selectChamp = row.querySelector('.select-champ');
             const selectCours = row.querySelector('.select-cours');
-            const deleteBtn = row.querySelector('.btn-delete-row');
-
-            selectChamp.addEventListener('change', () => this.handleChampChange(row));
-            selectCours.addEventListener('change', () => this.handleCoursChange(row));
-            deleteBtn.addEventListener('click', () => row.remove());
-        },
-
-        handleChampChange(row) {
-            const selectChamp = row.querySelector('.select-champ');
             const champNo = selectChamp.value;
-            this.populateCoursSelect(row, champNo);
-            this.handleCoursChange(row);
-        },
 
-        populateCoursSelect(row, champNo) {
-            const selectCours = row.querySelector('.select-cours');
             selectCours.innerHTML = '<option value="">Choisir un cours...</option>';
             selectCours.disabled = !champNo;
 
@@ -207,23 +138,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
-        handleCoursChange(row) {
-            this.clearTeachers(row);
+        // CORRIGÉ : Distribue les enseignants dans les colonnes d'assignation
+        populateTeachers(row) {
+            // 1. Vider toutes les colonnes d'enseignants pour cette ligne
+            row.querySelectorAll('.teachers-container').forEach(c => c.innerHTML = '');
+
             const selectCours = row.querySelector('.select-cours');
             const courseCode = selectCours.value;
 
             if (courseCode && enseignantsParCours[courseCode]) {
                 const teachers = enseignantsParCours[courseCode];
-                const placementContainers = row.querySelectorAll('.teachers-container'); // On sélectionne TOUTES les colonnes
+                // 2. Récupérer les conteneurs de destination
+                const assignmentContainers = row.querySelectorAll('.assignment-droppable');
+                const availableContainer = row.querySelector('.available-teachers');
 
+                // 3. Distribuer les enseignants
                 teachers.forEach((teacher, index) => {
-                    if (placementContainers[index]) {
-                        // On place l'enseignant 'index' dans la colonne 'index'
-                        const teacherElement = this.createTeacherElement(teacher);
-                        placementContainers[index].appendChild(teacherElement);
+                    const teacherElement = this.createTeacherElement(teacher);
+                    // S'il y a une colonne d'assignation disponible pour cet enseignant
+                    if (assignmentContainers[index]) {
+                        assignmentContainers[index].appendChild(teacherElement);
                     } else {
-                        // S'il n'y a plus de colonne, on logue un avertissement
-                        console.warn(`Plus d'enseignants que de colonnes disponibles pour le cours ${courseCode}. L'enseignant ${teacher.nomcomplet} n'a pas été placé.`);
+                        // Sinon (plus d'enseignants que de colonnes), le mettre dans les "disponibles"
+                        console.warn(`Plus d'enseignants que de colonnes, enseignant ${teacher.nomcomplet} placé dans "disponibles".`);
+                        availableContainer.appendChild(teacherElement);
                     }
                 });
             }
@@ -236,10 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
             div.dataset.enseignantId = teacher.enseignantid;
             div.draggable = true;
             return div;
-        },
-
-        clearTeachers(row) {
-            row.querySelectorAll('.teachers-container').forEach(container => container.innerHTML = '');
         },
 
         async handleSave() {
@@ -277,9 +211,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const selectCours = row.querySelector('.select-cours');
                     const courseCode = selectCours.value;
                     const selectedOption = selectCours.options[selectCours.selectedIndex];
+
                     if (courseCode && selectedOption && selectedOption.dataset.anneeId) {
                         const courseAnneeId = parseInt(selectedOption.dataset.anneeId, 10);
-                        row.querySelectorAll('.teachers-container').forEach(container => {
+
+                        // Collecter les enseignants depuis les colonnes d'assignation
+                        row.querySelectorAll('.assignment-droppable').forEach(container => {
                             const colName = container.parentElement.dataset.colName;
                             container.querySelectorAll('.teacher-item').forEach(teacherItem => {
                                 assignments.push({

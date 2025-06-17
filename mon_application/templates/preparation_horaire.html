@@ -4,95 +4,22 @@
 
 {% block head_extra %}
 <style>
-    .tabs-container {
-        margin-top: 1rem;
-    }
-    .tabs-nav {
-        display: flex;
-        list-style-type: none;
-        padding: 0;
-        margin: 0;
-        border-bottom: 2px solid #ccc;
-    }
-    .tabs-nav li {
-        padding: 10px 20px;
-        cursor: pointer;
-        background-color: #f1f1f1;
-        border: 1px solid #ccc;
-        border-bottom: none;
-        margin-right: 5px;
-        border-radius: 5px 5px 0 0;
-    }
-    .tabs-nav li.active {
-        background-color: #fff;
-        border-bottom: 2px solid #fff;
-        position: relative;
-        top: 2px;
-        font-weight: bold;
-    }
-    .tab-content {
-        display: none;
-        padding: 20px;
-        border: 1px solid #ccc;
-        border-top: none;
-    }
-    .tab-content.active {
-        display: block;
-    }
-    table.preparation-table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed; /* Important pour les colonnes de même largeur */
-    }
-    .preparation-table th, .preparation-table td {
-        border: 1px solid #ddd;
-        padding: 8px;
-        text-align: center;
-        vertical-align: top; /* Aligner le contenu en haut */
-        overflow: hidden;
-        white-space: nowrap;
-    }
-    .preparation-table th {
-        background-color: #f2f2f2;
-    }
-    .preparation-table select {
-        width: 100%;
-    }
-    .teachers-container {
-        min-height: 40px; /* Hauteur minimale pour la zone de dépôt */
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        padding: 4px;
-        align-items: flex-start; /* Aligner les pastilles en haut */
-        justify-content: center;
-        height: 100%;
-        transition: background-color 0.2s ease-in-out; /* Pour la surbrillance */
-    }
-    .teacher-item {
-        background-color: #e0eafc;
-        border: 1px solid #a4bdf1;
-        border-radius: 4px;
-        padding: 2px 6px;
-        font-size: 0.8em;
-        cursor: grab;
-        user-select: none; /* Empêche la sélection de texte lors du drag */
-    }
-    /* Style pour l'élément en cours de déplacement */
-    .teacher-item.dragging {
-        opacity: 0.5;
-        cursor: grabbing;
-    }
-    /* Style pour la zone de dépôt lors du survol */
-    .teachers-container.drag-over {
-        background-color: #d8e8ff;
-        border: 2px dashed #6b9cff;
-    }
-    .page-actions {
-        margin-bottom: 1rem;
-        display: flex;
-        gap: 1rem;
-    }
+    /* ... (les styles restent les mêmes, mais sont maintenant appliqués à du contenu généré par Jinja) ... */
+    .tabs-container { margin-top: 1rem; }
+    .tabs-nav { display: flex; list-style-type: none; padding: 0; margin: 0; border-bottom: 2px solid #ccc; }
+    .tabs-nav li { padding: 10px 20px; cursor: pointer; background-color: #f1f1f1; border: 1px solid #ccc; border-bottom: none; margin-right: 5px; border-radius: 5px 5px 0 0; }
+    .tabs-nav li.active { background-color: #fff; border-bottom: 2px solid #fff; position: relative; top: 2px; font-weight: bold; }
+    .tab-content { display: none; padding: 20px; border: 1px solid #ccc; border-top: none; }
+    .tab-content.active { display: block; }
+    table.preparation-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .preparation-table th, .preparation-table td { border: 1px solid #ddd; padding: 8px; text-align: center; vertical-align: top; overflow: hidden; white-space: nowrap; }
+    .preparation-table th { background-color: #f2f2f2; }
+    .preparation-table select { width: 100%; }
+    .teachers-container { min-height: 40px; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; align-items: flex-start; justify-content: center; height: 100%; transition: background-color 0.2s ease-in-out; }
+    .teacher-item { background-color: #e0eafc; border: 1px solid #a4bdf1; border-radius: 4px; padding: 2px 6px; font-size: 0.8em; cursor: grab; user-select: none; }
+    .teacher-item.dragging { opacity: 0.5; cursor: grabbing; }
+    .teachers-container.drag-over { background-color: #d8e8ff; border: 2px dashed #6b9cff; }
+    .page-actions { margin-bottom: 1rem; display: flex; gap: 1rem; }
 </style>
 {% endblock %}
 
@@ -121,40 +48,85 @@
             <li data-level="5">Secondaire 5</li>
         </ul>
 
+        {% set column_names = ["PSC", "PSC2", "PSE", "DLTA", "DLTA3", "PSA", "PSA2", "PSA3", "PAP", "PAP2"] %}
+
         {% for level in range(1, 6) %}
         <div id="tab-content-{{ level }}" class="tab-content {% if level == 1 %}active{% endif %}" data-level="{{ level }}">
             <table class="preparation-table">
                 <thead>
                     <tr>
                         <th style="width: 15%;">Champ</th>
-                        <th style="width: 20%;">Cours</th>
-                        <th>PSC</th>
-                        <th>PSC2</th>
-                        <th>PSE</th>
-                        <th>DLTA</th>
-                        <th>DLTA3</th>
-                        <th>PSA</th>
-                        <th>PSA2</th>
-                        <th>PSA3</th>
-                        <th>PAP</th>
-                        <th>PAP2</th>
+                        <th style="width: 15%;">Cours</th>
+                        <th style="width: 20%;">Enseignants disponibles</th>
+                        {% for col_name in column_names %}
+                            <th>{{ col_name }}</th>
+                        {% endfor %}
                         <th style="width: 5%;"></th>
                     </tr>
                 </thead>
                 <tbody id="schedule-body-{{ level }}">
-                    <!-- Les lignes seront insérées ici par JavaScript -->
+                    <!-- Lignes pré-rendues par Jinja2 -->
+                    {% for row_data in preparation_data.prepared_grid[level] %}
+                    <tr data-cours-code="{{ row_data.cours.codecours }}" data-annee-id="{{ row_data.cours.annee_id }}">
+                        <td>
+                            <select class="select-champ" disabled>
+                                {% for champ in preparation_data.all_champs %}
+                                <option value="{{ champ.champno }}" {% if champ.champno == row_data.cours.champno %}selected{% endif %}>
+                                    {{ champ.champnom }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <select class="select-cours" disabled>
+                                {% for cours in preparation_data.cours_par_champ.get(row_data.cours.champno, []) %}
+                                <option value="{{ cours.codecours }}" data-annee-id="{{ cours.annee_id }}" {% if cours.codecours == row_data.cours.codecours %}selected{% endif %}>
+                                    {{ cours.codecours }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <div class="teachers-container available-teachers">
+                                {% for teacher in row_data.unassigned_teachers %}
+                                <div class="teacher-item" data-enseignant-id="{{ teacher.enseignantid }}" draggable="true">
+                                    {{ teacher.nomcomplet }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        {% for col_name in column_names %}
+                        <td data-col-name="{{ col_name }}">
+                            <div class="teachers-container assignment-droppable">
+                                {% for teacher in row_data.assigned_teachers.get(col_name, []) %}
+                                <div class="teacher-item" data-enseignant-id="{{ teacher.enseignantid }}" draggable="true">
+                                    {{ teacher.nomcomplet }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        {% endfor %}
+                        <td>
+                            <button class="btn btn-danger btn-delete-row">X</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    <!-- Les nouvelles lignes ajoutées par JS apparaîtront ici -->
                 </tbody>
             </table>
         </div>
         {% endfor %}
     </div>
 
-    <!-- Modèle pour les nouvelles lignes (caché) -->
+    <!-- Modèle pour les NOUVELLES lignes (caché) -->
     <template id="row-template">
         <tr>
             <td>
                 <select class="select-champ">
                     <option value="">Choisir un champ...</option>
+                    {% for champ in preparation_data.all_champs %}
+                    <option value="{{ champ.champno }}">{{ champ.champnom }}</option>
+                    {% endfor %}
                 </select>
             </td>
             <td>
@@ -162,16 +134,14 @@
                     <option value="">Choisir un cours...</option>
                 </select>
             </td>
-            <td data-col-name="PSC"><div class="teachers-container"></div></td>
-            <td data-col-name="PSC2"><div class="teachers-container"></div></td>
-            <td data-col-name="PSE"><div class="teachers-container"></div></td>
-            <td data-col-name="DLTA"><div class="teachers-container"></div></td>
-            <td data-col-name="DLTA3"><div class="teachers-container"></div></td>
-            <td data-col-name="PSA"><div class="teachers-container"></div></td>
-            <td data-col-name="PSA2"><div class="teachers-container"></div></td>
-            <td data-col-name="PSA3"><div class="teachers-container"></div></td>
-            <td data-col-name="PAP"><div class="teachers-container"></div></td>
-            <td data-col-name="PAP2"><div class="teachers-container"></div></td>
+            <td>
+                <div class="teachers-container available-teachers">
+                    <!-- Les enseignants apparaîtront ici après sélection du cours -->
+                </div>
+            </td>
+            {% for col_name in column_names %}
+            <td data-col-name="{{ col_name }}"><div class="teachers-container assignment-droppable"></div></td>
+            {% endfor %}
             <td>
                 <button class="btn btn-danger btn-delete-row">X</button>
             </td>
@@ -193,7 +163,7 @@
         allChamps: {{ preparation_data.all_champs | tojson }},
         coursParChamp: {{ preparation_data.cours_par_champ | tojson }},
         enseignantsParCours: {{ preparation_data.enseignants_par_cours | tojson }},
-        savedAssignments: {{ preparation_data.saved_assignments | tojson }},
+        // L'ancienne clé `savedAssignments` n'est plus nécessaire côté JS
         urls: {
             saveSchedule: "{{ url_for('dashboard.api_sauvegarder_preparation_horaire') }}"
         }

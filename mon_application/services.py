@@ -747,6 +747,7 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
     """
     Récupère et structure les données nécessaires pour la page de préparation de l'horaire.
+    Cette version est refactorisée pour préparer une grille complète pour le rendu Jinja2.
     """
     try:
         # 1. Récupérer toutes les briques de données brutes
@@ -755,38 +756,65 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
         all_assignments_raw = db.get_assignments_for_preparation(annee_id)
         saved_assignments_raw = db.get_saved_preparation_horaire(annee_id)
 
-        # 2. Structurer les cours par champ pour les listes déroulantes
-        cours_par_champ: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        # 2. Pré-traiter les données pour un accès facile
+        cours_par_champ: defaultdict[str, list] = defaultdict(list)
+        cours_details: dict[str, dict] = {}
         for cours in all_cours_raw:
-            cours_par_champ[cours["champno"]].append(
-                {"codecours": cours["codecours"], "annee_id": cours["annee_id"]}
-            )
+            cours_par_champ[cours["champno"]].append(cours)
+            cours_details[cours["codecours"]] = cours
 
-        # 3. Structurer les enseignants par cours pour affichage
-        enseignants_par_cours: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        enseignants_par_cours: defaultdict[str, list] = defaultdict(list)
         for assignment in all_assignments_raw:
-            enseignants_par_cours[assignment["codecours"]].append(
-                {"enseignantid": assignment["enseignantid"], "nomcomplet": assignment["nomcomplet"]}
-            )
+            enseignants_par_cours[assignment["codecours"]].append(assignment)
 
-        # 4. Structurer les assignations sauvegardées pour reconstruire l'état
-        saved_assignments_structured: defaultdict[int, list[dict[str, Any]]] = defaultdict(list)
+        enseignants_by_id: dict[int, dict] = {
+            ens["enseignantid"]: ens
+            for assignments in enseignants_par_cours.values() for ens in assignments
+        }
+
+        # 3. Organiser les assignations sauvegardées par niveau et cours
+        saved_placements = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         for saved in saved_assignments_raw:
-            level = saved['secondaire_level']
-            saved_assignments_structured[level].append(saved)
+            saved_placements[saved['secondaire_level']][saved['codecours']][saved['colonne_assignee']].append(saved['enseignant_id'])
 
+        # 4. Construire la structure de la grille pour le template
+        prepared_grid: dict[int, list] = {level: [] for level in range(1, 6)}
+
+        for level, courses in saved_placements.items():
+            for codecours, columns in courses.items():
+                cours_info = cours_details.get(codecours)
+                if not cours_info:
+                    continue
+
+                all_possible_teachers = enseignants_par_cours.get(codecours, [])
+                placed_teacher_ids = set()
+
+                assigned_teachers: defaultdict[str, list] = defaultdict(list)
+                for col_name, teacher_ids in columns.items():
+                    for teacher_id in teacher_ids:
+                        if teacher_id in enseignants_by_id:
+                            assigned_teachers[col_name].append(enseignants_by_id[teacher_id])
+                            placed_teacher_ids.add(teacher_id)
+
+                unassigned_teachers = [
+                    teacher for teacher in all_possible_teachers
+                    if teacher['enseignantid'] not in placed_teacher_ids
+                ]
+
+                prepared_grid[level].append({
+                    "cours": cours_info,
+                    "assigned_teachers": dict(assigned_teachers),
+                    "unassigned_teachers": unassigned_teachers,
+                })
 
         # 5. Retourner le dictionnaire final structuré
         return {
             "all_champs": all_champs,
             "cours_par_champ": dict(cours_par_champ),
-            "enseignants_par_cours": dict(enseignants_par_cours),
-            "saved_assignments": dict(saved_assignments_structured),
+            "enseignants_par_cours": dict(enseignants_par_cours), # Utile pour le JS (ajout de ligne)
+            "prepared_grid": prepared_grid,
         }
     except Exception as e:
-        # Idéalement, on utiliserait le logger de Flask ici
-        # from flask import current_app
-        # current_app.logger.error(...)
         raise ServiceException(f"Erreur lors de la préparation des données pour l'horaire : {e}")
 
 
