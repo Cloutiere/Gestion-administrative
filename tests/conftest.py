@@ -1,27 +1,21 @@
 # tests/conftest.py
-"""
-Ce fichier contient les fixtures pytest partagées pour la suite de tests.
-Il utilise une base de données SQLite en mémoire et neutralise complètement
-l'ancien système de base de données pour des tests purs.
-"""
 import os
 import sys
+import pytest
 
 # Ajoute manuellement le répertoire racine du projet au PYTHONPATH.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import pytest
 from mon_application import create_app
 from mon_application.extensions import db as _db
 
 @pytest.fixture
-def app(monkeypatch): # Demande la fixture monkeypatch
+def app(monkeypatch):
     """
-    Crée une nouvelle instance de l'application pour chaque test.
+    Crée une nouvelle instance de l'application POUR CHAQUE TEST.
+    C'est la clé de l'isolation.
     """
-    # **LA SOLUTION FINALE ET DÉFINITIVE**
-    # Nous patchons les fonctions de l'ANCIEN module de BDD pour qu'elles ne
-    # contactent jamais la base PostgreSQL pendant les tests.
+    # Neutralise les appels à l'ancien système de BDD qui polluent les tests.
     monkeypatch.setattr("mon_application.database.get_all_annees", lambda: [])
     monkeypatch.setattr("mon_application.database.get_annee_courante", lambda: None)
 
