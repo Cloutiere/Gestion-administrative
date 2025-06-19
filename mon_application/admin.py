@@ -332,7 +332,9 @@ def importer_cours_excel() -> Response:
         flash(
             f"{stats.imported_count} cours importés pour '{annee_active['libelle_annee']}'. "
             f"Anciens cours ({stats.deleted_main_entities_count}) et "
-            f"attributions ({stats.deleted_attributions_count}) supprimés.", "success")
+            f"attributions ({stats.deleted_attributions_count}) supprimés.",
+            "success",
+        )
     except (InvalidFileException, ValueError, ServiceException) as e:
         flash(str(e), "error")
     except Exception as e_gen:
@@ -370,7 +372,9 @@ def importer_enseignants_excel() -> Response:
         flash(
             f"{stats.imported_count} enseignants importés pour '{annee_active['libelle_annee']}'. "
             f"Anciens enseignants ({stats.deleted_main_entities_count}) et "
-            f"attributions ({stats.deleted_attributions_count}) supprimés.", "success")
+            f"attributions ({stats.deleted_attributions_count}) supprimés.",
+            "success",
+        )
     except (InvalidFileException, ValueError, ServiceException) as e:
         flash(str(e), "error")
     except Exception as e_gen:
@@ -381,6 +385,7 @@ def importer_enseignants_excel() -> Response:
 
 
 # --- API pour la gestion des Types de Financement (admin seulement) ---
+
 
 @bp.route("/api/financements", methods=["GET"])
 @admin_api_required
@@ -525,7 +530,7 @@ def api_reassigner_cours_champ(annee_active: dict[str, Any]) -> tuple[Response, 
     try:
         result = services.reassign_course_to_champ_service(code_cours, annee_active["annee_id"], nouveau_champ_no)
         current_app.logger.info(f"Cours '{code_cours}' réassigné au champ '{nouveau_champ_no}'.")
-        return jsonify(success=True, message=f"Cours réassigné.", **result), 200
+        return jsonify(success=True, message="Cours réassigné.", **result), 200
     except ServiceException as e:
         return jsonify({"success": False, "message": e.message}), 500
 
@@ -548,6 +553,7 @@ def api_reassigner_cours_financement(annee_active: dict[str, Any]) -> tuple[Resp
 
 
 # --- API POUR LA PRÉPARATION DE L'HORAIRE ---
+
 
 @bp.route("/api/horaire/sauvegarder", methods=["POST"])
 @admin_api_required

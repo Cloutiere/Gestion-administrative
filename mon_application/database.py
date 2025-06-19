@@ -74,8 +74,8 @@ def get_db_connection_string() -> str:
     # ON DÉFINIT LA VARIABLE ICI
     connection_string = f"dbname='{db_name}' user='{db_user}' host='{db_host}' password='{db_pass}' port='{db_port}' sslmode='{ssl_mode}'"
 
-
     return connection_string
+
 
 def get_db() -> PgConnection | None:
     """Ouvre et réutilise une connexion à la base de données pour la durée d'une requête."""
@@ -1374,8 +1374,10 @@ def get_data_for_org_scolaire_export(annee_id: int) -> list[dict[str, Any]]:
                 HAVING SUM(periodes_calculees) > 0
                 ORDER BY
                     ChampNo,
-                    CASE WHEN EstFictif = FALSE THEN 0 WHEN NomComplet LIKE '%%-Tâche restante-%%' THEN 1 WHEN NomComplet = 'Non attribué' THEN 2 ELSE 3 END,
-                    CASE WHEN EstFictif = TRUE AND NomComplet LIKE '%%-Tâche restante-%%' THEN CAST(substring(NomComplet FROM '-(\\d+)$') AS INTEGER) ELSE NULL END,
+                    CASE WHEN EstFictif = FALSE THEN 0 WHEN NomComplet LIKE '%%-Tâche restante-%%' THEN 1 WHEN NomComplet = 'Non attribué' THEN\
+                    2 ELSE 3 END,
+                    CASE WHEN EstFictif = TRUE AND NomComplet LIKE '%%-Tâche restante-%%' THEN CAST(substring(NomComplet FROM '-(\\d+)$') AS INTEGER)\
+                    ELSE NULL END,
                     Nom COLLATE "fr-CA-x-icu", Prenom COLLATE "fr-CA-x-icu";
             """
             cur.execute(query_sql, {"annee_id": annee_id})
@@ -1477,6 +1479,7 @@ def get_dashboard_summary_data(annee_id: int) -> dict[str, Any]:
 
 # --- FONCTIONS DAO POUR PRÉPARATION HORAIRE ---
 
+
 def get_all_cours_for_preparation(annee_id: int) -> list[dict[str, Any]]:
     """
     Récupère tous les cours pour une année donnée, y compris le nom du champ,
@@ -1503,6 +1506,7 @@ def get_all_cours_for_preparation(annee_id: int) -> list[dict[str, Any]]:
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_all_cours_for_preparation pour annee {annee_id}: {e}", exc_info=True)
         return []
+
 
 def get_assignments_for_preparation(annee_id: int) -> list[dict[str, Any]]:
     """
@@ -1534,6 +1538,7 @@ def get_assignments_for_preparation(annee_id: int) -> list[dict[str, Any]]:
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_assignments_for_preparation pour annee {annee_id}: {e}", exc_info=True)
         return []
+
 
 def get_saved_preparation_horaire(annee_id: int) -> list[dict[str, Any]]:
     """

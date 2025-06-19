@@ -16,9 +16,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 
-def _apply_border_to_range(
-    sheet: Worksheet, start_row: int, end_row: int, start_col: int, end_col: int
-) -> None:
+def _apply_border_to_range(sheet: Worksheet, start_row: int, end_row: int, start_col: int, end_col: int) -> None:
     """Applique une bordure fine autour d'une plage de cellules."""
     thin_border_side = Side(style="thin")
     box_border = Border(
@@ -28,16 +26,12 @@ def _apply_border_to_range(
         bottom=thin_border_side,
     )
 
-    for row_iter in sheet.iter_rows(
-        min_row=start_row, max_row=end_row, min_col=start_col, max_col=end_col
-    ):
+    for row_iter in sheet.iter_rows(min_row=start_row, max_row=end_row, min_col=start_col, max_col=end_col):
         for cell in row_iter:
             cell.border = box_border
 
 
-def generer_export_taches(
-    attributions_par_champ: dict[str, dict[str, Any]]
-) -> io.BytesIO:
+def generer_export_taches(attributions_par_champ: dict[str, dict[str, Any]]) -> io.BytesIO:
     """
     Génère un fichier Excel des tâches attribuées, avec une feuille par champ.
 
@@ -70,15 +64,18 @@ def generer_export_taches(
         champ_nom = champ_data["nom"]
         attributions = champ_data["attributions"]
         nom_complet_champ = f"{champ_no}-{champ_nom}"
-        safe_sheet_title = "".join(
-            c for c in nom_complet_champ if c.isalnum() or c in " -_"
-        ).strip()[:31]
+        safe_sheet_title = "".join(c for c in nom_complet_champ if c.isalnum() or c in " -_").strip()[:31]
         sheet: Worksheet = workbook.create_sheet(title=safe_sheet_title)
 
         current_row_num = 2
         headers = [
-            "Enseignant", "Code cours", "Description", "Cours autre",
-            "Nb. grp.", "Pér./ groupe", "Pér. Total",
+            "Enseignant",
+            "Code cours",
+            "Description",
+            "Cours autre",
+            "Nb. grp.",
+            "Pér./ groupe",
+            "Pér. Total",
         ]
         for col_idx, header_text in enumerate(headers, start=2):
             cell = sheet.cell(row=current_row_num, column=col_idx, value=header_text)
@@ -97,19 +94,19 @@ def generer_export_taches(
             nom_enseignant_cle = f"{attr['nom']}, {attr['prenom']}"
             nom_enseignant_affichage = f"{attr['prenom']} {attr['nom']}"
 
-            if (
-                previous_teacher_name is not None
-                and nom_enseignant_cle != previous_teacher_name
-            ):
-                cell_label = sheet.cell(
-                    row=current_row_num, column=2,
+            if previous_teacher_name is not None and nom_enseignant_cle != previous_teacher_name:
+                sheet.cell(
+                    row=current_row_num,
+                    column=2,
                     value=f"Total pour {previous_teacher_fullname} ",
                 )
                 cell_value = sheet.cell(row=current_row_num, column=8)
                 cell_value.value = subtotal_periodes_enseignant
                 sheet.merge_cells(
-                    start_row=current_row_num, start_column=2,
-                    end_row=current_row_num, end_column=7,
+                    start_row=current_row_num,
+                    start_column=2,
+                    end_row=current_row_num,
+                    end_column=7,
                 )
                 for col_idx in range(2, 9):
                     cell = sheet.cell(row=current_row_num, column=col_idx)
@@ -131,9 +128,13 @@ def generer_export_taches(
             per_total_ligne = int(nb_groupes) * per_groupe
 
             row_data: list[Any] = [
-                f"{attr['nom']}, {attr['prenom']}", attr["codecours"],
-                attr["coursdescriptif"], est_autre, nb_groupes,
-                per_groupe, per_total_ligne,
+                f"{attr['nom']}, {attr['prenom']}",
+                attr["codecours"],
+                attr["coursdescriptif"],
+                est_autre,
+                nb_groupes,
+                per_groupe,
+                per_total_ligne,
             ]
             for col_idx, cell_value in enumerate(row_data, start=2):
                 cell = sheet.cell(row=current_row_num, column=col_idx, value=cell_value)
@@ -152,16 +153,19 @@ def generer_export_taches(
             previous_teacher_fullname = nom_enseignant_affichage
 
         if previous_teacher_name is not None:
-            cell_label = sheet.cell(
-                row=current_row_num, column=2,
+            sheet.cell(
+                row=current_row_num,
+                column=2,
                 value=f"Total pour {previous_teacher_fullname} ",
             )
             cell_value = sheet.cell(row=current_row_num, column=8)
             cell_value.value = subtotal_periodes_enseignant
 
             sheet.merge_cells(
-                start_row=current_row_num, start_column=2,
-                end_row=current_row_num, end_column=7,
+                start_row=current_row_num,
+                start_column=2,
+                end_row=current_row_num,
+                end_column=7,
             )
             for col_idx in range(2, 9):
                 cell = sheet.cell(row=current_row_num, column=col_idx)
@@ -175,16 +179,19 @@ def generer_export_taches(
             _apply_border_to_range(sheet, group_start_row, current_row_num, 2, 8)
             current_row_num += 2
 
-            cell_grand_total_label = sheet.cell(
-                row=current_row_num, column=2,
+            sheet.cell(
+                row=current_row_num,
+                column=2,
                 value="TOTAL DES PÉRIODES ATTRIBUÉES DU CHAMP",
             )
             cell_grand_total_value = sheet.cell(row=current_row_num, column=8)
             cell_grand_total_value.value = grand_total_periodes_champ
 
             sheet.merge_cells(
-                start_row=current_row_num, start_column=2,
-                end_row=current_row_num, end_column=7,
+                start_row=current_row_num,
+                start_column=2,
+                end_row=current_row_num,
+                end_column=7,
             )
             for col_idx in range(2, 9):
                 cell = sheet.cell(row=current_row_num, column=col_idx)
@@ -197,7 +204,14 @@ def generer_export_taches(
                     cell.number_format = number_format_periods
 
         column_widths = {
-            "A": 3, "B": 30, "C": 11, "D": 43, "E": 12, "F": 10, "G": 12, "H": 12,
+            "A": 3,
+            "B": 30,
+            "C": 11,
+            "D": 43,
+            "E": 12,
+            "F": 10,
+            "G": 12,
+            "H": 12,
         }
         for col_letter, width in column_widths.items():
             sheet.column_dimensions[col_letter].width = width
@@ -209,9 +223,7 @@ def generer_export_taches(
     return mem_file
 
 
-def generer_export_periodes_restantes(
-    periodes_par_champ: dict[str, dict[str, Any]]
-) -> io.BytesIO:
+def generer_export_periodes_restantes(periodes_par_champ: dict[str, dict[str, Any]]) -> io.BytesIO:
     """
     Génère un fichier Excel des périodes restantes avec totaux et mise en forme.
 
@@ -243,15 +255,17 @@ def generer_export_periodes_restantes(
         champ_nom = champ_data["nom"]
         periodes = champ_data["periodes"]
         nom_complet_champ = f"{champ_no}-{champ_nom}"
-        safe_sheet_title = "".join(
-            c for c in nom_complet_champ if c.isalnum() or c in " -_"
-        ).strip()[:31]
+        safe_sheet_title = "".join(c for c in nom_complet_champ if c.isalnum() or c in " -_").strip()[:31]
         sheet: Worksheet = workbook.create_sheet(title=safe_sheet_title)
 
         current_row_num = 2
         headers = [
-            "Champ", "Tâche restantes", "Code cours",
-            "Description", "Cours autre", "Pér./ groupe",
+            "Champ",
+            "Tâche restantes",
+            "Code cours",
+            "Description",
+            "Cours autre",
+            "Pér./ groupe",
         ]
         for col_idx, header_text in enumerate(headers, start=2):
             cell = sheet.cell(row=current_row_num, column=col_idx, value=header_text)
@@ -273,19 +287,19 @@ def generer_export_periodes_restantes(
             if current_tache_raw.startswith(prefix_champ):
                 current_tache_display = current_tache_raw.removeprefix(prefix_champ)
 
-            if (
-                previous_tache_raw is not None
-                and current_tache_raw != previous_tache_raw
-            ):
-                cell_label = sheet.cell(
-                    row=current_row_num, column=2,
+            if previous_tache_raw is not None and current_tache_raw != previous_tache_raw:
+                sheet.cell(
+                    row=current_row_num,
+                    column=2,
                     value=f"Total pour {previous_tache_display} ",
                 )
                 cell_value = sheet.cell(row=current_row_num, column=7)
                 cell_value.value = subtotal_periodes
                 sheet.merge_cells(
-                    start_row=current_row_num, start_column=2,
-                    end_row=current_row_num, end_column=6,
+                    start_row=current_row_num,
+                    start_column=2,
+                    end_row=current_row_num,
+                    end_column=6,
                 )
                 for col_idx in range(2, 8):
                     cell = sheet.cell(row=current_row_num, column=col_idx)
@@ -304,8 +318,12 @@ def generer_export_periodes_restantes(
             est_autre = "Oui" if periode["estcoursautre"] else "Non"
             current_periods_val = float(periode["nbperiodes"])
             row_data: list[Any] = [
-                nom_complet_champ, current_tache_display, periode["codecours"],
-                periode["coursdescriptif"], est_autre, current_periods_val,
+                nom_complet_champ,
+                current_tache_display,
+                periode["codecours"],
+                periode["coursdescriptif"],
+                est_autre,
+                current_periods_val,
             ]
             for col_idx, cell_value in enumerate(row_data, start=2):
                 cell = sheet.cell(row=current_row_num, column=col_idx, value=cell_value)
@@ -324,15 +342,18 @@ def generer_export_periodes_restantes(
             previous_tache_display = current_tache_display
 
         if previous_tache_raw is not None:
-            cell_label = sheet.cell(
-                row=current_row_num, column=2,
+            sheet.cell(
+                row=current_row_num,
+                column=2,
                 value=f"Total pour {previous_tache_display} ",
             )
             cell_value = sheet.cell(row=current_row_num, column=7)
             cell_value.value = subtotal_periodes
             sheet.merge_cells(
-                start_row=current_row_num, start_column=2,
-                end_row=current_row_num, end_column=6,
+                start_row=current_row_num,
+                start_column=2,
+                end_row=current_row_num,
+                end_column=6,
             )
             for col_idx in range(2, 8):
                 cell = sheet.cell(row=current_row_num, column=col_idx)
@@ -346,15 +367,18 @@ def generer_export_periodes_restantes(
             _apply_border_to_range(sheet, group_start_row, current_row_num, 2, 7)
             current_row_num += 2
 
-            cell_grand_total_label = sheet.cell(
-                row=current_row_num, column=2,
+            sheet.cell(
+                row=current_row_num,
+                column=2,
                 value="TOTAL DES PÉRIODES RESTANTES DU CHAMP",
             )
             cell_grand_total_value = sheet.cell(row=current_row_num, column=7)
             cell_grand_total_value.value = grand_total_periodes
             sheet.merge_cells(
-                start_row=current_row_num, start_column=2,
-                end_row=current_row_num, end_column=6,
+                start_row=current_row_num,
+                start_column=2,
+                end_row=current_row_num,
+                end_column=6,
             )
             for col_idx in range(2, 8):
                 cell = sheet.cell(row=current_row_num, column=col_idx)
@@ -367,7 +391,13 @@ def generer_export_periodes_restantes(
                     cell.number_format = number_format_periods
 
         column_widths = {
-            "A": 3, "B": 35, "C": 16, "D": 11, "E": 43, "F": 12, "G": 12,
+            "A": 3,
+            "B": 35,
+            "C": 16,
+            "D": 11,
+            "E": 43,
+            "F": 12,
+            "G": 12,
         }
         for col_letter, width in column_widths.items():
             sheet.column_dimensions[col_letter].width = width
@@ -379,9 +409,7 @@ def generer_export_periodes_restantes(
     return mem_file
 
 
-def generer_export_org_scolaire(
-    donnees_par_champ: dict[str, dict[str, Any]]
-) -> io.BytesIO:
+def generer_export_org_scolaire(donnees_par_champ: dict[str, dict[str, Any]]) -> io.BytesIO:
     """
     Génère un fichier Excel pour l'organisation scolaire.
 
@@ -396,17 +424,24 @@ def generer_export_org_scolaire(
 
     total_font = Font(bold=True, name="Calibri", size=11)
     header_font_org = Font(bold=True, name="Calibri", size=11)
-    header_align = Alignment(
-        wrap_text=True, horizontal="center", vertical="center"
-    )
+    header_align = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
     HEADERS = [
-        "NOM, PRÉNOM", "PÉRIODES RÉGULIER", "PÉRIODES ADAPTATION SCOLAIRE",
-        "PÉRIODES SPORT-ÉTUDES", "PÉRIODES ENSEIGNANT RESSOURCE", "PÉRIODES AIDESEC",
-        "PÉRIODES DIPLÔMA", "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
-        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)", "PÉRIODES MESURE SEUIL (POUR FABLAB)",
-        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)", "PÉRIODES ALTERNE", "PÉRIODES FORMANUM",
-        "PÉRIODES MENTORAT", "PÉRIODES COORDINATION SPORT-ÉTUDES",
+        "NOM, PRÉNOM",
+        "PÉRIODES RÉGULIER",
+        "PÉRIODES ADAPTATION SCOLAIRE",
+        "PÉRIODES SPORT-ÉTUDES",
+        "PÉRIODES ENSEIGNANT RESSOURCE",
+        "PÉRIODES AIDESEC",
+        "PÉRIODES DIPLÔMA",
+        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
+        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
+        "PÉRIODES MESURE SEUIL (POUR FABLAB)",
+        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
+        "PÉRIODES ALTERNE",
+        "PÉRIODES FORMANUM",
+        "PÉRIODES MENTORAT",
+        "PÉRIODES COORDINATION SPORT-ÉTUDES",
         "PÉRIODES SOUTIEN SPORT-ÉTUDES",
     ]
     COLUMN_WIDTH = 22
@@ -415,9 +450,7 @@ def generer_export_org_scolaire(
         champ_nom = champ_data["nom"]
         donnees = champ_data["donnees"]
         nom_complet_champ = f"{champ_no}-{champ_nom}"
-        safe_sheet_title = "".join(
-            c for c in nom_complet_champ if c.isalnum() or c in " -_"
-        ).strip()[:31]
+        safe_sheet_title = "".join(c for c in nom_complet_champ if c.isalnum() or c in " -_").strip()[:31]
         sheet: Worksheet = workbook.create_sheet(title=safe_sheet_title)
 
         for col_idx, header_text in enumerate(HEADERS, start=1):
@@ -453,12 +486,14 @@ def generer_export_org_scolaire(
             grand_total_row_idx = total_row_idx + 2
             grand_total_periodes_champ = sum(totals.values())
             label_cell = sheet.cell(
-                row=grand_total_row_idx, column=1,
+                row=grand_total_row_idx,
+                column=1,
                 value="TOTAL PÉRIODES DU CHAMP",
             )
             label_cell.font = total_font
             value_cell = sheet.cell(
-                row=grand_total_row_idx, column=2,
+                row=grand_total_row_idx,
+                column=2,
             )
             value_cell.value = grand_total_periodes_champ
             value_cell.font = total_font

@@ -5,14 +5,26 @@ Ce module contient le Blueprint pour les routes d'authentification.
 Il gère la connexion, la déconnexion et l'inscription des utilisateurs.
 """
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_login import current_user, login_user, logout_user
 from werkzeug.security import check_password_hash
 from werkzeug.wrappers import Response
 
 from . import database as db
 from . import services
-from .services import BusinessRuleValidationError, DuplicateEntityError, ServiceException
+from .services import (
+    BusinessRuleValidationError,
+    DuplicateEntityError,
+    ServiceException,
+)
 
 # Crée un Blueprint nommé 'auth'.
 bp = Blueprint("auth", __name__, url_prefix="/auth")

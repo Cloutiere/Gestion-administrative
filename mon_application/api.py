@@ -22,7 +22,6 @@ from .services import (
 )
 from .utils import annee_active_required
 
-
 # Crée un Blueprint 'api' avec un préfixe d'URL.
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -46,17 +45,19 @@ def api_ajouter_attribution(annee_active: dict[str, Any]) -> tuple[Response, int
         nouvelle_attribution_id = services.add_attribution_service(eid, cc, annee_active["annee_id"])
 
         # Assemblage de la réponse pour le client
-        return jsonify({
-            "success": True,
-            "message": "Cours attribué avec succès!",
-            "attribution_id": nouvelle_attribution_id,
-            "enseignant_id": eid,
-            "code_cours": cc,
-            "annee_id_cours": annee_active["annee_id"],
-            "periodes_enseignant": db.get_periodes_enseignant(eid),
-            "groupes_restants_cours": db.get_groupes_restants_pour_cours(cc, annee_active["annee_id"]),
-            "attributions_enseignant": db.get_attributions_enseignant(eid),
-        }), 201
+        return jsonify(
+            {
+                "success": True,
+                "message": "Cours attribué avec succès!",
+                "attribution_id": nouvelle_attribution_id,
+                "enseignant_id": eid,
+                "code_cours": cc,
+                "annee_id_cours": annee_active["annee_id"],
+                "periodes_enseignant": db.get_periodes_enseignant(eid),
+                "groupes_restants_cours": db.get_groupes_restants_pour_cours(cc, annee_active["annee_id"]),
+                "attributions_enseignant": db.get_attributions_enseignant(eid),
+            }
+        ), 201
 
     except EntityNotFoundError as e:
         return jsonify({"success": False, "message": e.message}), 404
@@ -91,16 +92,18 @@ def api_supprimer_attribution() -> tuple[Response, int]:
         annee_id_cours = deleted_attr_info["annee_id_cours"]
 
         # Assemblage de la réponse pour le client
-        return jsonify({
-            "success": True,
-            "message": "Attribution supprimée!",
-            "enseignant_id": enseignant_id,
-            "code_cours": code_cours,
-            "annee_id_cours": annee_id_cours,
-            "periodes_enseignant": db.get_periodes_enseignant(enseignant_id),
-            "groupes_restants_cours": db.get_groupes_restants_pour_cours(code_cours, annee_id_cours),
-            "attributions_enseignant": db.get_attributions_enseignant(enseignant_id),
-        }), 200
+        return jsonify(
+            {
+                "success": True,
+                "message": "Attribution supprimée!",
+                "enseignant_id": enseignant_id,
+                "code_cours": code_cours,
+                "annee_id_cours": annee_id_cours,
+                "periodes_enseignant": db.get_periodes_enseignant(enseignant_id),
+                "groupes_restants_cours": db.get_groupes_restants_pour_cours(code_cours, annee_id_cours),
+                "attributions_enseignant": db.get_attributions_enseignant(enseignant_id),
+            }
+        ), 200
 
     except EntityNotFoundError as e:
         return jsonify({"success": False, "message": e.message}), 404
@@ -123,12 +126,14 @@ def api_creer_tache_restante(champ_no: str, annee_active: dict[str, Any]) -> tup
         # REFACTOR: Appel à la couche de service
         nouveau_fictif = services.create_fictitious_teacher_service(champ_no, annee_active["annee_id"])
 
-        return jsonify({
-            "success": True,
-            "message": "Tâche restante créée avec succès!",
-            "enseignant": {**nouveau_fictif, "attributions": []},
-            "periodes_actuelles": {"periodes_cours": 0.0, "periodes_autres": 0.0, "total_periodes": 0.0},
-        }), 201
+        return jsonify(
+            {
+                "success": True,
+                "message": "Tâche restante créée avec succès!",
+                "enseignant": {**nouveau_fictif, "attributions": []},
+                "periodes_actuelles": {"periodes_cours": 0.0, "periodes_autres": 0.0, "total_periodes": 0.0},
+            }
+        ), 201
 
     except ServiceException as e:
         current_app.logger.error(f"Erreur inattendue dans api_creer_tache_restante: {e}", exc_info=True)
@@ -150,20 +155,25 @@ def api_supprimer_enseignant(enseignant_id: int) -> tuple[Response, int]:
         # REFACTOR: Appel à la couche de service
         cours_affectes = services.delete_teacher_service(enseignant_id)
 
-        cours_liberes_details = [{
-            "code_cours": c["codecours"],
-            "annee_id_cours": c["annee_id_cours"],
-            "nouveaux_groupes_restants": db.get_groupes_restants_pour_cours(c["codecours"], c["annee_id_cours"]),
-        } for c in cours_affectes]
+        cours_liberes_details = [
+            {
+                "code_cours": c["codecours"],
+                "annee_id_cours": c["annee_id_cours"],
+                "nouveaux_groupes_restants": db.get_groupes_restants_pour_cours(c["codecours"], c["annee_id_cours"]),
+            }
+            for c in cours_affectes
+        ]
 
-        return jsonify({
-            "success": True,
-            "message": "Enseignant supprimé avec succès.",
-            "enseignant_id": enseignant_id,
-            "cours_liberes_details": cours_liberes_details,
-        }), 200
+        return jsonify(
+            {
+                "success": True,
+                "message": "Enseignant supprimé avec succès.",
+                "enseignant_id": enseignant_id,
+                "cours_liberes_details": cours_liberes_details,
+            }
+        ), 200
 
-    except EntityNotFoundError as e: # Normalement déjà attrapé mais par sécurité
+    except EntityNotFoundError as e:  # Normalement déjà attrapé mais par sécurité
         return jsonify({"success": False, "message": e.message}), 404
     except ServiceException as e:
         current_app.logger.error(f"Erreur inattendue dans api_supprimer_enseignant: {e}", exc_info=True)

@@ -61,6 +61,7 @@ class ForeignKeyError(ServiceException):
 
 # --- Services liés à l'importation de fichiers ---
 
+
 class ImportationStats:
     """Classe de données pour stocker les statistiques d'une importation."""
 
@@ -86,7 +87,11 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
                 continue
 
             (
-                champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw,
+                champ_no_raw,
+                code_cours_raw,
+                desc_raw,
+                nb_grp_raw,
+                nb_per_raw,
             ) = (values[0], values[1], values[3], values[4], values[5])
             est_autre_raw = values[6] if len(values) > 6 else None
             financement_code_raw = values[7] if len(values) > 7 else None
@@ -162,7 +167,10 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
                 continue
 
             champ_no_raw, nom_raw, prenom_raw, temps_plein_raw = (
-                values[0], values[1], values[2], values[3],
+                values[0],
+                values[1],
+                values[2],
+                values[3],
             )
 
             if not all([champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]):
@@ -177,8 +185,7 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
                         "nom": nom_clean,
                         "prenom": prenom_clean,
                         "champno": str(champ_no_raw).strip(),
-                        "esttempsplein": str(temps_plein_raw).strip().upper()
-                        in ("VRAI", "TRUE", "OUI", "YES", "1"),
+                        "esttempsplein": str(temps_plein_raw).strip().upper() in ("VRAI", "TRUE", "OUI", "YES", "1"),
                     }
                 )
             except (ValueError, TypeError) as e:
@@ -455,6 +462,7 @@ def delete_financement_service(code: str) -> None:
 
 # --- Services - Utilisateurs et Rôles ---
 
+
 def register_first_admin_service(username: str, password: str, confirm_password: str) -> dict[str, Any]:
     """
     Gère la logique d'inscription du premier utilisateur (administrateur).
@@ -537,7 +545,7 @@ def create_user_service(username: str, password: str, role: str, allowed_champs:
         if isinstance(e, psycopg2.errors.UniqueViolation):
             raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
         if isinstance(e, ServiceException):
-            raise e # Fait remonter les exceptions de service déjà levées
+            raise e  # Fait remonter les exceptions de service déjà levées
         raise ServiceException(f"Erreur base de données lors de la création de l'utilisateur: {e}")
 
 
@@ -701,11 +709,20 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 
     pivot_data: dict[str, dict[str, Any]] = {}
     ALL_HEADERS = [
-        "PÉRIODES RÉGULIER", "PÉRIODES ADAPTATION SCOLAIRE", "PÉRIODES SPORT-ÉTUDES",
-        "PÉRIODES ENSEIGNANT RESSOURCE", "PÉRIODES AIDESEC", "PÉRIODES DIPLÔMA",
-        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)", "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
-        "PÉRIODES MESURE SEUIL (POUR FABLAB)", "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
-        "PÉRIODES ALTERNE", "PÉRIODES FORMANUM", "PÉRIODES MENTORAT", "PÉRIODES COORDINATION SPORT-ÉTUDES",
+        "PÉRIODES RÉGULIER",
+        "PÉRIODES ADAPTATION SCOLAIRE",
+        "PÉRIODES SPORT-ÉTUDES",
+        "PÉRIODES ENSEIGNANT RESSOURCE",
+        "PÉRIODES AIDESEC",
+        "PÉRIODES DIPLÔMA",
+        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
+        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
+        "PÉRIODES MESURE SEUIL (POUR FABLAB)",
+        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
+        "PÉRIODES ALTERNE",
+        "PÉRIODES FORMANUM",
+        "PÉRIODES MENTORAT",
+        "PÉRIODES COORDINATION SPORT-ÉTUDES",
         "PÉRIODES SOUTIEN SPORT-ÉTUDES",
     ]
 
@@ -715,8 +732,11 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 
         if enseignant_key not in pivot_data.setdefault(champ_no, {}):
             pivot_data[champ_no][enseignant_key] = {
-                "nom": item["nom"], "prenom": item["prenom"], "nomcomplet": item["nomcomplet"],
-                "estfictif": item["estfictif"], "champnom": item["champnom"],
+                "nom": item["nom"],
+                "prenom": item["prenom"],
+                "nomcomplet": item["nomcomplet"],
+                "estfictif": item["estfictif"],
+                "champnom": item["champnom"],
                 **{header: 0.0 for header in ALL_HEADERS},
             }
 
@@ -744,6 +764,7 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 
 # --- SERVICES POUR PRÉPARATION HORAIRE ---
 
+
 def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
     """
     Récupère et structure les données nécessaires pour la page de préparation de l'horaire.
@@ -769,8 +790,8 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
         # 3. Organiser les assignations sauvegardées
         saved_placements = defaultdict(lambda: defaultdict(list))
         for saved in saved_assignments_raw:
-            key = (saved['secondaire_level'], saved['codecours'])
-            saved_placements[key][saved['colonne_assignee']].append(saved['enseignant_id'])
+            key = (saved["secondaire_level"], saved["codecours"])
+            saved_placements[key][saved["colonne_assignee"]].append(saved["enseignant_id"])
 
         # 4. Construire la structure de la grille pour le template
         prepared_grid: dict[int, list] = {level: [] for level in range(1, 6)}
@@ -783,18 +804,20 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
 
             all_teachers_for_course = enseignants_par_cours.get(codecours, [])
             placed_teacher_ids = {tid for teacher_ids in columns.values() for tid in teacher_ids}
-            unassigned_teachers = [t for t in all_teachers_for_course if t['enseignantid'] not in placed_teacher_ids]
+            unassigned_teachers = [t for t in all_teachers_for_course if t["enseignantid"] not in placed_teacher_ids]
 
             # MODIFIÉ : Création et ajout du dictionnaire de recherche
-            teachers_lookup = {t['enseignantid']: t for t in all_teachers_for_course}
+            teachers_lookup = {t["enseignantid"]: t for t in all_teachers_for_course}
 
-            prepared_grid[level].append({
-                "cours": cours_info,
-                "all_teachers_for_course": all_teachers_for_course,
-                "unassigned_teachers": unassigned_teachers,
-                "assigned_teachers_by_col": columns,
-                "teachers_lookup": teachers_lookup,  # NOUVEAU: Ajout du lookup
-            })
+            prepared_grid[level].append(
+                {
+                    "cours": cours_info,
+                    "all_teachers_for_course": all_teachers_for_course,
+                    "unassigned_teachers": unassigned_teachers,
+                    "assigned_teachers_by_col": columns,
+                    "teachers_lookup": teachers_lookup,  # NOUVEAU: Ajout du lookup
+                }
+            )
             cours_traites.add(codecours)
 
         # 5. Retourner le dictionnaire final structuré
@@ -806,6 +829,7 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
         }
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise ServiceException(f"Erreur lors de la préparation des données pour l'horaire : {e}")
 

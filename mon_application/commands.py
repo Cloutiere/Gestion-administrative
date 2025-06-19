@@ -37,15 +37,12 @@ def init_db_command() -> None:
     db_conn = get_db()
     if not db_conn:
         click.secho(
-            "Erreur: Impossible d'établir une connexion à la base de données. "
-            "Vérifiez vos variables d'environnement.",
+            "Erreur: Impossible d'établir une connexion à la base de données. " "Vérifiez vos variables d'environnement.",
             fg="red",
         )
         return
 
-    schema_path = os.path.join(
-        os.path.dirname(current_app.root_path), "schema.sql"
-    )
+    schema_path = os.path.join(os.path.dirname(current_app.root_path), "schema.sql")
 
     try:
         with db_conn.cursor() as cur:
@@ -54,17 +51,13 @@ def init_db_command() -> None:
                 with open(schema_path, encoding="utf-8") as f:
                     sql_commands = f.read()
             except FileNotFoundError:
-                click.secho(
-                    f"Erreur : Le fichier '{schema_path}' est introuvable.", fg="red"
-                )
+                click.secho(f"Erreur : Le fichier '{schema_path}' est introuvable.", fg="red")
                 return
 
             click.echo("Application du schéma (création des tables)...")
             cur.execute(sql_commands)
             db_conn.commit()
-            click.secho(
-                "La base de données a été initialisée avec succès.", fg="green"
-            )
+            click.secho("La base de données a été initialisée avec succès.", fg="green")
 
     except psycopg2.Error as e:
         if db_conn:

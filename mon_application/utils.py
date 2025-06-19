@@ -7,10 +7,11 @@ d'importation circulaire qui peuvent survenir lorsque les blueprints
 et le paquet principal (__init__.py) dépendent les uns des autres.
 """
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, cast
+from typing import Any, cast
 
-from flask import g, jsonify, flash, redirect, url_for
+from flask import flash, g, jsonify, redirect, url_for
 from flask_login import current_user
 from werkzeug.wrappers import Response
 
@@ -58,9 +59,7 @@ def admin_required(f: Callable[..., Any]) -> Callable[..., Any]:
 
     @wraps(f)
     def decorated_function(*args: Any, **kwargs: Any) -> Response | Any:
-        if not current_user.is_authenticated or not getattr(
-            current_user, "is_admin", False
-        ):
+        if not current_user.is_authenticated or not getattr(current_user, "is_admin", False):
             flash(
                 "Vous n'avez pas les permissions suffisantes pour accéder à cette page.",
                 "error",

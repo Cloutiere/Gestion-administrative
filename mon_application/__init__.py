@@ -15,6 +15,7 @@ from werkzeug.wrappers import Response
 
 from .models import User
 
+
 # ... (la fonction determine_active_school_year reste la même)
 def determine_active_school_year(
     toutes_les_annees: list[dict[str, Any]], has_dashboard_access: bool, annee_id_session: int | None
@@ -58,7 +59,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         __name__,
         instance_relative_config=False,
         template_folder=os.path.join(project_root, "templates"),
-        static_folder=os.path.join(project_root, "static")
+        static_folder=os.path.join(project_root, "static"),
     )
 
     app.config.from_mapping(
@@ -98,11 +99,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @login_manager.user_loader
     def load_user(user_id: str) -> User | None:
         from .database import get_user_obj_by_id
+
         return get_user_obj_by_id(int(user_id))
 
     @app.before_request
     def load_active_school_year() -> None:
         from . import database as db
+
         g.toutes_les_annees = db.get_all_annees()
         has_dashboard_access = current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only)
         annee_id_session = session.get("annee_scolaire_id")
@@ -129,6 +132,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         }
 
     from . import admin, api, auth, dashboard, views
+
     app.register_blueprint(auth.bp)
     app.register_blueprint(views.bp)
     app.add_url_rule("/", endpoint="index")
@@ -137,6 +141,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(api.bp)
 
     from . import commands
+
     commands.init_app(app)
 
     return app

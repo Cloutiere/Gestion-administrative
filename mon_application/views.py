@@ -15,7 +15,6 @@ from werkzeug.wrappers import Response
 
 from . import database as db
 
-
 # Crée un Blueprint nommé 'views'.
 bp = Blueprint("views", __name__)
 
@@ -72,9 +71,7 @@ def page_champ(champ_no: str) -> str | Response:
     for ens in enseignants_du_champ:
         attributions = db.get_attributions_enseignant(ens["enseignantid"])
         periodes = db.get_periodes_enseignant(ens["enseignantid"])
-        enseignants_complets.append(
-            {"attributions": attributions, "periodes_actuelles": periodes, **ens}
-        )
+        enseignants_complets.append({"attributions": attributions, "periodes_actuelles": periodes, **ens})
         if ens["esttempsplein"] and not ens["estfictif"]:
             # CORRECTION: Conversion explicite en float avant l'addition
             total_periodes_tp += float(periodes["total_periodes"])

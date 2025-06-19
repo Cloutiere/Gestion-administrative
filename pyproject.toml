@@ -14,6 +14,12 @@ dependencies = [
     "openpyxl>=3.1.0",
     "Flask-Login>=0.6.3",
     "werkzeug>=3.0.0",
+    # --- AJOUTS POUR L'ORM ET LES MIGRATIONS ---
+    "flask-sqlalchemy>=3.1.1",
+    "sqlalchemy>=2.0.29",
+    "flask-migrate>=4.0.7",
+    # --- AJOUT POUR LES FORMULAIRES ET CSRF ---
+    "flask-wtf>=1.2.1",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +57,8 @@ exclude = [
     "dist",
     "node_modules",
     "venv",
+    # On ajoute le futur dossier des migrations
+    "migrations",
 ]
 
 # Longueur maximale des lignes, respectée par le linter et le formateur.
@@ -78,7 +86,7 @@ indent-style = "space"
 # --- Configuration de Setuptools ---
 [tool.setuptools.packages.find]
 where = ["."]  # Cherche les packages à la racine du projet.
-exclude = ["uploads*", "tests*"]  # Exclut les dossiers 'uploads' et 'tests'.
+exclude = ["uploads*", "tests*", "migrations*"]  # Exclut les dossiers 'uploads', 'tests' et 'migrations'.
 
 # --- AJOUT CRUCIAL ---
 # Indique à setuptools d'inclure les fichiers non-Python (templates, static)
