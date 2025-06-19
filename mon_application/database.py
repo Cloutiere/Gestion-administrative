@@ -21,7 +21,8 @@ import psycopg2.sql
 from flask import Flask, current_app, g
 from psycopg2.extensions import connection as PgConnection
 
-from .models import User
+# NOTE: La référence au modèle User est supprimée car plus utilisée ici.
+# from .models import User
 
 
 # --- Gestion de la connexion à la base de données ---
@@ -196,170 +197,9 @@ def set_annee_courante(annee_id: int) -> bool:
 
 
 # --- Fonctions d'accès aux données (DAO) - Utilisateurs ---
-
-
-def _create_user_from_data(user_data: dict[str, Any] | None) -> User | None:
-    """Factory privée pour créer un objet User à partir de données de la BDD."""
-    if not user_data:
-        return None
-    return User(
-        _id=user_data["id"],
-        username=user_data["username"],
-        is_admin=user_data["is_admin"],
-        is_dashboard_only=user_data["is_dashboard_only"],
-        allowed_champs=user_data.get("allowed_champs") or [],
-    )
-
-
-def get_user_by_id(user_id: int) -> dict[str, Any] | None:
-    """Récupère les données brutes d'un utilisateur par son ID, y compris ses permissions."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                """
-                SELECT u.id, u.username, u.password_hash, u.is_admin, u.is_dashboard_only,
-                       ARRAY_AGG(uca.champ_no ORDER BY uca.champ_no)
-                           FILTER (WHERE uca.champ_no IS NOT NULL) AS allowed_champs
-                FROM Users u
-                LEFT JOIN user_champ_access uca ON u.id = uca.user_id
-                WHERE u.id = %s
-                GROUP BY u.id;
-                """,
-                (user_id,),
-            )
-            return dict(row) if (row := cur.fetchone()) else None
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_user_by_id pour {user_id}: {e}")
-        return None
-
-
-def get_user_obj_by_id(user_id: int) -> User | None:
-    """Récupère un objet User par son ID."""
-    user_data = get_user_by_id(user_id)
-    return _create_user_from_data(user_data)
-
-
-def get_user_by_username(username: str) -> dict[str, Any] | None:
-    """Récupère un utilisateur par son nom d'utilisateur."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                "SELECT id, username, password_hash, is_admin, is_dashboard_only " "FROM Users WHERE username = %s;",
-                (username,),
-            )
-            user_data = cur.fetchone()
-            return dict(user_data) if user_data else None
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_user_by_username pour {username}: {e}")
-        return None
-
-
-def get_users_count() -> int:
-    """Compte le nombre total d'utilisateurs."""
-    db_conn = get_db()
-    if not db_conn:
-        return 0
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM Users;")
-            result = cur.fetchone()
-            return result[0] if result else 0
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_users_count: {e}")
-        return 0
-
-
-def get_admin_count() -> int:
-    """Compte le nombre total d'administrateurs."""
-    db_conn = get_db()
-    if not db_conn:
-        return 0
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM Users WHERE is_admin = TRUE;")
-            result = cur.fetchone()
-            return result[0] if result else 0
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_admin_count: {e}")
-        return 0
-
-
-def create_user(username: str, password_hash: str, is_admin: bool = False, is_dashboard_only: bool = False) -> dict[str, Any] | None:
-    """Crée un nouvel utilisateur."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                "INSERT INTO Users (username, password_hash, is_admin, is_dashboard_only) "
-                "VALUES (%s, %s, %s, %s) RETURNING id, username, is_admin, is_dashboard_only;",
-                (username, password_hash, is_admin, is_dashboard_only),
-            )
-            user_data = cur.fetchone()
-            db_conn.commit()
-            return dict(user_data) if user_data else None
-    except psycopg2.errors.UniqueViolation:
-        if db_conn:
-            db_conn.rollback()
-        return None
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO create_user pour {username}: {e}")
-        return None
-
-
-def update_user_role_and_access(user_id: int, is_admin: bool, is_dashboard_only: bool, allowed_champs: list[str]) -> bool:
-    """Met à jour le rôle et les accès d'un utilisateur de manière transactionnelle."""
-    db_conn = get_db()
-    if not db_conn:
-        return False
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute(
-                "UPDATE Users SET is_admin = %s, is_dashboard_only = %s WHERE id = %s;",
-                (is_admin, is_dashboard_only, user_id),
-            )
-            cur.execute("DELETE FROM user_champ_access WHERE user_id = %s;", (user_id,))
-
-            if not is_admin and not is_dashboard_only and allowed_champs:
-                psycopg2.extras.execute_values(
-                    cur,
-                    "INSERT INTO user_champ_access (user_id, champ_no) VALUES %s;",
-                    [(user_id, c) for c in allowed_champs],
-                )
-
-            db_conn.commit()
-            return True
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO update_user_role_and_access pour user {user_id}: {e}")
-        return False
-
-
-def delete_user_data(user_id: int) -> bool:
-    """Supprime un utilisateur."""
-    db_conn = get_db()
-    if not db_conn:
-        return False
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("DELETE FROM Users WHERE id = %s;", (user_id,))
-            db_conn.commit()
-            return cur.rowcount > 0
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_user_data pour user {user_id}: {e}")
-        return False
+# TOUTES LES FONCTIONS DE CETTE SECTION ONT ÉTÉ SUPPRIMÉES CAR
+# LA GESTION DES UTILISATEURS EST MAINTENANT ENTIÈREMENT GÉRÉE PAR
+# L'ORM SQLAlchemy DANS LA COUCHE DE SERVICES.
 
 
 # --- Fonctions d'accès aux données (DAO) - Champs ---
@@ -528,6 +368,7 @@ def delete_financement(code: str) -> bool:
             db_conn.rollback()
         raise
 
+# ... le reste du fichier database.py reste identique ...
 
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---
 def get_enseignants_par_champ(champ_no: str, annee_id: int) -> list[dict[str, Any]]:

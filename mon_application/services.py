@@ -18,6 +18,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 from psycopg2.extensions import connection as PgConnection
 # NOUVEAU : Imports pour SQLAlchemy ORM
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from werkzeug.security import generate_password_hash
 
@@ -441,65 +442,100 @@ def get_all_users_with_details_service() -> dict[str, Any]:
     except Exception as e:
         raise ServiceException(f"Erreur ORM lors de la récupération des détails utilisateurs : {e}")
 
+# REFACTORISÉ
 def create_user_service(username: str, password: str, role: str, allowed_champs: list[str]) -> dict[str, Any]:
+    """Crée un nouvel utilisateur en utilisant l'ORM SQLAlchemy."""
     if len(password) < 6:
         raise BusinessRuleValidationError("Le mot de passe doit faire au moins 6 caractères.")
-    password_hash = generate_password_hash(password)
-    conn = cast(PgConnection | None, old_db.get_db())
-    if not conn:
-        raise ServiceException("Pas de connexion à la base de données.")
-    user = None
+
+    # Vérification de l'unicité du nom d'utilisateur
+    if db.session.query(User).filter_by(username=username).first():
+        raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
+
+    new_user = User(username=username)
+    new_user.set_password(password)
+
+    if role == "admin":
+        new_user.is_admin = True
+    elif role == "dashboard_only":
+        new_user.is_dashboard_only = True
+    elif role == "specific_champs" and allowed_champs:
+        champs_objects = db.session.query(Champ).filter(Champ.champno.in_(allowed_champs)).all()
+        if len(champs_objects) != len(allowed_champs):
+            raise BusinessRuleValidationError("Un ou plusieurs champs spécifiés sont invalides.")
+        new_user.champs_autorises = champs_objects
+
     try:
-        user = old_db.create_user(username, password_hash)
-        if not user:
-            raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
-        is_admin = role == "admin"
-        is_dashboard_only = role == "dashboard_only"
-        champs_for_role = allowed_champs if role == "specific_champs" else []
-        old_db.update_user_role_and_access(user["id"], is_admin, is_dashboard_only, champs_for_role)
-        conn.commit()
-        user_complet = old_db.get_user_by_id(user["id"])
-        if not user_complet:
-            raise ServiceException("Erreur lors de la récupération de l'utilisateur après création.")
-        return user_complet
+        db.session.add(new_user)
+        db.session.commit()
+        # Rafraîchir l'objet pour charger les relations après le commit.
+        db.session.refresh(new_user)
+        return {
+            "id": new_user.id,
+            "username": new_user.username,
+            "is_admin": new_user.is_admin,
+            "is_dashboard_only": new_user.is_dashboard_only,
+            "allowed_champs": new_user.allowed_champs
+        }
+    except IntegrityError: # Gère les cas de race condition au niveau BDD
+        db.session.rollback()
+        raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
     except Exception as e:
-        if conn: conn.rollback()
-        if user: old_db.delete_user_data(user["id"]); conn.commit()
-        if isinstance(e, (psycopg2.errors.UniqueViolation, DuplicateEntityError)):
-            raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
-        if isinstance(e, ServiceException): raise e
-        raise ServiceException(f"Erreur base de données lors de la création de l'utilisateur: {e}")
+        db.session.rollback()
+        raise ServiceException(f"Erreur ORM lors de la création de l'utilisateur: {e}")
 
 
+# REFACTORISÉ
 def update_user_role_service(user_id: int, role: str, allowed_champs: list[str]) -> None:
-    if not old_db.get_user_by_id(user_id):
+    """Met à jour le rôle et les accès d'un utilisateur en utilisant l'ORM."""
+    user = db.session.get(User, user_id)
+    if not user:
         raise EntityNotFoundError("Utilisateur non trouvé.")
-    is_admin = role == "admin"
-    is_dashboard_only = role == "dashboard_only"
-    champs_for_role = allowed_champs if role == "specific_champs" else []
-    conn = cast(PgConnection | None, old_db.get_db())
-    if not conn:
-        raise ServiceException("Pas de connexion à la base de données.")
+
+    # Réinitialiser les rôles et permissions
+    user.is_admin = False
+    user.is_dashboard_only = False
+    user.champs_autorises.clear()
+
+    # Appliquer les nouveaux rôles et permissions
+    if role == "admin":
+        user.is_admin = True
+    elif role == "dashboard_only":
+        user.is_dashboard_only = True
+    elif role == "specific_champs" and allowed_champs:
+        champs_objects = db.session.query(Champ).filter(Champ.champno.in_(allowed_champs)).all()
+        if len(champs_objects) != len(allowed_champs):
+             raise BusinessRuleValidationError("Un ou plusieurs champs spécifiés sont invalides.")
+        user.champs_autorises = champs_objects
+
     try:
-        with conn.cursor():
-            old_db.update_user_role_and_access(user_id, is_admin, is_dashboard_only, champs_for_role)
-        conn.commit()
-    except psycopg2.Error as e:
-        if conn:
-            conn.rollback()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
         raise ServiceException(f"La mise à jour du rôle a échoué: {e}")
 
 
+# REFACTORISÉ
 def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
+    """Supprime un utilisateur en utilisant l'ORM, avec des vérifications de règles métier."""
     if user_id_to_delete == current_user_id:
         raise BusinessRuleValidationError("Vous ne pouvez pas vous supprimer vous-même.")
-    target_user = old_db.get_user_by_id(user_id_to_delete)
-    if not target_user:
+
+    user_to_delete = db.session.get(User, user_id_to_delete)
+    if not user_to_delete:
         raise EntityNotFoundError("Utilisateur non trouvé.")
-    if target_user["is_admin"] and old_db.get_admin_count() <= 1:
-        raise BusinessRuleValidationError("Impossible de supprimer le dernier administrateur.")
-    if not old_db.delete_user_data(user_id_to_delete):
-        raise ServiceException("La suppression de l'utilisateur a échoué.")
+
+    if user_to_delete.is_admin:
+        admin_count = db.session.query(User).filter_by(is_admin=True).count()
+        if admin_count <= 1:
+            raise BusinessRuleValidationError("Impossible de supprimer le dernier administrateur.")
+
+    try:
+        db.session.delete(user_to_delete)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"La suppression de l'utilisateur a échoué: {e}")
 
 
 def add_attribution_service(enseignant_id: int, code_cours: str, annee_id: int) -> int:
