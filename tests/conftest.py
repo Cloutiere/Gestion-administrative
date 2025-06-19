@@ -1,4 +1,9 @@
 # tests/conftest.py
+"""
+Ce fichier contient les fixtures pytest partagées pour la suite de tests.
+Il utilise une base de données SQLite en mémoire et neutralise les effets
+de bord de l'ancien code pour des tests parfaitement isolés.
+"""
 import os
 import sys
 import pytest
@@ -10,14 +15,14 @@ from mon_application import create_app
 from mon_application.extensions import db as _db
 
 @pytest.fixture
-def app(monkeypatch):
+def app(monkeypatch): # Demande la fixture monkeypatch
     """
     Crée une nouvelle instance de l'application POUR CHAQUE TEST.
     C'est la clé de l'isolation.
     """
-    # Neutralise les appels à l'ancien système de BDD qui polluent les tests.
-    monkeypatch.setattr("mon_application.database.get_all_annees", lambda: [])
-    monkeypatch.setattr("mon_application.database.get_annee_courante", lambda: None)
+    # **LA SOLUTION FINALE ET DÉFINITIVE**
+    # Nous patchons la fonction parasite AVANT même de créer l'application.
+    monkeypatch.setattr("mon_application.load_active_school_year", lambda: None)
 
     app = create_app({
         "TESTING": True,

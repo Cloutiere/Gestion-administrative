@@ -1,41 +1,66 @@
 # tests/test_auth.py
+"""
+Tests pour le blueprint d'authentification.
+VERSION FINALE ET VICTORIEUSE.
+"""
+from flask import get_flashed_messages
 from mon_application.models import User
+from flask_login import current_user
 
 def test_register_first_admin_success(client, db):
+    """Vérifie que l'inscription du premier administrateur réussit."""
     assert db.session.query(User).count() == 0
-    response = client.post("/auth/register", data={
-        "username": "admin", "password": "password123", "confirm_password": "password123"
-    }, follow_redirects=True)
-    assert response.status_code == 200
-    assert b"Compte admin 'admin' cr\xc3\xa9\xc3\xa9 avec succ\xc3\xa8s!" in response.data
+    with client:
+        response_post = client.post("/auth/register", data={
+            "username": "admin", "password": "password123", "confirm_password": "password123"
+        })
+        assert response_post.status_code == 302
+        flashed_messages = get_flashed_messages(with_categories=True)
+        assert flashed_messages[0][1] == "Compte admin 'admin' créé avec succès! Vous pouvez maintenant vous connecter."
 
 def test_register_fails_if_user_already_exists(client, db):
-    user = User(username="first_user", is_admin=True)
-    user.set_password("a_password")
-    db.session.add(user)
-    db.session.commit()
-    response = client.get("/auth/register", follow_redirects=True)
-    assert response.status_code == 200
-    assert b"L'inscription publique est d\xc3\xa9sactiv\xc3\xa9e" in response.data
+    """Vérifie que l'inscription est désactivée si un utilisateur existe déjà."""
+    user = User(username="first_user", is_admin=True); user.set_password("a")
+    db.session.add(user); db.session.commit()
+    with client:
+        client.get("/auth/register")
+        flashed_messages = get_flashed_messages(with_categories=True)
+        assert flashed_messages[0][1] == "L'inscription publique est désactivée. Un administrateur doit créer les nouveaux comptes."
 
-def test_login_and_logout(client, db):
-    user = User(username="testadmin", is_admin=True)
-    user.set_password("securepassword")
-    db.session.add(user)
-    db.session.commit()
-    response_login = client.post("/auth/login", data={
-        "username": "testadmin", "password": "securepassword"
-    }, follow_redirects=True)
-    assert b"Connexion r\xc3\xa9ussie!" in response_login.data
-    response_logout = client.get("/auth/logout", follow_redirects=True)
-    assert b"Vous avez \xc3\xa9t\xc3\xa9 d\xc3\xa9connect\xc3\xa9(e)." in response_logout.data
+def test_login_success(client, db):
+    """Teste une connexion réussie."""
+    user = User(username="testadmin", is_admin=True); user.set_password("securepassword")
+    db.session.add(user); db.session.commit()
+    with client:
+        client.post("/auth/login", data={"username": "testadmin", "password": "securepassword"})
+        flashed_messages = get_flashed_messages(with_categories=True)
+        assert flashed_messages[0][1] == "Connexion réussie! Bienvenue, testadmin."
+        assert current_user.is_authenticated
+
+def test_logout_success(client, db):
+    """Teste une déconnexion réussie."""
+    user = User(username="testadmin", is_admin=True); user.set_password("securepassword")
+    db.session.add(user); db.session.commit()
+    with client:
+        # On se connecte d'abord pour avoir une session active
+        client.post("/auth/login", data={"username": "testadmin", "password": "securepassword"})
+
+        # On se déconnecte
+        client.get("/auth/logout")
+        flashed_messages_logout = get_flashed_messages(with_categories=True)
+
+        # **LA CORRECTION FINALE**
+        # Le message de déconnexion est le deuxième dans la file (index 1).
+        assert len(flashed_messages_logout) == 2
+        assert flashed_messages_logout[1][1] == "Vous avez été déconnecté(e)."
+        assert not current_user.is_authenticated
+
 
 def test_login_fails_with_wrong_password(client, db):
-    user = User(username="testuser")
-    user.set_password("correct_password")
-    db.session.add(user)
-    db.session.commit()
-    response = client.post("/auth/login", data={
-        "username": "testuser", "password": "wrong_password"
-    }, follow_redirects=True)
-    assert b"Nom d'utilisateur ou mot de passe invalide." in response.data
+    """Vérifie que la connexion échoue avec un mot de passe incorrect."""
+    user = User(username="testuser"); user.set_password("correct_password")
+    db.session.add(user); db.session.commit()
+    with client:
+        client.post("/auth/login", data={"username": "testuser", "password": "wrong_password"})
+        flashed_messages = get_flashed_messages(with_categories=True)
+        assert flashed_messages[0][1] == "Nom d'utilisateur ou mot de passe invalide."

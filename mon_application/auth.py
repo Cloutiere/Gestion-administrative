@@ -1,7 +1,7 @@
 # mon_application/auth.py
 """
 Ce module contient le Blueprint pour les routes d'authentification.
-Il est instrumenté pour le débogage.
+VERSION CORRIGÉE.
 """
 
 from flask import (
@@ -18,69 +18,47 @@ from .services import (
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# ... (les routes login et logout restent inchangées) ...
 @bp.route("/login", methods=["GET", "POST"])
 def login() -> str | Response:
-    """Gère la connexion des utilisateurs."""
     if current_user.is_authenticated:
-        flash("Vous êtes déjà connecté(e).", "info")
         return redirect(url_for("dashboard.page_sommaire"))
     first_user = db.session.query(User).first() is None
     if request.method == "POST":
-        username = request.form["username"].strip()
-        password = request.form["password"].strip()
-        user = User.query.filter_by(username=username).first()
-        if user and user.check_password(password):
+        user = User.query.filter_by(username=request.form["username"].strip()).first()
+        if user and user.check_password(request.form["password"].strip()):
             login_user(user)
             flash(f"Connexion réussie! Bienvenue, {user.username}.", "success")
-            next_page = request.args.get("next")
-            return redirect(next_page or url_for("dashboard.page_sommaire"))
+            return redirect(request.args.get("next") or url_for("dashboard.page_sommaire"))
         flash("Nom d'utilisateur ou mot de passe invalide.", "error")
     return render_template("login.html", first_user=first_user)
 
-
 @bp.route("/logout")
 def logout() -> Response:
-    """Déconnecte l'utilisateur actuel."""
     logout_user()
     flash("Vous avez été déconnecté(e).", "info")
     return redirect(url_for("auth.login"))
 
-
 @bp.route("/register", methods=["GET", "POST"])
 def register() -> str | Response:
     """Gère l'inscription du premier administrateur."""
-    print("\n--- [DEBUG] Entrée dans la route /auth/register ---", flush=True)
-
     user_count = db.session.query(User.id).count()
-    print(f"--- [DEBUG] Nombre d'utilisateurs trouvés : {user_count} ---", flush=True)
 
-    # Note: en mode test, cette condition sera toujours fausse
-    if user_count > 0 and not current_app.config.get("TESTING", False):
-        flash("L'inscription publique est désactivée.", "warning")
+    # CORRECTION : La condition est simplifiée. Si des utilisateurs existent,
+    # on bloque toujours l'accès, peu importe l'environnement.
+    if user_count > 0:
+        flash("L'inscription publique est désactivée. Un administrateur doit créer les nouveaux comptes.", "warning")
         return redirect(url_for("auth.login"))
 
     if request.method == "POST":
-        print("--- [DEBUG] Méthode POST détectée ---", flush=True)
-        username = request.form["username"].strip()
-        password = request.form["password"].strip()
-        confirm_password = request.form["confirm_password"].strip()
-
         try:
-            print("--- [DEBUG] Avant appel au service register_first_admin_service ---", flush=True)
-            user = register_first_admin_service(username, password, confirm_password)
-            print(f"--- [DEBUG] Service a retourné l'utilisateur : {user.username} ---", flush=True)
-
+            user = register_first_admin_service(
+                request.form["username"].strip(),
+                request.form["password"].strip(),
+                request.form["confirm_password"].strip()
+            )
             db.session.commit()
-            print("--- [DEBUG] db.session.commit() exécuté ---", flush=True)
-
-            # L'étape critique
-            print(f"--- [DEBUG] Avant flash. Session actuelle : {session.copy()} ---", flush=True)
             flash(f"Compte admin '{user.username}' créé avec succès! Vous pouvez maintenant vous connecter.", "success")
-            print(f"--- [DEBUG] Après flash. Session modifiée : {session.copy()} ---", flush=True)
-
             return redirect(url_for("auth.login"))
-
         except (BusinessRuleValidationError, DuplicateEntityError) as e:
             db.session.rollback()
             flash(e.message, "error")

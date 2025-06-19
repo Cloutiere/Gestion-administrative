@@ -2,6 +2,7 @@
 """
 Ce module est le cœur de l'application (paquet).
 Il contient la factory de l'application `create_app`.
+VERSION CORRIGÉE ET TESTABLE.
 """
 
 import datetime
@@ -15,11 +16,11 @@ from werkzeug.wrappers import Response
 from .extensions import db, migrate
 from .models import User
 
-# CORRECTION : La fonction est maintenant au premier niveau du module, la rendant importable et patchable.
+# CORRECTION : La fonction est maintenant au premier niveau du module,
+# la rendant importable et donc patchable par nos tests.
 def load_active_school_year() -> None:
     """Charge l'année scolaire active pour la requête en cours."""
     # NOTE : Cette fonction utilise encore l'ancien module 'database'.
-    # Nous la refactoriserons plus tard.
     from . import database as old_db
     g.toutes_les_annees = old_db.get_all_annees()
     has_dashboard_access = current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only)
@@ -99,6 +100,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     # CORRECTION : On enregistre la fonction qui est maintenant au premier niveau.
     app.before_request(load_active_school_year)
 
+    # ... le reste de create_app reste identique ...
     @app.context_processor
     def inject_global_data() -> dict[str, Any]:
         return {"current_user": current_user, "SCRIPT_YEAR": datetime.datetime.now().year, "annee_active": getattr(g, "annee_active", None), "toutes_les_annees": getattr(g, "toutes_les_annees", [])}
