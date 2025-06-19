@@ -170,5 +170,9 @@ cython_debug/
 uploads/
 
 # Ignore database dumps
-*.sql
-*.dump
+# *.sql
+# *.dump
+
+# Fichiers de configuration spécifiques à Replit
+.replit
+replit.nix

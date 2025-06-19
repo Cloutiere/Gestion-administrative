@@ -12,7 +12,7 @@ dependencies = [
     "flask>=3.0.0",
     "psycopg2-binary>=2.9.9",
     "openpyxl>=3.1.0",
-    "Flask-Login>=0.6.3",
+    "Flask-Login>=0.6.3", 
     "werkzeug>=3.0.0",
     # --- AJOUTS POUR L'ORM ET LES MIGRATIONS ---
     "flask-sqlalchemy>=3.1.1",
@@ -26,17 +26,15 @@ dependencies = [
 dev = [
     "ruff",
     "pytest>=8.0.0",
-    "pytest-flask>=1.3.0",
+    # pytest-flask a été supprimé
     "python-dotenv>=1.0.0",
 ]
 
+# ... le reste du fichier est correct et reste identique ...
+
 # --- Configuration de Ruff (Linter et Formateur) ---
 [tool.ruff]
-# Répertoires source à analyser. "." signifie le répertoire courant.
 src = ["."]
-
-# Liste des répertoires et fichiers à exclure de l'analyse.
-# Essentiel pour ignorer les environnements virtuels, caches, et autres.
 exclude = [
     ".bzr",
     ".direnv",
@@ -57,40 +55,31 @@ exclude = [
     "dist",
     "node_modules",
     "venv",
-    # On ajoute le futur dossier des migrations
     "migrations",
 ]
-
-# Longueur maximale des lignes, respectée par le linter et le formateur.
 line-length = 150
-
-# Version de Python ciblée pour garantir la compatibilité des suggestions.
-target-version = "py311" # Doit correspondre à `requires-python`.
-
+target-version = "py311"
 
 # --- Configuration du Linter de Ruff ([tool.ruff.lint]) ---
 [tool.ruff.lint]
-# Sélection des catégories de règles à activer.
 select = ["E", "F", "W", "I", "UP"]
-
 
 # --- Configuration du Formateur de Ruff ([tool.ruff.format]) ---
 [tool.ruff.format]
-# Style de guillemets à utiliser pour les chaînes de caractères.
 quote-style = "double"
-
-# Style d'indentation à utiliser ("space" ou "tab").
 indent-style = "space"
-
 
 # --- Configuration de Setuptools ---
 [tool.setuptools.packages.find]
-where = ["."]  # Cherche les packages à la racine du projet.
-exclude = ["uploads*", "tests*", "migrations*"]  # Exclut les dossiers 'uploads', 'tests' et 'migrations'.
+where = ["."]
+exclude = ["uploads*", "tests*", "migrations*"]
 
 # --- AJOUT CRUCIAL ---
-# Indique à setuptools d'inclure les fichiers non-Python (templates, static)
-# lors de l'installation du paquet. Le `/**` est un joker récursif qui inclut
-# tous les fichiers et sous-dossiers.
 [tool.setuptools.package-data]
 mon_application = ["templates/**", "static/**"]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+pythonpath = "."
