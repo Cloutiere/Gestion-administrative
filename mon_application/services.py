@@ -17,44 +17,54 @@ import psycopg2
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 from psycopg2.extensions import connection as PgConnection
+
 # NOUVEAU : Imports pour SQLAlchemy ORM
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
-from werkzeug.security import generate_password_hash
-
-from .extensions import db
-from .models import Champ, User
 
 # ANCIEN : On le garde pour les fonctions non encore refactorisées
 from . import database as old_db
+from .extensions import db
+from .models import Champ, Cours, TypeFinancement, User
 
 
 # --- Exceptions Personnalisées pour la Couche de Service ---
 class ServiceException(Exception):
     """Exception de base pour les erreurs de la couche de service."""
+
     def __init__(self, message="Une erreur est survenue."):
         self.message = message
         super().__init__(self.message)
 
+
 class EntityNotFoundError(ServiceException):
     """Levée lorsqu'une entité n'est pas trouvée."""
+
     def __init__(self, message="L'entité n'a pas été trouvée."):
         super().__init__(message)
 
+
 class DuplicateEntityError(ServiceException):
     """Levée lors d'une tentative de création d'une entité qui existe déjà."""
+
     def __init__(self, message="Cette entité existe déjà."):
         super().__init__(message)
 
+
 class BusinessRuleValidationError(ServiceException):
     """Levée lorsqu'une règle métier est violée."""
+
     def __init__(self, message="Opération non autorisée par les règles de gestion."):
         super().__init__(message)
 
+
 class ForeignKeyError(ServiceException):
     """Levée lorsqu'une suppression est bloquée par une contrainte de clé étrangère."""
+
     def __init__(self, message="Impossible de supprimer, cette entité est en cours d'utilisation."):
-        super().__init__(message)
+        # CORRECTION : Utiliser la variable 'message' passée en argument, et non 'self.message'.
+        self.message = message
+        super().__init__(self.message)
 
 
 # --- Services - Utilisateurs et Rôles ---
@@ -74,7 +84,7 @@ def register_first_admin_service(username: str, password: str, confirm_password:
         raise BusinessRuleValidationError("Le mot de passe doit contenir au moins 6 caractères.")
 
     if db.session.query(User).filter_by(username=username).first():
-            raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
+        raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
 
     new_admin = User(username=username, is_admin=True)
     new_admin.set_password(password)
@@ -83,8 +93,7 @@ def register_first_admin_service(username: str, password: str, confirm_password:
     return new_admin
 
 
-# --- Le reste du fichier services.py reste inchangé pour l'instant ---
-# ...
+# ... (le reste du fichier est identique) ...
 def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
     nouveaux_cours: list[dict[str, Any]] = []
     try:
@@ -97,7 +106,11 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
             if not any(v is not None and str(v).strip() != "" for v in values[:7]):
                 continue
             (
-                champ_no_raw, code_cours_raw, desc_raw, nb_grp_raw, nb_per_raw,
+                champ_no_raw,
+                code_cours_raw,
+                desc_raw,
+                nb_grp_raw,
+                nb_per_raw,
             ) = (values[0], values[1], values[3], values[4], values[5])
             est_autre_raw = values[6] if len(values) > 6 else None
             financement_code_raw = values[7] if len(values) > 7 else None
@@ -125,11 +138,13 @@ def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
         raise ValueError("Aucun cours valide n'a été trouvé dans le fichier.")
     return nouveaux_cours
 
+
 class ImportationStats:
     def __init__(self) -> None:
         self.imported_count = 0
         self.deleted_attributions_count = 0
         self.deleted_main_entities_count = 0
+
 
 def save_imported_courses(courses_data: list[dict[str, Any]], annee_id: int) -> ImportationStats:
     stats = ImportationStats()
@@ -148,6 +163,7 @@ def save_imported_courses(courses_data: list[dict[str, Any]], annee_id: int) -> 
         conn.rollback()
         raise ServiceException(f"Erreur de base de données lors de l'importation des cours: {e}")
 
+
 def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
     nouveaux_enseignants: list[dict[str, Any]] = []
     try:
@@ -160,7 +176,10 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
             if not any(v is not None and str(v).strip() != "" for v in values[:4]):
                 continue
             champ_no_raw, nom_raw, prenom_raw, temps_plein_raw = (
-                values[0], values[1], values[2], values[3],
+                values[0],
+                values[1],
+                values[2],
+                values[3],
             )
             if not all([champ_no_raw, nom_raw, prenom_raw, temps_plein_raw is not None]):
                 raise ValueError(f"Ligne {row_idx}: Données essentielles manquantes.")
@@ -173,8 +192,7 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
                         "nom": nom_clean,
                         "prenom": prenom_clean,
                         "champno": str(champ_no_raw).strip(),
-                        "esttempsplein": str(temps_plein_raw).strip().upper()
-                        in ("VRAI", "TRUE", "OUI", "YES", "1"),
+                        "esttempsplein": str(temps_plein_raw).strip().upper() in ("VRAI", "TRUE", "OUI", "YES", "1"),
                     }
                 )
             except (ValueError, TypeError) as e:
@@ -239,7 +257,6 @@ def set_annee_courante_service(annee_id: int) -> None:
 
 
 def get_all_champs_service() -> list[dict[str, Any]]:
-    # REFACTORISÉ : Utilise l'ORM pour une cohérence totale.
     try:
         champs_orm = db.session.query(Champ).order_by(Champ.champno).all()
         return [{"champno": champ.champno, "champnom": champ.champnom} for champ in champs_orm]
@@ -259,6 +276,7 @@ def toggle_champ_confirm_service(champ_no: str, annee_id: int) -> bool:
     if nouveau_statut is None:
         raise ServiceException(f"Impossible de modifier la confirmation du champ {champ_no}.")
     return nouveau_statut
+
 
 def get_course_details_service(code_cours: str, annee_id: int) -> dict[str, Any]:
     cours = old_db.get_cours_details(code_cours, annee_id)
@@ -381,50 +399,69 @@ def create_fictitious_teacher_service(champ_no: str, annee_id: int) -> dict[str,
 
 
 def get_all_financements_service() -> list[dict[str, Any]]:
-    return old_db.get_all_financements()
+    """Récupère tous les types de financement via l'ORM."""
+    try:
+        financements = db.session.query(TypeFinancement).order_by(TypeFinancement.code).all()
+        return [{"code": f.code, "libelle": f.libelle} for f in financements]
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la récupération des financements: {e}")
 
 
 def create_financement_service(code: str, libelle: str) -> dict[str, Any]:
+    """Crée un nouveau type de financement via l'ORM."""
+    new_financement = TypeFinancement(code=code, libelle=libelle)
+    db.session.add(new_financement)
     try:
-        new_financement = old_db.create_financement(code, libelle)
-        if not new_financement:
-            raise ServiceException("La création du financement a échoué.")
-        return new_financement
-    except psycopg2.errors.UniqueViolation:
+        db.session.commit()
+        return {"code": new_financement.code, "libelle": new_financement.libelle}
+    except IntegrityError:
+        db.session.rollback()
         raise DuplicateEntityError("Ce code de financement existe déjà.")
-    except psycopg2.Error as e:
+    except Exception as e:
+        db.session.rollback()
         raise ServiceException(f"Erreur de base de données: {e}")
 
 
 def update_financement_service(code: str, libelle: str) -> dict[str, Any]:
+    """Met à jour un type de financement via l'ORM."""
+    financement = db.session.get(TypeFinancement, code)
+    if not financement:
+        raise EntityNotFoundError("Type de financement non trouvé.")
+
+    financement.libelle = libelle
     try:
-        updated = old_db.update_financement(code, libelle)
-        if not updated:
-            raise EntityNotFoundError("Financement non trouvé.")
-        return updated
-    except psycopg2.Error as e:
+        db.session.commit()
+        return {"code": financement.code, "libelle": financement.libelle}
+    except Exception as e:
+        db.session.rollback()
         raise ServiceException(f"Erreur de base de données: {e}")
 
 
 def delete_financement_service(code: str) -> None:
-    try:
-        if not old_db.delete_financement(code):
-            raise EntityNotFoundError("Type de financement non trouvé.")
-    except psycopg2.errors.ForeignKeyViolation:
+    """Supprime un type de financement via l'ORM."""
+    financement = db.session.get(TypeFinancement, code)
+    if not financement:
+        raise EntityNotFoundError("Type de financement non trouvé.")
+
+    cours_utilisant = db.session.query(Cours.codecours).filter_by(financement_code=code).first()
+    if cours_utilisant:
         raise ForeignKeyError("Impossible de supprimer : ce financement est utilisé par des cours.")
-    except psycopg2.Error as e:
+
+    db.session.delete(financement)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise ForeignKeyError("Impossible de supprimer : ce financement est utilisé par des cours.")
+    except Exception as e:
+        db.session.rollback()
         raise ServiceException(f"Erreur de base de données: {e}")
 
-# REFACTORISÉ : Cette fonction est maintenant la source de vérité pour les données utilisateur.
+
 def get_all_users_with_details_service() -> dict[str, Any]:
     """Récupère tous les utilisateurs avec des détails et le décompte des admins, via l'ORM."""
     try:
-        users_orm = (
-            db.session.query(User)
-            .options(joinedload(User.champs_autorises))
-            .order_by(User.username)
-            .all()
-        )
+        users_orm = db.session.query(User).options(joinedload(User.champs_autorises)).order_by(User.username).all()
         users_data = [
             {
                 "id": user.id,
@@ -442,13 +479,12 @@ def get_all_users_with_details_service() -> dict[str, Any]:
     except Exception as e:
         raise ServiceException(f"Erreur ORM lors de la récupération des détails utilisateurs : {e}")
 
-# REFACTORISÉ
+
 def create_user_service(username: str, password: str, role: str, allowed_champs: list[str]) -> dict[str, Any]:
     """Crée un nouvel utilisateur en utilisant l'ORM SQLAlchemy."""
     if len(password) < 6:
         raise BusinessRuleValidationError("Le mot de passe doit faire au moins 6 caractères.")
 
-    # Vérification de l'unicité du nom d'utilisateur
     if db.session.query(User).filter_by(username=username).first():
         raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
 
@@ -468,16 +504,15 @@ def create_user_service(username: str, password: str, role: str, allowed_champs:
     try:
         db.session.add(new_user)
         db.session.commit()
-        # Rafraîchir l'objet pour charger les relations après le commit.
         db.session.refresh(new_user)
         return {
             "id": new_user.id,
             "username": new_user.username,
             "is_admin": new_user.is_admin,
             "is_dashboard_only": new_user.is_dashboard_only,
-            "allowed_champs": new_user.allowed_champs
+            "allowed_champs": new_user.allowed_champs,
         }
-    except IntegrityError: # Gère les cas de race condition au niveau BDD
+    except IntegrityError:
         db.session.rollback()
         raise DuplicateEntityError("Ce nom d'utilisateur est déjà pris.")
     except Exception as e:
@@ -485,19 +520,16 @@ def create_user_service(username: str, password: str, role: str, allowed_champs:
         raise ServiceException(f"Erreur ORM lors de la création de l'utilisateur: {e}")
 
 
-# REFACTORISÉ
 def update_user_role_service(user_id: int, role: str, allowed_champs: list[str]) -> None:
     """Met à jour le rôle et les accès d'un utilisateur en utilisant l'ORM."""
     user = db.session.get(User, user_id)
     if not user:
         raise EntityNotFoundError("Utilisateur non trouvé.")
 
-    # Réinitialiser les rôles et permissions
     user.is_admin = False
     user.is_dashboard_only = False
     user.champs_autorises.clear()
 
-    # Appliquer les nouveaux rôles et permissions
     if role == "admin":
         user.is_admin = True
     elif role == "dashboard_only":
@@ -505,7 +537,7 @@ def update_user_role_service(user_id: int, role: str, allowed_champs: list[str])
     elif role == "specific_champs" and allowed_champs:
         champs_objects = db.session.query(Champ).filter(Champ.champno.in_(allowed_champs)).all()
         if len(champs_objects) != len(allowed_champs):
-             raise BusinessRuleValidationError("Un ou plusieurs champs spécifiés sont invalides.")
+            raise BusinessRuleValidationError("Un ou plusieurs champs spécifiés sont invalides.")
         user.champs_autorises = champs_objects
 
     try:
@@ -515,7 +547,6 @@ def update_user_role_service(user_id: int, role: str, allowed_champs: list[str])
         raise ServiceException(f"La mise à jour du rôle a échoué: {e}")
 
 
-# REFACTORISÉ
 def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
     """Supprime un utilisateur en utilisant l'ORM, avec des vérifications de règles métier."""
     if user_id_to_delete == current_user_id:
@@ -573,15 +604,14 @@ def get_data_for_admin_page_service(annee_id: int) -> dict[str, Any]:
     return {
         "cours_par_champ": old_db.get_all_cours_grouped_by_champ(annee_id),
         "enseignants_par_champ": old_db.get_all_enseignants_grouped_by_champ(annee_id),
-        "tous_les_champs": get_all_champs_service(), # Appel à la nouvelle fonction ORM
-        "tous_les_financements": old_db.get_all_financements(),
+        "tous_les_champs": get_all_champs_service(),
+        "tous_les_financements": get_all_financements_service(),
     }
 
-# REFACTORISÉ : Cette fonction appelle maintenant les autres services ORM pour rester DRY.
+
 def get_data_for_user_admin_page_service() -> dict[str, Any]:
     """Récupère toutes les données nécessaires pour la page d'administration des utilisateurs."""
     try:
-        # On réutilise la logique déjà refactorisée
         user_details = get_all_users_with_details_service()
         all_champs = get_all_champs_service()
 
@@ -592,13 +622,14 @@ def get_data_for_user_admin_page_service() -> dict[str, Any]:
     except Exception as e:
         raise ServiceException(f"Erreur lors de l'agrégation des données utilisateur : {e}")
 
+
 def get_dashboard_summary_service(annee_id: int) -> dict[str, Any]:
     return old_db.get_dashboard_summary_data(annee_id)
 
 
 def get_detailed_tasks_data_service(annee_id: int) -> list[dict[str, Any]]:
     tous_les_enseignants_details = old_db.get_all_enseignants_avec_details(annee_id)
-    tous_les_champs = get_all_champs_service() # Appel à la nouvelle fonction ORM
+    tous_les_champs = get_all_champs_service()
     statuts_champs = old_db.get_all_champ_statuses_for_year(annee_id)
     enseignants_par_champ_temp: dict[str, dict[str, Any]] = {
         str(champ["champno"]): {
@@ -644,7 +675,7 @@ def get_remaining_periods_for_export_service(annee_id: int) -> dict[str, dict[st
 
 
 def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, Any]]:
-    tous_les_financements = old_db.get_all_financements()
+    tous_les_financements = get_all_financements_service()
     libelle_to_header_map = {f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}" for f in tous_les_financements}
     libelle_to_header_map["SOUTIEN EN SPORT-ÉTUDES"] = "PÉRIODES SOUTIEN SPORT-ÉTUDES"
     code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
@@ -653,11 +684,20 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
         return {}
     pivot_data: dict[str, dict[str, Any]] = {}
     ALL_HEADERS = [
-        "PÉRIODES RÉGULIER", "PÉRIODES ADAPTATION SCOLAIRE", "PÉRIODES SPORT-ÉTUDES",
-        "PÉRIODES ENSEIGNANT RESSOURCE", "PÉRIODES AIDESEC", "PÉRIODES DIPLÔMA",
-        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)", "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
-        "PÉRIODES MESURE SEUIL (POUR FABLAB)", "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
-        "PÉRIODES ALTERNE", "PÉRIODES FORMANUM", "PÉRIODES MENTORAT", "PÉRIODES COORDINATION SPORT-ÉTUDES",
+        "PÉRIODES RÉGULIER",
+        "PÉRIODES ADAPTATION SCOLAIRE",
+        "PÉRIODES SPORT-ÉTUDES",
+        "PÉRIODES ENSEIGNANT RESSOURCE",
+        "PÉRIODES AIDESEC",
+        "PÉRIODES DIPLÔMA",
+        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
+        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
+        "PÉRIODES MESURE SEUIL (POUR FABLAB)",
+        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
+        "PÉRIODES ALTERNE",
+        "PÉRIODES FORMANUM",
+        "PÉRIODES MENTORAT",
+        "PÉRIODES COORDINATION SPORT-ÉTUDES",
         "PÉRIODES SOUTIEN SPORT-ÉTUDES",
     ]
     for item in donnees_raw:
@@ -665,8 +705,11 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
         enseignant_key = f"fictif-{item['nomcomplet']}" if item["estfictif"] else f"reel-{item['nom']}-{item['prenom']}"
         if enseignant_key not in pivot_data.setdefault(champ_no, {}):
             pivot_data[champ_no][enseignant_key] = {
-                "nom": item["nom"], "prenom": item["prenom"], "nomcomplet": item["nomcomplet"],
-                "estfictif": item["estfictif"], "champnom": item["champnom"],
+                "nom": item["nom"],
+                "prenom": item["prenom"],
+                "nomcomplet": item["nomcomplet"],
+                "estfictif": item["estfictif"],
+                "champnom": item["champnom"],
                 **{header: 0.0 for header in ALL_HEADERS},
             }
         total_p = float(item["total_periodes"] or 0.0)
@@ -690,7 +733,7 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 
 def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
     try:
-        all_champs = get_all_champs_service() # Appel à la nouvelle fonction ORM
+        all_champs = get_all_champs_service()
         all_cours_raw = old_db.get_all_cours_for_preparation(annee_id)
         all_assignments_raw = old_db.get_assignments_for_preparation(annee_id)
         saved_assignments_raw = old_db.get_saved_preparation_horaire(annee_id)
@@ -704,8 +747,8 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
             enseignants_par_cours[assignment["codecours"]].append(assignment)
         saved_placements = defaultdict(lambda: defaultdict(list))
         for saved in saved_assignments_raw:
-            key = (saved['secondaire_level'], saved['codecours'])
-            saved_placements[key][saved['colonne_assignee']].append(saved['enseignant_id'])
+            key = (saved["secondaire_level"], saved["codecours"])
+            saved_placements[key][saved["colonne_assignee"]].append(saved["enseignant_id"])
         prepared_grid: dict[int, list] = {level: [] for level in range(1, 6)}
         cours_traites = set()
         for (level, codecours), columns in saved_placements.items():
@@ -714,15 +757,17 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
                 continue
             all_teachers_for_course = enseignants_par_cours.get(codecours, [])
             placed_teacher_ids = {tid for teacher_ids in columns.values() for tid in teacher_ids}
-            unassigned_teachers = [t for t in all_teachers_for_course if t['enseignantid'] not in placed_teacher_ids]
-            teachers_lookup = {t['enseignantid']: t for t in all_teachers_for_course}
-            prepared_grid[level].append({
-                "cours": cours_info,
-                "all_teachers_for_course": all_teachers_for_course,
-                "unassigned_teachers": unassigned_teachers,
-                "assigned_teachers_by_col": columns,
-                "teachers_lookup": teachers_lookup,
-            })
+            unassigned_teachers = [t for t in all_teachers_for_course if t["enseignantid"] not in placed_teacher_ids]
+            teachers_lookup = {t["enseignantid"]: t for t in all_teachers_for_course}
+            prepared_grid[level].append(
+                {
+                    "cours": cours_info,
+                    "all_teachers_for_course": all_teachers_for_course,
+                    "unassigned_teachers": unassigned_teachers,
+                    "assigned_teachers_by_col": columns,
+                    "teachers_lookup": teachers_lookup,
+                }
+            )
             cours_traites.add(codecours)
         return {
             "all_champs": all_champs,
@@ -732,6 +777,7 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
         }
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise ServiceException(f"Erreur lors de la préparation des données pour l'horaire : {e}")
 

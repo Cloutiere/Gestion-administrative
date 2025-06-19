@@ -127,7 +127,8 @@ class Cours(db.Model):
     nbperiodes = db.Column(db.Numeric(5, 2), nullable=False)
     nbgroupeinitial = db.Column(db.Integer, nullable=False)
     estcoursautre = db.Column(db.Boolean, nullable=False, default=False)
-    financement_code = db.Column(db.Text, db.ForeignKey("typesfinancement.code", ondelete="SET NULL"))
+    # MODIFIÉ : on supprime ondelete="SET NULL" pour forcer une erreur si le financement est utilisé
+    financement_code = db.Column(db.Text, db.ForeignKey("typesfinancement.code"))
 
     # Relations
     annee_scolaire = db.relationship("AnneeScolaire", back_populates="cours")

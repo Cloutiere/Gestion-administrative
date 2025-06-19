@@ -4,19 +4,21 @@ Ce module contient le Blueprint pour les routes d'authentification.
 VERSION CORRIGÉE.
 """
 
-from flask import (
-    Blueprint, current_app, flash, redirect, render_template, request, url_for, session
-)
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_user, logout_user
 from werkzeug.wrappers import Response
 
 from .extensions import db
 from .models import User
 from .services import (
-    BusinessRuleValidationError, DuplicateEntityError, ServiceException, register_first_admin_service,
+    BusinessRuleValidationError,
+    DuplicateEntityError,
+    ServiceException,
+    register_first_admin_service,
 )
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
+
 
 @bp.route("/login", methods=["GET", "POST"])
 def login() -> str | Response:
@@ -32,11 +34,13 @@ def login() -> str | Response:
         flash("Nom d'utilisateur ou mot de passe invalide.", "error")
     return render_template("login.html", first_user=first_user)
 
+
 @bp.route("/logout")
 def logout() -> Response:
     logout_user()
     flash("Vous avez été déconnecté(e).", "info")
     return redirect(url_for("auth.login"))
+
 
 @bp.route("/register", methods=["GET", "POST"])
 def register() -> str | Response:
@@ -52,9 +56,7 @@ def register() -> str | Response:
     if request.method == "POST":
         try:
             user = register_first_admin_service(
-                request.form["username"].strip(),
-                request.form["password"].strip(),
-                request.form["confirm_password"].strip()
+                request.form["username"].strip(), request.form["password"].strip(), request.form["confirm_password"].strip()
             )
             db.session.commit()
             flash(f"Compte admin '{user.username}' créé avec succès! Vous pouvez maintenant vous connecter.", "success")

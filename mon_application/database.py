@@ -205,6 +205,7 @@ def set_annee_courante(annee_id: int) -> bool:
 # --- Fonctions d'accès aux données (DAO) - Champs ---
 # NOTE: get_all_champs a été supprimé car remplacé par l'ORM.
 
+
 def get_champ_details(champ_no: str, annee_id: int) -> dict[str, Any] | None:
     """Récupère les détails d'un champ et ses statuts pour une année donnée."""
     db_conn = get_db()
@@ -302,73 +303,11 @@ def toggle_champ_annee_confirm_status(champ_no: str, annee_id: int) -> bool | No
 
 
 # --- Fonctions DAO - Types de Financement ---
-def get_all_financements() -> list[dict[str, Any]]:
-    """Récupère tous les types de financement, triés par code."""
-    db_conn = get_db()
-    if not db_conn:
-        return []
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT code, libelle FROM typesfinancement ORDER BY code;")
-            return [dict(row) for row in cur.fetchall()]
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_financements: {e}")
-        return []
+# Cette section est maintenant vide.
 
-
-def create_financement(code: str, libelle: str) -> dict[str, Any] | None:
-    """Crée un nouveau type de financement."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("INSERT INTO typesfinancement (code, libelle) VALUES (%s, %s) RETURNING *;", (code, libelle))
-            new_financement = cur.fetchone()
-            db_conn.commit()
-            return dict(new_financement) if new_financement else None
-    except psycopg2.Error:
-        if db_conn:
-            db_conn.rollback()
-        raise
-
-
-def update_financement(code: str, libelle: str) -> dict[str, Any] | None:
-    """Met à jour le libellé d'un type de financement."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("UPDATE typesfinancement SET libelle = %s WHERE code = %s RETURNING *;", (libelle, code))
-            updated_financement = cur.fetchone()
-            db_conn.commit()
-            return dict(updated_financement) if updated_financement else None
-    except psycopg2.Error:
-        if db_conn:
-            db_conn.rollback()
-        raise
-
-
-def delete_financement(code: str) -> bool:
-    """
-    Supprime un type de financement.
-    REFACTOR: Ne gère plus l'erreur FK. Laisse remonter l'exception.
-    """
-    db_conn = get_db()
-    if not db_conn:
-        return False
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("DELETE FROM typesfinancement WHERE code = %s;", (code,))
-            db_conn.commit()
-            return cur.rowcount > 0
-    except psycopg2.Error:
-        if db_conn:
-            db_conn.rollback()
-        raise
 
 # ... le reste du fichier database.py reste identique ...
+
 
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---
 def get_enseignants_par_champ(champ_no: str, annee_id: int) -> list[dict[str, Any]]:

@@ -1,45 +1,32 @@
-# .gitignore
+# --- Gitignore pour notre projet Flask ---
 
-# Byte-compiled / optimized / DLL files
+# Ignorer les fichiers et dossiers générés par Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
+*.pyd
 
-# Distribution / packaging
-.Python
+# Dossiers de build et de packaging
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 MANIFEST
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# Environnement virtuel (à adapter si tu utilises un nom différent pour ton venv)
+venv/
+.venv/
+env/
+.env/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# Fichiers de configuration IDE / Éditeurs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
 
-# Unit test / coverage reports
-htmlcov/
+# Rapports de tests / couverture
 .tox/
 .nox/
 .coverage
@@ -53,126 +40,56 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Translations
+# Fichiers de traduction
 *.mo
 *.pot
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
+# Fichiers spécifiques à Django/Flask (certains peuvent déjà être couverts plus haut)
 instance/
 .webassets-cache
+# Note: db.sqlite3 est déjà couvert par 'instance/', mais pour la clarté :
+# db.sqlite3
+# db.sqlite3-journal
 
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
+# Dossiers de documentation générée
 docs/_build/
+site/
 
-# PyBuilder
-.pybuilder/
-target/
+# Fichiers de logs
+*.log
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Fichiers de sauvegarde généraux
+*.bak
+*.tmp
 
-# IPython
-profile_default/
-ipython_config.py
+# Fichiers spécifiques à notre projet et données d'instance
+# --- Ignorer les sauvegardes locales ---
+local_data/
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+# --- Ignorer les fichiers téléversés par les utilisateurs ---
+# Le dossier 'uploads' de l'application est géré par 'instance/', donc nous ignorons 'instance/'
+# Le dossier 'mon_application/uploads' est supposé être pour des fichiers statiques/par défaut
+# qui ne devraient pas être versionnés non plus si jamais des fichiers utilisateur s'y retrouvaient.
+# Nous ignorons donc le dossier d'uploads actif (instance/uploads)
+# et le dossier qui pourrait contenir des fichiers statiques (mon_application/uploads)
+# S'il y a des fichiers spécifiques dans mon_application/uploads qui DOIVENT être versionnés,
+# il faudrait les exclure de cette règle (ex: !mon_application/uploads/fichier_important.txt)
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/#use-with-ide
-#.pdm.toml
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-
-# --- Project-specific ignores ---
-# Ignore all environment files...
-.env*
-# ...but DO commit the example file.
+# --- Ignorer les fichiers de configuration locaux ---
+# .env pour les secrets de développement (NE PAS COMMITTER)
+.env
+# Assure-toi de commiter un .env.example si nécessaire
 !.env.example
 
-# Ignore user-uploaded files
-uploads/
+# --- Fichiers divers que nous avons organisés ---
+# Si tu décides de ne pas versionner le dossier docs/
+docs/
 
-# Ignore database dumps
-# *.sql
-# *.dump
-
-# Fichiers de configuration spécifiques à Replit
+# Fichiers spécifiques à Replit (si pertinent)
 .replit
 replit.nix
+
+# Fichier de sauvegarde de production à ignorer
+# Si tu as décidé de le garder pour une raison spécifique, assure-toi qu'il est ici.
+# Sinon, tu peux supprimer cette ligne.
+sauvegarde_prod_avant_migration.dump

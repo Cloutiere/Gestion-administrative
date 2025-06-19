@@ -2,7 +2,6 @@
 """
 Ce module est le cœur de l'application (paquet).
 Il contient la factory de l'application `create_app`.
-VERSION CORRIGÉE ET TESTABLE.
 """
 
 import datetime
@@ -15,6 +14,7 @@ from werkzeug.wrappers import Response
 
 from .extensions import db, migrate
 from .models import User
+
 
 # CORRECTION : La fonction est maintenant au premier niveau du module,
 # la rendant importable et donc patchable par nos tests.
@@ -64,15 +64,36 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     """Crée et configure une instance de l'application Flask (Application Factory)."""
     if os.environ.get("PYTEST_CURRENT_TEST"):
         os.environ["APP_ENV"] = "test"
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    app = Flask(__name__, instance_relative_config=False, template_folder=os.path.join(project_root, "templates"), static_folder=os.path.join(project_root, "static"))
-    app.config.from_mapping(SECRET_KEY=os.environ.get("SECRET_KEY", "dev"), UPLOAD_FOLDER=os.path.join(app.root_path, "uploads"), ALLOWED_EXTENSIONS={"xlsx"}, TESTING=os.environ.get("APP_ENV") == "test", SQLALCHEMY_DATABASE_URI=get_database_uri(), SQLALCHEMY_TRACK_MODIFICATIONS=False)
+
+    # --- CORRECTION 1 : Simplification de la création de l'app et activation de l'instance ---
+    # `instance_relative_config=True` indique à Flask d'utiliser le dossier 'instance/'
+    # Les chemins `template_folder` et `static_folder` sont maintenant inutiles car Flask
+    # les trouve automatiquement par convention.
+    app = Flask(__name__, instance_relative_config=True)
+
+    # --- CORRECTION 2 : Configuration du dossier d'upload ---
+    # On définit `UPLOAD_FOLDER` en utilisant `app.instance_path` qui pointe vers le dossier 'instance/'
+    upload_folder = os.path.join(app.instance_path, 'uploads')
+
+    app.config.from_mapping(
+        SECRET_KEY=os.environ.get("SECRET_KEY", "dev"),
+        UPLOAD_FOLDER=upload_folder,  # Utilisation du chemin correct
+        ALLOWED_EXTENSIONS={"xlsx"},
+        TESTING=os.environ.get("APP_ENV") == "test",
+        SQLALCHEMY_DATABASE_URI=get_database_uri(),
+        SQLALCHEMY_TRACK_MODIFICATIONS=False
+    )
+
     if test_config:
         app.config.from_mapping(test_config)
+
+    # --- CORRECTION 3 : Création du dossier d'upload et du dossier instance ---
+    # On s'assure que le dossier d'instance ET le dossier d'upload existent.
     try:
+        os.makedirs(app.instance_path, exist_ok=True)
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     except OSError as e:
-        app.logger.error(f"Erreur lors de la création du dossier d'upload: {e}")
+        app.logger.error(f"Erreur lors de la création des dossiers d'instance/upload: {e}")
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -97,13 +118,16 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def load_user(user_id: str) -> User | None:
         return db.session.get(User, int(user_id))
 
-    # CORRECTION : On enregistre la fonction qui est maintenant au premier niveau.
     app.before_request(load_active_school_year)
 
-    # ... le reste de create_app reste identique ...
     @app.context_processor
     def inject_global_data() -> dict[str, Any]:
-        return {"current_user": current_user, "SCRIPT_YEAR": datetime.datetime.now().year, "annee_active": getattr(g, "annee_active", None), "toutes_les_annees": getattr(g, "toutes_les_annees", [])}
+        return {
+            "current_user": current_user,
+            "SCRIPT_YEAR": datetime.datetime.now().year,
+            "annee_active": getattr(g, "annee_active", None),
+            "toutes_les_annees": getattr(g, "toutes_les_annees", [])
+        }
 
     from . import admin, api, auth, dashboard, views
     app.register_blueprint(auth.bp)

@@ -2,7 +2,7 @@ entrypoint = "run.py"
 modules = ["python-3.11", "postgresql-16"]
 [nix]
 channel = "stable-24_05"
-packages = ["pyright", "ruff"]
+packages = ["pyright", "ruff", "tree"]
 [unitTest]
 language = "python3"
 [gitHubImport]
