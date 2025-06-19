@@ -6,6 +6,9 @@ Il constitue la couche d'accès aux données (DAO) de l'application.
 Ses fonctions se limitent à exécuter des requêtes SQL et à retourner des
 données brutes, sans aucune logique métier. La gestion des transactions
 complexes et des règles métier est déléguée à la couche de services.
+
+NOTE : Ce module est progressivement déprécié au profit de l'ORM SQLAlchemy.
+Les fonctions sont supprimées au fur et à mesure de leur refactorisation.
 """
 
 import os
@@ -313,35 +316,6 @@ def create_user(username: str, password_hash: str, is_admin: bool = False, is_da
         return None
 
 
-def get_all_users_with_access_info() -> list[dict[str, Any]]:
-    """Récupère tous les utilisateurs avec leurs accès."""
-    db_conn = get_db()
-    if not db_conn:
-        return []
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                """
-                SELECT u.id, u.username, u.is_admin, u.is_dashboard_only,
-                       ARRAY_AGG(uca.champ_no ORDER BY uca.champ_no)
-                           FILTER (WHERE uca.champ_no IS NOT NULL) AS allowed_champs
-                FROM Users u
-                LEFT JOIN user_champ_access uca ON u.id = uca.user_id
-                GROUP BY u.id
-                ORDER BY u.username;
-                """
-            )
-            users_data = []
-            for row in cur.fetchall():
-                user_dict = dict(row)
-                user_dict["allowed_champs"] = user_dict["allowed_champs"] or []
-                users_data.append(user_dict)
-            return users_data
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_users_with_access_info: {e}")
-        return []
-
-
 def update_user_role_and_access(user_id: int, is_admin: bool, is_dashboard_only: bool, allowed_champs: list[str]) -> bool:
     """Met à jour le rôle et les accès d'un utilisateur de manière transactionnelle."""
     db_conn = get_db()
@@ -389,19 +363,7 @@ def delete_user_data(user_id: int) -> bool:
 
 
 # --- Fonctions d'accès aux données (DAO) - Champs ---
-def get_all_champs() -> list[dict[str, Any]]:
-    """Récupère tous les champs, triés par leur numéro."""
-    db_conn = get_db()
-    if not db_conn:
-        return []
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT ChampNo, ChampNom FROM Champs ORDER BY ChampNo;")
-            return [dict(row) for row in cur.fetchall()]
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_champs: {e}")
-        return []
-
+# NOTE: get_all_champs a été supprimé car remplacé par l'ORM.
 
 def get_champ_details(champ_no: str, annee_id: int) -> dict[str, Any] | None:
     """Récupère les détails d'un champ et ses statuts pour une année donnée."""
