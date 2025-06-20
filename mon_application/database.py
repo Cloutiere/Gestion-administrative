@@ -21,20 +21,11 @@ import psycopg2.sql
 from flask import Flask, current_app, g
 from psycopg2.extensions import connection as PgConnection
 
-# NOTE: La référence au modèle User est supprimée car plus utilisée ici.
-# from .models import User
-
 
 # --- Gestion de la connexion à la base de données ---
 def get_db_connection_string() -> str:
     """
     Construit la chaîne de connexion à la BDD en fonction de l'environnement.
-
-    Utilise la variable d'environnement 'APP_ENV'.
-    - 'production' : utilise les variables préfixées par 'PROD_'.
-    - 'test' : utilise les variables préfixées par 'TEST_'.
-    - Par défaut ('development') : utilise les variables préfixées par 'DEV_'.
-    Cette fonction est stricte et ne se rabat PAS sur des variables génériques.
     """
     app_env = os.environ.get("APP_ENV", "development")
 
@@ -48,8 +39,6 @@ def get_db_connection_string() -> str:
     if current_app:
         current_app.logger.info(f"Configuration de la base de données pour l'environnement : {app_env.upper()} avec le préfixe '{prefix}'")
 
-    # On utilise exclusivement les variables préfixées pour éviter les conflits
-    # avec les injections automatiques de l'environnement (ex: Replit).
     db_host = os.environ.get(f"{prefix}PGHOST")
     db_name = os.environ.get(f"{prefix}PGDATABASE")
     db_user = os.environ.get(f"{prefix}PGUSER")
@@ -72,12 +61,8 @@ def get_db_connection_string() -> str:
             current_app.logger.critical(log_message)
         return ""
 
-    # Pour Neon/Replit, il faut souvent forcer le SSL
     ssl_mode = "require" if "neon.tech" in db_host else "prefer"
-
-    # ON DÉFINIT LA VARIABLE ICI
     connection_string = f"dbname='{db_name}' user='{db_user}' host='{db_host}' password='{db_pass}' port='{db_port}' sslmode='{ssl_mode}'"
-
     return connection_string
 
 
@@ -109,21 +94,7 @@ def init_app(app: Flask) -> None:
     app.teardown_appcontext(close_db)
 
 
-# --- Fonctions d'accès aux données (DAO) - Années Scolaires ---
-# CETTE SECTION EST MAINTENANT VIDE CAR LA GESTION DES ANNÉES SCOLAIRES
-# EST ENTIÈREMENT GÉRÉE PAR L'ORM SQLAlchemy.
-
-
-# --- Fonctions d'accès aux données (DAO) - Utilisateurs ---
-# TOUTES LES FONCTIONS DE CETTE SECTION ONT ÉTÉ SUPPRIMÉES CAR
-# LA GESTION DES UTILISATEURS EST MAINTENANT ENTIÈREMENT GÉRÉE PAR
-# L'ORM SQLAlchemy DANS LA COUCHE DE SERVICES.
-
-
 # --- Fonctions d'accès aux données (DAO) - Champs ---
-# NOTE: get_all_champs a été supprimé car remplacé par l'ORM.
-
-
 def get_champ_details(champ_no: str, annee_id: int) -> dict[str, Any] | None:
     """Récupère les détails d'un champ et ses statuts pour une année donnée."""
     db_conn = get_db()
@@ -838,60 +809,6 @@ def get_all_enseignants_grouped_by_champ(annee_id: int) -> dict[str, dict[str, A
         return {}
 
 
-def delete_all_attributions_for_year(annee_id: int) -> int:
-    """Supprime TOUTES les attributions pour une année. Retourne le nb de lignes."""
-    db_conn = get_db()
-    if not db_conn:
-        return 0
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute(
-                """
-                DELETE FROM AttributionsCours ac USING Enseignants e
-                WHERE ac.EnseignantID = e.EnseignantID AND e.annee_id = %s;
-                """,
-                (annee_id,),
-            )
-            return cur.rowcount
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_all_attributions_for_year pour annee {annee_id}: {e}")
-        raise
-
-
-def delete_all_cours_for_year(annee_id: int) -> int:
-    """Supprime TOUS les cours pour une année. Retourne le nb de lignes."""
-    db_conn = get_db()
-    if not db_conn:
-        return 0
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("DELETE FROM Cours WHERE annee_id = %s;", (annee_id,))
-            return cur.rowcount
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_all_cours_for_year pour annee {annee_id}: {e}")
-        raise
-
-
-def delete_all_enseignants_for_year(annee_id: int) -> int:
-    """Supprime TOUS les enseignants pour une année. Retourne le nb de lignes."""
-    db_conn = get_db()
-    if not db_conn:
-        return 0
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("DELETE FROM Enseignants WHERE annee_id = %s;", (annee_id,))
-            return cur.rowcount
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_all_enseignants_for_year pour annee {annee_id}: {e}")
-        raise
-
-
 def get_all_attributions_for_export(annee_id: int) -> list[dict[str, Any]]:
     """Récupère toutes les attributions de cours pour une année, formatées pour l'export."""
     db_conn = get_db()
@@ -1046,7 +963,6 @@ def get_dashboard_summary_data(annee_id: int) -> dict[str, Any]:
     if not db_conn:
         return {}
 
-    # REQUÊTE CORRIGÉE : Utilise LEFT JOIN depuis Champs pour inclure tous les champs.
     query = """
     WITH enseignants_avec_periodes AS (
         SELECT

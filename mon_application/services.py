@@ -17,15 +17,22 @@ import psycopg2
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 from psycopg2.extensions import connection as PgConnection
-
-# NOUVEAU : Imports pour SQLAlchemy ORM
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload, noload
+from sqlalchemy.orm import joinedload
 
 # ANCIEN : On le garde pour les fonctions non encore refactorisées
 from . import database as old_db
 from .extensions import db
-from .models import AnneeScolaire, Champ, Cours, TypeFinancement, User
+# NOUVEAU: Import des modèles requis pour la refactorisation
+from .models import (
+    AnneeScolaire,
+    AttributionCours,
+    Champ,
+    Cours,
+    Enseignant,
+    TypeFinancement,
+    User,
+)
 
 
 # --- Exceptions Personnalisées pour la Couche de Service ---
@@ -92,7 +99,7 @@ def register_first_admin_service(username: str, password: str, confirm_password:
     return new_admin
 
 
-# ... (le reste du fichier est identique jusqu'aux fonctions d'années scolaires) ...
+# --- Services - Traitement des fichiers et Importations ---
 def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
     nouveaux_cours: list[dict[str, Any]] = []
     try:
@@ -146,20 +153,43 @@ class ImportationStats:
 
 
 def save_imported_courses(courses_data: list[dict[str, Any]], annee_id: int) -> ImportationStats:
+    """
+    Sauvegarde les cours importés en utilisant l'ORM SQLAlchemy.
+    Supprime les anciens cours et attributions de l'année avant d'insérer les nouveaux.
+    L'opération est transactionnelle.
+    """
     stats = ImportationStats()
-    conn = cast(PgConnection | None, old_db.get_db())
-    if not conn:
-        raise ServiceException("Impossible d'obtenir une connexion à la base de données.")
     try:
-        with conn.cursor():
-            stats.deleted_attributions_count = old_db.delete_all_attributions_for_year(annee_id)
-            stats.deleted_main_entities_count = old_db.delete_all_cours_for_year(annee_id)
-            for cours in courses_data:
-                old_db.create_cours(cours, annee_id)
-            stats.imported_count = len(courses_data)
-            conn.commit()
-    except psycopg2.Error as e:
-        conn.rollback()
+        # Étape 1 : Compter les attributions qui seront supprimées par cascade pour les stats.
+        # On le fait avant la suppression.
+        stats.deleted_attributions_count = (
+            db.session.query(AttributionCours.attributionid)
+            .filter(AttributionCours.annee_id_cours == annee_id)
+            .count()
+        )
+
+        # Étape 2 : Supprimer tous les cours de l'année.
+        # L'option synchronize_session=False est plus performante pour les suppressions en masse.
+        # La cascade configurée sur le modèle AnneeScolaire -> Cours s'occupera de tout.
+        # Mais ici, on cible directement les cours pour plus de clarté.
+        deleted_rows = db.session.query(Cours).filter_by(annee_id=annee_id).delete(synchronize_session=False)
+        stats.deleted_main_entities_count = deleted_rows
+
+        # Étape 3 : Créer et ajouter les nouveaux cours
+        nouveaux_cours_objets = [Cours(annee_id=annee_id, **data) for data in courses_data]
+        if nouveaux_cours_objets:
+            db.session.add_all(nouveaux_cours_objets)
+            stats.imported_count = len(nouveaux_cours_objets)
+
+        # Étape 4 : Valider la transaction
+        db.session.commit()
+        return stats
+    except IntegrityError as e:
+        db.session.rollback()
+        # Cela peut se produire si un `financement_code` ou `champno` n'existe pas.
+        raise ServiceException(f"Erreur d'intégrité des données: un champ ou un code de financement est-il invalide ? Détails: {e}")
+    except Exception as e:
+        db.session.rollback()
         raise ServiceException(f"Erreur de base de données lors de l'importation des cours: {e}")
 
 
@@ -204,26 +234,51 @@ def process_teachers_excel(file_stream: Any) -> list[dict[str, Any]]:
 
 
 def save_imported_teachers(teachers_data: list[dict[str, Any]], annee_id: int) -> ImportationStats:
+    """
+    Sauvegarde les enseignants importés en utilisant l'ORM SQLAlchemy.
+    Supprime les anciens enseignants et attributions de l'année avant d'insérer les nouveaux.
+    L'opération est transactionnelle.
+    """
     stats = ImportationStats()
-    conn = cast(PgConnection | None, old_db.get_db())
-    if not conn:
-        raise ServiceException("Impossible d'obtenir une connexion à la base de données.")
     try:
-        with conn.cursor():
-            stats.deleted_attributions_count = old_db.delete_all_attributions_for_year(annee_id)
-            stats.deleted_main_entities_count = old_db.delete_all_enseignants_for_year(annee_id)
-            for ens in teachers_data:
-                ens["nomcomplet"] = f"{ens['prenom']} {ens['nom']}"
-                old_db.create_enseignant(ens, annee_id)
-            stats.imported_count = len(teachers_data)
-            conn.commit()
-    except psycopg2.Error as e:
-        conn.rollback()
+        # Étape 1 : Compter les attributions qui seront supprimées par cascade
+        stats.deleted_attributions_count = (
+            db.session.query(AttributionCours.attributionid)
+            .join(Enseignant, Enseignant.enseignantid == AttributionCours.enseignantid)
+            .filter(Enseignant.annee_id == annee_id)
+            .count()
+        )
+
+        # Étape 2 : Supprimer tous les enseignants de l'année.
+        deleted_rows = db.session.query(Enseignant).filter_by(annee_id=annee_id).delete(synchronize_session=False)
+        stats.deleted_main_entities_count = deleted_rows
+
+        # Étape 3 : Créer et ajouter les nouveaux enseignants
+        nouveaux_enseignants_objets = []
+        for data in teachers_data:
+            data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
+            nouveaux_enseignants_objets.append(Enseignant(annee_id=annee_id, **data))
+
+        if nouveaux_enseignants_objets:
+            db.session.add_all(nouveaux_enseignants_objets)
+            stats.imported_count = len(nouveaux_enseignants_objets)
+
+        # Étape 4 : Valider la transaction
+        db.session.commit()
+        return stats
+    except IntegrityError as e:
+        db.session.rollback()
+        # Cause probable : `champno` invalide ou doublon nom/prénom pour la même année.
+        raise ServiceException(
+            f"Erreur d'intégrité: un champ est-il invalide ou y a-t-il un doublon de nom/prénom? Détails: {e}"
+        )
+    except Exception as e:
+        db.session.rollback()
         raise ServiceException(f"Erreur de base de données lors de l'importation des enseignants: {e}")
-    return stats
 
 
 # --- SECTION REFACTORISÉE : Années Scolaires avec ORM ---
+
 
 def get_all_annees_service() -> list[dict[str, Any]]:
     """Récupère toutes les années scolaires via l'ORM, ordonnées par libellé décroissant."""
@@ -272,7 +327,6 @@ def set_annee_courante_service(annee_id: int) -> None:
     """
     Définit une année scolaire comme courante via l'ORM, en assurant une transaction atomique.
     """
-    # CORRECTION : Le bloc try/except a été enlevé pour laisser remonter EntityNotFoundError.
     annee_a_definir = db.session.get(AnneeScolaire, annee_id)
     if not annee_a_definir:
         raise EntityNotFoundError("Année non trouvée.")
@@ -288,9 +342,10 @@ def set_annee_courante_service(annee_id: int) -> None:
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        # On lève une ServiceException seulement en cas d'erreur de commit, pas pour un not found.
         raise ServiceException(f"La mise à jour de l'année courante a échoué en base de données : {e}")
 
+
+# ... (le reste du fichier reste identique) ...
 
 def get_all_champs_service() -> list[dict[str, Any]]:
     try:
@@ -504,7 +559,7 @@ def get_all_users_with_details_service() -> dict[str, Any]:
                 "username": user.username,
                 "is_admin": user.is_admin,
                 "is_dashboard_only": user.is_dashboard_only,
-                "allowed_champs": user.allowed_champs,
+                "allowed_champs": [c.champno for c in user.champs_autorises],
             }
             for user in users_orm
         ]
@@ -540,13 +595,13 @@ def create_user_service(username: str, password: str, role: str, allowed_champs:
     try:
         db.session.add(new_user)
         db.session.commit()
-        db.session.refresh(new_user)
+        db.session.refresh(new_user, ["champs_autorises"])
         return {
             "id": new_user.id,
             "username": new_user.username,
             "is_admin": new_user.is_admin,
             "is_dashboard_only": new_user.is_dashboard_only,
-            "allowed_champs": new_user.allowed_champs,
+            "allowed_champs": [c.champno for c in new_user.champs_autorises],
         }
     except IntegrityError:
         db.session.rollback()
