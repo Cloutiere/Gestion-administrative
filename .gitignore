@@ -1,6 +1,7 @@
-# --- Gitignore pour notre projet Flask ---
+# .gitignore
 
-# Ignorer les fichiers et dossiers générés par Python
+# --- Caches et Fichiers Générés ---
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -14,82 +15,49 @@ dist/
 *.egg
 MANIFEST
 
-# Environnement virtuel (à adapter si tu utilises un nom différent pour ton venv)
+# Caches d'outils (uv, pip, poetry, nix, etc.)
+/.cache/
+.pytest_cache/
+.mypy_cache/
+
+# Environnement virtuel
 venv/
 .venv/
 env/
 .env/
 
-# Fichiers de configuration IDE / Éditeurs
+# --- Données d'Instance et Fichiers Locaux ---
+instance/
+local_data/
+uploads/ # Par sécurité, au cas où un dossier uploads serait créé à la racine
+
+# --- Fichiers de Configuration Locaux et Secrets ---
+# Ignorer tous les fichiers .env...
+.env*
+# ...mais ne PAS ignorer le fichier d'exemple.
+!.env.example
+!.env.test # Si vous souhaitez partager la configuration de test
+
+# --- Sauvegardes et Logs ---
+*.sql
+*.dump
+*.log
+*.bak
+*.tmp
+
+# --- Configuration d'Outils Spécifiques à l'Environnement ---
+# Replit
+.replit
+replit.nix
+# Semgrep (si la configuration est locale et non partagée)
+/.config/
+
+# --- Fichiers d'IDE ---
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
 
-# Rapports de tests / couverture
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Fichiers de traduction
-*.mo
-*.pot
-
-# Fichiers spécifiques à Django/Flask (certains peuvent déjà être couverts plus haut)
-instance/
-.webassets-cache
-# Note: db.sqlite3 est déjà couvert par 'instance/', mais pour la clarté :
-# db.sqlite3
-# db.sqlite3-journal
-
-# Dossiers de documentation générée
+# --- Documentation Générée ---
 docs/_build/
 site/
-
-# Fichiers de logs
-*.log
-
-# Fichiers de sauvegarde généraux
-*.bak
-*.tmp
-
-# Fichiers spécifiques à notre projet et données d'instance
-# --- Ignorer les sauvegardes locales ---
-local_data/
-
-# --- Ignorer les fichiers téléversés par les utilisateurs ---
-# Le dossier 'uploads' de l'application est géré par 'instance/', donc nous ignorons 'instance/'
-# Le dossier 'mon_application/uploads' est supposé être pour des fichiers statiques/par défaut
-# qui ne devraient pas être versionnés non plus si jamais des fichiers utilisateur s'y retrouvaient.
-# Nous ignorons donc le dossier d'uploads actif (instance/uploads)
-# et le dossier qui pourrait contenir des fichiers statiques (mon_application/uploads)
-# S'il y a des fichiers spécifiques dans mon_application/uploads qui DOIVENT être versionnés,
-# il faudrait les exclure de cette règle (ex: !mon_application/uploads/fichier_important.txt)
-
-# --- Ignorer les fichiers de configuration locaux ---
-# .env pour les secrets de développement (NE PAS COMMITTER)
-.env
-# Assure-toi de commiter un .env.example si nécessaire
-!.env.example
-
-# --- Fichiers divers que nous avons organisés ---
-# Si tu décides de ne pas versionner le dossier docs/
-docs/
-
-# Fichiers spécifiques à Replit (si pertinent)
-.replit
-replit.nix
-
-# Fichier de sauvegarde de production à ignorer
-# Si tu as décidé de le garder pour une raison spécifique, assure-toi qu'il est ici.
-# Sinon, tu peux supprimer cette ligne.
-sauvegarde_prod_avant_migration.dump

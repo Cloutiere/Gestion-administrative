@@ -32,16 +32,24 @@ def load_active_school_year() -> None:
     )
 
 def get_database_uri() -> str:
-    """Construit l'URI de la base de données pour SQLAlchemy."""
-    app_env = os.environ.get("APP_ENV", "development")
-    prefix = {"production": "PROD_", "test": "TEST_"}.get(app_env, "DEV_")
+    """Construit l'URI de la base de données pour SQLAlchemy en se basant sur FLASK_ENV."""
+    # --- CORRECTION : Utilisation de la variable standard FLASK_ENV ---
+    # On lit FLASK_ENV. Par sécurité, si elle n'est pas définie, on suppose "production".
+    flask_env = os.environ.get("FLASK_ENV", "production")
+
+    # On mappe les environnements aux préfixes de variables
+    prefix = {"development": "DEV_", "test": "TEST_"}.get(flask_env, "PROD_")
+
     db_host = os.environ.get(f"{prefix}PGHOST")
     db_name = os.environ.get(f"{prefix}PGDATABASE")
     db_user = os.environ.get(f"{prefix}PGUSER")
     db_pass = os.environ.get(f"{prefix}PGPASSWORD")
     db_port = os.environ.get(f"{prefix}PGPORT", "5432")
+
     if not all([db_host, db_name, db_user, db_pass]):
-        raise ValueError(f"Variables de BDD manquantes pour l'environnement '{app_env}'")
+        # Message d'erreur plus clair qui indique quel environnement est utilisé.
+        raise ValueError(f"Variables de BDD manquantes pour l'environnement '{flask_env}' (préfixe '{prefix}')")
+
     return f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
 def determine_active_school_year(
@@ -62,39 +70,36 @@ def determine_active_school_year(
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     """Crée et configure une instance de l'application Flask (Application Factory)."""
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        os.environ["APP_ENV"] = "test"
 
-    # --- CORRECTION 1 : Simplification de la création de l'app et activation de l'instance ---
-    # `instance_relative_config=True` indique à Flask d'utiliser le dossier 'instance/'
-    # Les chemins `template_folder` et `static_folder` sont maintenant inutiles car Flask
-    # les trouve automatiquement par convention.
+    # On n'a plus besoin de manipuler l'environnement ici.
+    # FLASK_ENV et FLASK_DEBUG sont gérés par les fichiers .flaskenv et .env
+
     app = Flask(__name__, instance_relative_config=True)
 
-    # --- CORRECTION 2 : Configuration du dossier d'upload ---
-    # On définit `UPLOAD_FOLDER` en utilisant `app.instance_path` qui pointe vers le dossier 'instance/'
     upload_folder = os.path.join(app.instance_path, 'uploads')
 
+    # --- CORRECTION FINALE : Suppression de la configuration de TESTING ---
+    # La configuration de TESTING est maintenant entièrement gérée par le `test_config`
+    # passé par la suite de tests (conftest.py). Elle n'a plus sa place ici.
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev"),
-        UPLOAD_FOLDER=upload_folder,  # Utilisation du chemin correct
+        UPLOAD_FOLDER=upload_folder,
         ALLOWED_EXTENSIONS={"xlsx"},
-        TESTING=os.environ.get("APP_ENV") == "test",
         SQLALCHEMY_DATABASE_URI=get_database_uri(),
         SQLALCHEMY_TRACK_MODIFICATIONS=False
     )
 
     if test_config:
+        # C'est ici que `TESTING=True` sera appliqué lors des tests.
         app.config.from_mapping(test_config)
 
-    # --- CORRECTION 3 : Création du dossier d'upload et du dossier instance ---
-    # On s'assure que le dossier d'instance ET le dossier d'upload existent.
     try:
         os.makedirs(app.instance_path, exist_ok=True)
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     except OSError as e:
         app.logger.error(f"Erreur lors de la création des dossiers d'instance/upload: {e}")
 
+    # ... (le reste de la fonction est identique) ...
     db.init_app(app)
     migrate.init_app(app, db)
 
