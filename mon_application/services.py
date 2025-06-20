@@ -28,6 +28,7 @@ from .models import (
     AnneeScolaire,
     AttributionCours,
     Champ,
+    ChampAnneeStatut,
     Cours,
     Enseignant,
     TypeFinancement,
@@ -739,34 +740,73 @@ def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
 
 
 def add_attribution_service(enseignant_id: int, code_cours: str, annee_id: int) -> int:
-    verrou_info = old_db.get_verrou_info_enseignant(enseignant_id)
-    if not verrou_info:
+    """Ajoute une attribution de cours à un enseignant via l'ORM."""
+    # 1. Valider les entités et les règles métier
+    enseignant = db.session.get(Enseignant, enseignant_id)
+    if not enseignant:
         raise EntityNotFoundError("Enseignant non trouvé.")
-    if verrou_info.get("est_verrouille") and not verrou_info.get("estfictif"):
+
+    cours = db.session.get(Cours, {"codecours": code_cours, "annee_id": annee_id})
+    if not cours:
+        raise EntityNotFoundError("Cours non trouvé.")
+
+    # Règle: Vérifier le verrouillage du champ
+    statut_champ = db.session.query(ChampAnneeStatut).filter_by(champ_no=enseignant.champno, annee_id=annee_id).first()
+    if statut_champ and statut_champ.est_verrouille and not enseignant.estfictif:
         raise BusinessRuleValidationError("Les modifications sont désactivées car le champ est verrouillé.")
-    if old_db.get_groupes_restants_pour_cours(code_cours, annee_id) < 1:
+
+    # Règle: Vérifier les groupes restants
+    groupes_pris = sum(attr.nbgroupespris for attr in cours.attributions)
+    if (cours.nbgroupeinitial - groupes_pris) < 1:
         raise BusinessRuleValidationError("Plus de groupes disponibles pour ce cours.")
+
+    # 2. Exécuter l'opération
     try:
-        new_id = old_db.add_attribution(enseignant_id, code_cours, annee_id)
-        if new_id is None:
-            raise ServiceException("Erreur de base de données lors de l'attribution.")
-        return new_id
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+        new_attribution = AttributionCours(
+            enseignantid=enseignant_id,
+            codecours=code_cours,
+            annee_id_cours=annee_id,
+            nbgroupespris=1,
+        )
+        db.session.add(new_attribution)
+        db.session.commit()
+        return new_attribution.attributionid
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de l'attribution : {e}")
 
 
 def delete_attribution_service(attribution_id: int) -> dict[str, Any]:
-    attr_info = old_db.get_attribution_info(attribution_id)
-    if not attr_info:
+    """Supprime une attribution de cours via l'ORM."""
+    # 1. Récupérer l'entité et valider les règles métier
+    attribution = db.session.get(AttributionCours, attribution_id)
+    if not attribution:
         raise EntityNotFoundError("Attribution non trouvée.")
-    if attr_info.get("est_verrouille") and not attr_info.get("estfictif"):
+
+    enseignant = attribution.enseignant
+    # Règle: Vérifier le verrouillage du champ
+    statut_champ = db.session.query(ChampAnneeStatut).filter_by(champ_no=enseignant.champno, annee_id=enseignant.annee_id).first()
+    if statut_champ and statut_champ.est_verrouille and not enseignant.estfictif:
         raise BusinessRuleValidationError("Les modifications sont désactivées car le champ est verrouillé.")
+
+    # 2. Préparer les données à retourner (contrat de la fonction)
+    attr_info = {
+        "EnseignantID": enseignant.enseignantid,
+        "CodeCours": attribution.codecours,
+        "annee_id_cours": attribution.annee_id_cours,
+        "EstFictif": enseignant.estfictif,
+        "ChampNo": enseignant.champno,
+        "est_verrouille": statut_champ.est_verrouille if statut_champ else False,
+    }
+
+    # 3. Exécuter l'opération
     try:
-        if not old_db.delete_attribution(attribution_id):
-            raise ServiceException("Échec de la suppression de l'attribution.")
+        db.session.delete(attribution)
+        db.session.commit()
         return attr_info
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Échec de la suppression de l'attribution : {e}")
 
 
 def get_data_for_admin_page_service(annee_id: int) -> dict[str, Any]:

@@ -12,23 +12,27 @@ from mon_application.models import (
     AnneeScolaire,
     AttributionCours,
     Champ,
+    ChampAnneeStatut,
     Cours,
     Enseignant,
     TypeFinancement,
 )
 from mon_application.services import (
+    add_attribution_service,
+    BusinessRuleValidationError,
+    create_course_service,
+    create_teacher_service,
+    delete_attribution_service,
+    delete_course_service,
+    delete_teacher_service,
     DuplicateEntityError,
     EntityNotFoundError,
     ForeignKeyError,
-    ServiceException,
-    create_course_service,
-    create_teacher_service,
-    delete_course_service,
-    delete_teacher_service,
     get_course_details_service,
     get_teacher_details_service,
     save_imported_courses,
     save_imported_teachers,
+    ServiceException,
     update_course_service,
     update_teacher_service,
 )
@@ -209,14 +213,7 @@ class TestCourseServices:
     def test_create_course_fails_on_duplicate(self, app, db):
         """Vérifie que la création échoue avec la bonne exception en cas de doublon."""
         annee, champ, _, _ = _setup_initial_data(db)
-        data = {
-            "codecours": "TEST101",
-            "champno": champ.champno,
-            "coursdescriptif": "Cours test",
-            "nbperiodes": 4,
-            "nbgroupeinitial": 1,
-            "estcoursautre": False,
-        }
+        data = {"codecours": "TEST101", "champno": champ.champno, "coursdescriptif": "Cours test", "nbperiodes": 4, "nbgroupeinitial": 1, "estcoursautre": False}
         create_course_service(data, annee.annee_id)
 
         with pytest.raises(DuplicateEntityError) as excinfo:
@@ -226,15 +223,7 @@ class TestCourseServices:
     def test_get_course_details_success(self, app, db):
         """Vérifie que les détails d'un cours sont bien retournés."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(
-            codecours="TEST101",
-            annee_id=annee.annee_id,
-            champno=champ.champno,
-            coursdescriptif="Détails",
-            nbperiodes=5,
-            nbgroupeinitial=1,
-            estcoursautre=False,
-        )
+        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Détails", nbperiodes=5, nbgroupeinitial=1, estcoursautre=False)
         db.session.add(cours)
         db.session.commit()
 
@@ -251,15 +240,7 @@ class TestCourseServices:
     def test_update_course_success(self, app, db):
         """Vérifie la mise à jour réussie d'un cours."""
         annee, champ, champ_fran, _ = _setup_initial_data(db)
-        cours = Cours(
-            codecours="TEST101",
-            annee_id=annee.annee_id,
-            champno=champ.champno,
-            coursdescriptif="Original",
-            nbperiodes=1,
-            nbgroupeinitial=1,
-            estcoursautre=False,
-        )
+        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Original", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
         db.session.add(cours)
         db.session.commit()
 
@@ -281,15 +262,7 @@ class TestCourseServices:
     def test_delete_course_success(self, app, db):
         """Vérifie la suppression réussie d'un cours non utilisé."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(
-            codecours="TEST101",
-            annee_id=annee.annee_id,
-            champno=champ.champno,
-            coursdescriptif="A supprimer",
-            nbperiodes=1,
-            nbgroupeinitial=1,
-            estcoursautre=False,
-        )
+        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="A supprimer", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
         db.session.add(cours)
         db.session.commit()
         assert db.session.query(Cours).count() == 1
@@ -300,15 +273,7 @@ class TestCourseServices:
     def test_delete_course_fails_on_fk_constraint(self, app, db):
         """Vérifie que la suppression échoue si le cours est utilisé par une attribution."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(
-            codecours="USED101",
-            annee_id=annee.annee_id,
-            champno=champ.champno,
-            coursdescriptif="Utilisé",
-            nbperiodes=1,
-            nbgroupeinitial=1,
-            estcoursautre=False,
-        )
+        cours = Cours(codecours="USED101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Utilisé", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
         prof = Enseignant(annee_id=annee.annee_id, nomcomplet="Prof Test", nom="Test", prenom="Prof", champno=champ.champno)
         db.session.add_all([cours, prof])
         db.session.commit()
@@ -430,3 +395,87 @@ class TestTeacherServices:
         assert affected_courses[0]["CodeCours"] == "PHYS101"
         assert db.session.query(Enseignant).count() == 0
         assert db.session.query(AttributionCours).count() == 0
+
+
+class TestAttributionServices:
+    """Regroupe les tests pour les services CRUD de l'entité AttributionCours."""
+
+    def test_add_attribution_success(self, app, db):
+        """Vérifie l'ajout réussi d'une attribution."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        prof = Enseignant(annee_id=annee.annee_id, nom="A", prenom="B", nomcomplet="B A", champno=champ.champno)
+        cours = Cours(codecours="C1", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        db.session.add_all([prof, cours])
+        db.session.commit()
+
+        new_id = add_attribution_service(prof.enseignantid, cours.codecours, annee.annee_id)
+        assert isinstance(new_id, int)
+        assert db.session.query(AttributionCours).count() == 1
+
+    def test_add_attribution_fails_if_no_groups_left(self, app, db):
+        """Vérifie que l'ajout échoue s'il n'y a plus de groupes disponibles."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        prof = Enseignant(annee_id=annee.annee_id, nom="A", prenom="B", nomcomplet="B A", champno=champ.champno)
+        cours = Cours(codecours="C1", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        db.session.add_all([prof, cours])
+        db.session.commit()
+        add_attribution_service(prof.enseignantid, cours.codecours, annee.annee_id)
+
+        with pytest.raises(BusinessRuleValidationError, match="Plus de groupes disponibles"):
+            add_attribution_service(prof.enseignantid, cours.codecours, annee.annee_id)
+
+    def test_add_attribution_fails_if_champ_is_locked(self, app, db):
+        """Vérifie que l'ajout échoue si le champ de l'enseignant est verrouillé."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        prof = Enseignant(annee_id=annee.annee_id, nom="A", prenom="B", nomcomplet="B A", champno=champ.champno)
+        cours = Cours(codecours="C1", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        statut = ChampAnneeStatut(champ_no=champ.champno, annee_id=annee.annee_id, est_verrouille=True)
+        db.session.add_all([prof, cours, statut])
+        db.session.commit()
+
+        with pytest.raises(BusinessRuleValidationError, match="champ est verrouillé"):
+            add_attribution_service(prof.enseignantid, cours.codecours, annee.annee_id)
+
+    def test_add_attribution_succeeds_for_fictitious_teacher_when_locked(self, app, db):
+        """Vérifie que l'ajout est permis pour un prof fictif même si le champ est verrouillé."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        prof_fictif = Enseignant(annee_id=annee.annee_id, nomcomplet="Tâche", champno=champ.champno, estfictif=True)
+        cours = Cours(codecours="C1", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        statut = ChampAnneeStatut(champ_no=champ.champno, annee_id=annee.annee_id, est_verrouille=True)
+        db.session.add_all([prof_fictif, cours, statut])
+        db.session.commit()
+
+        add_attribution_service(prof_fictif.enseignantid, cours.codecours, annee.annee_id)
+        assert db.session.query(AttributionCours).count() == 1
+
+    def test_delete_attribution_success(self, app, db):
+        """Vérifie la suppression réussie d'une attribution."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        prof = Enseignant(annee_id=annee.annee_id, nom="A", prenom="B", nomcomplet="B A", champno=champ.champno)
+        cours = Cours(codecours="C1", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        db.session.add_all([prof, cours])
+        db.session.commit()
+        attr = AttributionCours(enseignantid=prof.enseignantid, codecours=cours.codecours, annee_id_cours=annee.annee_id)
+        db.session.add(attr)
+        db.session.commit()
+        attr_id = attr.attributionid
+
+        result = delete_attribution_service(attr_id)
+        assert result["CodeCours"] == "C1"
+        assert db.session.query(AttributionCours).count() == 0
+
+    def test_delete_attribution_fails_if_champ_is_locked(self, app, db):
+        """Vérifie que la suppression échoue si le champ est verrouillé."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        prof = Enseignant(annee_id=annee.annee_id, nom="A", prenom="B", nomcomplet="B A", champno=champ.champno)
+        cours = Cours(codecours="C1", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        statut = ChampAnneeStatut(champ_no=champ.champno, annee_id=annee.annee_id, est_verrouille=True)
+        db.session.add_all([prof, cours, statut])
+        db.session.commit()
+        attr = AttributionCours(enseignantid=prof.enseignantid, codecours=cours.codecours, annee_id_cours=annee.annee_id)
+        db.session.add(attr)
+        db.session.commit()
+
+        with pytest.raises(BusinessRuleValidationError, match="champ est verrouillé"):
+            delete_attribution_service(attr.attributionid)
+        assert db.session.query(AttributionCours).count() == 1

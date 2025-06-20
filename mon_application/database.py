@@ -342,30 +342,6 @@ def get_periodes_enseignant(enseignant_id: int) -> dict[str, float]:
         return {"periodes_cours": 0.0, "periodes_autres": 0.0, "total_periodes": 0.0}
 
 
-def get_groupes_restants_pour_cours(code_cours: str, annee_id: int) -> int:
-    """Calcule les groupes restants pour un cours d'une année donnée."""
-    db_conn = get_db()
-    if not db_conn:
-        return 0
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT (c.NbGroupeInitial - COALESCE(SUM(ac.NbGroupesPris), 0))
-                FROM Cours c
-                LEFT JOIN AttributionsCours ac ON c.CodeCours = ac.CodeCours AND c.annee_id = ac.annee_id_cours
-                WHERE c.CodeCours = %s AND c.annee_id = %s
-                GROUP BY c.CodeCours, c.annee_id;
-                """,
-                (code_cours, annee_id),
-            )
-            result = cur.fetchone()
-            return int(result[0]) if result and result[0] is not None else 0
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_groupes_restants_pour_cours pour {code_cours}, annee {annee_id}: {e}")
-        return 0
-
-
 def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
     """Récupère tous les cours d'une année, regroupés par champ."""
     db_conn = get_db()
@@ -394,95 +370,6 @@ def get_all_cours_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
     except psycopg2.Error as e:
         current_app.logger.error(f"Erreur DAO get_all_cours_grouped_by_champ pour annee {annee_id}: {e}")
         return {}
-
-
-def get_verrou_info_enseignant(enseignant_id: int) -> dict[str, Any] | None:
-    """Récupère le statut de verrouillage et le champno pour un enseignant."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                """
-                SELECT
-                    e.EstFictif, e.ChampNo, e.annee_id,
-                    COALESCE(cas.est_verrouille, FALSE) AS est_verrouille
-                FROM Enseignants e
-                LEFT JOIN champ_annee_statuts cas ON e.ChampNo = cas.champ_no AND e.annee_id = cas.annee_id
-                WHERE e.EnseignantID = %s;
-                """,
-                (enseignant_id,),
-            )
-            return dict(row) if (row := cur.fetchone()) else None
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_verrou_info_enseignant pour {enseignant_id}: {e}")
-        return None
-
-
-def add_attribution(enseignant_id: int, code_cours: str, annee_id_cours: int) -> int | None:
-    """Ajoute une attribution de cours à un enseignant."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                "INSERT INTO AttributionsCours (EnseignantID, CodeCours, annee_id_cours, NbGroupesPris) "
-                "VALUES (%s, %s, %s, 1) RETURNING AttributionID;",
-                (enseignant_id, code_cours, annee_id_cours),
-            )
-            new_id = cur.fetchone()
-            db_conn.commit()
-            return new_id["attributionid"] if new_id else None
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO add_attribution pour enseignant {enseignant_id}, cours {code_cours}: {e}")
-        return None
-
-
-def get_attribution_info(attribution_id: int) -> dict[str, Any] | None:
-    """Récupère les informations détaillées d'une attribution."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                """
-                SELECT
-                    ac.EnseignantID, ac.CodeCours, ac.annee_id_cours,
-                    e.EstFictif, e.ChampNo,
-                    COALESCE(cas.est_verrouille, FALSE) AS est_verrouille
-                FROM AttributionsCours ac
-                JOIN Enseignants e ON ac.EnseignantID = e.EnseignantID
-                LEFT JOIN champ_annee_statuts cas ON e.ChampNo = cas.champ_no AND e.annee_id = cas.annee_id
-                WHERE ac.AttributionID = %s;
-                """,
-                (attribution_id,),
-            )
-            return dict(row) if (row := cur.fetchone()) else None
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_attribution_info pour attribution {attribution_id}: {e}")
-        return None
-
-
-def delete_attribution(attribution_id: int) -> bool:
-    """Supprime une attribution de cours."""
-    db_conn = get_db()
-    if not db_conn:
-        return False
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("DELETE FROM AttributionsCours WHERE AttributionID = %s;", (attribution_id,))
-            db_conn.commit()
-            return cur.rowcount > 0
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO delete_attribution pour attribution {attribution_id}: {e}")
-        return False
 
 
 def create_fictif_enseignant(nom_tache: str, champ_no: str, annee_id: int) -> dict[str, Any] | None:
