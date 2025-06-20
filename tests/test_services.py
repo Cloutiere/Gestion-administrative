@@ -22,11 +22,15 @@ from mon_application.services import (
     ForeignKeyError,
     ServiceException,
     create_course_service,
+    create_teacher_service,
     delete_course_service,
+    delete_teacher_service,
     get_course_details_service,
+    get_teacher_details_service,
     save_imported_courses,
     save_imported_teachers,
     update_course_service,
+    update_teacher_service,
 )
 
 
@@ -205,7 +209,14 @@ class TestCourseServices:
     def test_create_course_fails_on_duplicate(self, app, db):
         """Vérifie que la création échoue avec la bonne exception en cas de doublon."""
         annee, champ, _, _ = _setup_initial_data(db)
-        data = {"codecours": "TEST101", "champno": champ.champno, "coursdescriptif": "Cours test", "nbperiodes": 4, "nbgroupeinitial": 1, "estcoursautre": False}
+        data = {
+            "codecours": "TEST101",
+            "champno": champ.champno,
+            "coursdescriptif": "Cours test",
+            "nbperiodes": 4,
+            "nbgroupeinitial": 1,
+            "estcoursautre": False,
+        }
         create_course_service(data, annee.annee_id)
 
         with pytest.raises(DuplicateEntityError) as excinfo:
@@ -215,7 +226,15 @@ class TestCourseServices:
     def test_get_course_details_success(self, app, db):
         """Vérifie que les détails d'un cours sont bien retournés."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Détails", nbperiodes=5, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="TEST101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="Détails",
+            nbperiodes=5,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         db.session.add(cours)
         db.session.commit()
 
@@ -232,7 +251,15 @@ class TestCourseServices:
     def test_update_course_success(self, app, db):
         """Vérifie la mise à jour réussie d'un cours."""
         annee, champ, champ_fran, _ = _setup_initial_data(db)
-        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Original", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="TEST101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="Original",
+            nbperiodes=1,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         db.session.add(cours)
         db.session.commit()
 
@@ -254,7 +281,15 @@ class TestCourseServices:
     def test_delete_course_success(self, app, db):
         """Vérifie la suppression réussie d'un cours non utilisé."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="A supprimer", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="TEST101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="A supprimer",
+            nbperiodes=1,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         db.session.add(cours)
         db.session.commit()
         assert db.session.query(Cours).count() == 1
@@ -265,7 +300,15 @@ class TestCourseServices:
     def test_delete_course_fails_on_fk_constraint(self, app, db):
         """Vérifie que la suppression échoue si le cours est utilisé par une attribution."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(codecours="USED101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Utilisé", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="USED101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="Utilisé",
+            nbperiodes=1,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         prof = Enseignant(annee_id=annee.annee_id, nomcomplet="Prof Test", nom="Test", prenom="Prof", champno=champ.champno)
         db.session.add_all([cours, prof])
         db.session.commit()
@@ -279,3 +322,111 @@ class TestCourseServices:
 
         assert "Impossible de supprimer" in str(excinfo.value)
         assert db.session.query(Cours).count() == 1
+
+
+class TestTeacherServices:
+    """Regroupe les tests pour les services CRUD de l'entité Enseignant."""
+
+    def test_create_teacher_success(self, app, db):
+        """Vérifie la création réussie d'un enseignant via le service."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        data = {"nom": "Einstein", "prenom": "Albert", "champno": champ.champno, "esttempsplein": True}
+
+        created_teacher_dict = create_teacher_service(data, annee.annee_id)
+        assert created_teacher_dict["nom"] == "Einstein"
+        assert created_teacher_dict["nomcomplet"] == "Albert Einstein"
+
+        teacher_in_db = db.session.query(Enseignant).filter_by(nom="Einstein").first()
+        assert teacher_in_db is not None
+        assert teacher_in_db.nomcomplet == "Albert Einstein"
+        assert not teacher_in_db.estfictif
+
+    def test_create_teacher_fails_on_duplicate(self, app, db):
+        """Vérifie que la création échoue avec la bonne exception en cas de doublon."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        data = {"nom": "Curie", "prenom": "Marie", "champno": champ.champno, "esttempsplein": True}
+        create_teacher_service(data, annee.annee_id)
+
+        with pytest.raises(DuplicateEntityError) as excinfo:
+            create_teacher_service(data, annee.annee_id)
+        assert "existe déjà" in str(excinfo.value)
+
+    def test_get_teacher_details_success(self, app, db):
+        """Vérifie que les détails d'un enseignant sont bien retournés."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        teacher = Enseignant(annee_id=annee.annee_id, nom="Nightingale", prenom="Florence", nomcomplet="Florence Nightingale", champno=champ.champno)
+        db.session.add(teacher)
+        db.session.commit()
+
+        details = get_teacher_details_service(teacher.enseignantid)
+        assert details["nom"] == "Nightingale"
+        assert details["enseignantid"] == teacher.enseignantid
+
+    def test_get_teacher_details_fails_on_not_found(self, app, db):
+        """Vérifie qu'une exception est levée si l'enseignant n'existe pas."""
+        _setup_initial_data(db)
+        with pytest.raises(EntityNotFoundError):
+            get_teacher_details_service(999)
+
+    def test_get_teacher_details_fails_for_fictitious_teacher(self, app, db):
+        """Vérifie que le service ne retourne pas d'enseignants fictifs."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        fictitious_teacher = Enseignant(annee_id=annee.annee_id, nomcomplet="Tâche", champno=champ.champno, estfictif=True)
+        db.session.add(fictitious_teacher)
+        db.session.commit()
+
+        with pytest.raises(EntityNotFoundError):
+            get_teacher_details_service(fictitious_teacher.enseignantid)
+
+    def test_update_teacher_success(self, app, db):
+        """Vérifie la mise à jour réussie d'un enseignant."""
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        teacher = Enseignant(annee_id=annee.annee_id, nom="Lovelace", prenom="Ada", nomcomplet="Ada Lovelace", champno=champ_math.champno)
+        db.session.add(teacher)
+        db.session.commit()
+
+        update_data = {"nom": "Byron", "prenom": "Augusta Ada", "champno": champ_fran.champno, "esttempsplein": False}
+        updated_dict = update_teacher_service(teacher.enseignantid, update_data)
+        assert updated_dict["nom"] == "Byron"
+        assert updated_dict["nomcomplet"] == "Augusta Ada Byron"
+
+        teacher_in_db = db.session.get(Enseignant, teacher.enseignantid)
+        assert teacher_in_db.nomcomplet == "Augusta Ada Byron"
+        assert not teacher_in_db.esttempsplein
+        assert teacher_in_db.champno == champ_fran.champno
+
+    def test_delete_teacher_success_no_attributions(self, app, db):
+        """Vérifie la suppression d'un enseignant sans attributions."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        teacher = Enseignant(annee_id=annee.annee_id, nom="Galilei", prenom="Galileo", nomcomplet="Galileo Galilei", champno=champ.champno)
+        db.session.add(teacher)
+        db.session.commit()
+        teacher_id = teacher.enseignantid
+        assert db.session.query(Enseignant).count() == 1
+
+        affected_courses = delete_teacher_service(teacher_id)
+        assert affected_courses == []
+        assert db.session.query(Enseignant).count() == 0
+
+    def test_delete_teacher_with_attributions(self, app, db):
+        """Vérifie la suppression d'un enseignant et la cascade sur ses attributions."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        teacher = Enseignant(annee_id=annee.annee_id, nom="Feynman", prenom="Richard", nomcomplet="Richard Feynman", champno=champ.champno)
+        cours = Cours(codecours="PHYS101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="QED", nbperiodes=4, nbgroupeinitial=1)
+        db.session.add_all([teacher, cours])
+        db.session.commit()
+
+        attribution = AttributionCours(enseignantid=teacher.enseignantid, codecours=cours.codecours, annee_id_cours=cours.annee_id)
+        db.session.add(attribution)
+        db.session.commit()
+
+        teacher_id = teacher.enseignantid
+        assert db.session.query(Enseignant).count() == 1
+        assert db.session.query(AttributionCours).count() == 1
+
+        affected_courses = delete_teacher_service(teacher_id)
+
+        assert len(affected_courses) == 1
+        assert affected_courses[0]["CodeCours"] == "PHYS101"
+        assert db.session.query(Enseignant).count() == 0
+        assert db.session.query(AttributionCours).count() == 0

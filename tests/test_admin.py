@@ -27,6 +27,7 @@ def admin_client(client, db):
 
 # --- Tests pour la gestion des utilisateurs ---
 
+
 def test_page_administration_utilisateurs_se_charge(admin_client):
     """
     Vérifie que la page HTML (la coquille) de l'administration des utilisateurs
@@ -62,6 +63,7 @@ def test_api_get_all_users_renvoie_les_utilisateurs(admin_client, db):
 
 # ... (Les autres tests pour les utilisateurs restent ici, inchangés) ...
 
+
 def test_api_delete_user_fails_on_self_delete(admin_client, db):
     """Vérifie qu'un admin ne peut pas se supprimer lui-même."""
     admin_user = db.session.query(User).filter_by(username="testadmin").one()
@@ -72,6 +74,7 @@ def test_api_delete_user_fails_on_self_delete(admin_client, db):
 
 
 # --- Tests pour la gestion des Types de Financement ---
+
 
 def test_api_get_all_financements_success(admin_client, db):
     """Vérifie que l'API renvoie une liste triée de financements."""
@@ -88,6 +91,7 @@ def test_api_get_all_financements_success(admin_client, db):
 
 
 # ... (Les autres tests pour les financements restent ici, inchangés) ...
+
 
 def test_api_delete_financement_fails_when_in_use(admin_client, db):
     """Vérifie que la suppression échoue si le financement est utilisé par un cours."""

@@ -163,9 +163,7 @@ def save_imported_courses(courses_data: list[dict[str, Any]], annee_id: int) -> 
         # Étape 1 : Compter les attributions qui seront supprimées par cascade pour les stats.
         # On le fait avant la suppression.
         stats.deleted_attributions_count = (
-            db.session.query(AttributionCours.attributionid)
-            .filter(AttributionCours.annee_id_cours == annee_id)
-            .count()
+            db.session.query(AttributionCours.attributionid).filter(AttributionCours.annee_id_cours == annee_id).count()
         )
 
         # Étape 2 : Supprimer tous les cours de l'année.
@@ -269,9 +267,7 @@ def save_imported_teachers(teachers_data: list[dict[str, Any]], annee_id: int) -
     except IntegrityError as e:
         db.session.rollback()
         # Cause probable : `champno` invalide ou doublon nom/prénom pour la même année.
-        raise ServiceException(
-            f"Erreur d'intégrité: un champ est-il invalide ou y a-t-il un doublon de nom/prénom? Détails: {e}"
-        )
+        raise ServiceException(f"Erreur d'intégrité: un champ est-il invalide ou y a-t-il un doublon de nom/prénom? Détails: {e}")
     except Exception as e:
         db.session.rollback()
         raise ServiceException(f"Erreur de base de données lors de l'importation des enseignants: {e}")
@@ -284,10 +280,7 @@ def get_all_annees_service() -> list[dict[str, Any]]:
     """Récupère toutes les années scolaires via l'ORM, ordonnées par libellé décroissant."""
     try:
         annees = db.session.query(AnneeScolaire).order_by(AnneeScolaire.libelle_annee.desc()).all()
-        return [
-            {"annee_id": a.annee_id, "libelle_annee": a.libelle_annee, "est_courante": a.est_courante}
-            for a in annees
-        ]
+        return [{"annee_id": a.annee_id, "libelle_annee": a.libelle_annee, "est_courante": a.est_courante} for a in annees]
     except Exception as e:
         raise ServiceException(f"Erreur ORM lors de la récupération des années: {e}")
 
@@ -344,8 +337,6 @@ def set_annee_courante_service(annee_id: int) -> None:
         db.session.rollback()
         raise ServiceException(f"La mise à jour de l'année courante a échoué en base de données : {e}")
 
-
-# ... (le reste du fichier reste identique) ...
 
 def get_all_champs_service() -> list[dict[str, Any]]:
     try:
@@ -470,48 +461,91 @@ def reassign_course_to_financement_service(code_cours: str, annee_id: int, code_
         raise ServiceException(f"Erreur de base de données: {e}")
 
 
+def _enseignant_to_dict(enseignant: Enseignant) -> dict[str, Any]:
+    """Utilitaire pour convertir un objet Enseignant en dictionnaire."""
+    return {
+        "enseignantid": enseignant.enseignantid,
+        "annee_id": enseignant.annee_id,
+        "nomcomplet": enseignant.nomcomplet,
+        "nom": enseignant.nom,
+        "prenom": enseignant.prenom,
+        "champno": enseignant.champno,
+        "esttempsplein": enseignant.esttempsplein,
+        "estfictif": enseignant.estfictif,
+    }
+
+
 def get_teacher_details_service(enseignant_id: int) -> dict[str, Any]:
-    enseignant = old_db.get_enseignant_details(enseignant_id)
-    if not enseignant or enseignant["estfictif"]:
+    """Récupère les détails d'un enseignant (non fictif) via l'ORM."""
+    enseignant = db.session.query(Enseignant).filter_by(enseignantid=enseignant_id, estfictif=False).first()
+    if not enseignant:
         raise EntityNotFoundError("Enseignant non trouvé ou non modifiable.")
-    return enseignant
+    return _enseignant_to_dict(enseignant)
 
 
 def create_teacher_service(data: dict[str, Any], annee_id: int) -> dict[str, Any]:
+    """Crée un nouvel enseignant via l'ORM."""
     try:
-        data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
-        new_teacher = old_db.create_enseignant(data, annee_id)
-        if not new_teacher:
-            raise ServiceException("La création de l'enseignant a échoué.")
-        return new_teacher
-    except psycopg2.errors.UniqueViolation:
+        new_teacher = Enseignant(
+            annee_id=annee_id,
+            nom=data["nom"],
+            prenom=data["prenom"],
+            nomcomplet=f"{data['prenom']} {data['nom']}",
+            champno=data["champno"],
+            esttempsplein=data["esttempsplein"],
+            estfictif=False,
+        )
+        db.session.add(new_teacher)
+        db.session.commit()
+        return _enseignant_to_dict(new_teacher)
+    except IntegrityError:
+        db.session.rollback()
         raise DuplicateEntityError("Un enseignant avec ce nom/prénom existe déjà pour cette année.")
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la création de l'enseignant : {e}")
 
 
 def update_teacher_service(enseignant_id: int, data: dict[str, Any]) -> dict[str, Any]:
+    """Met à jour un enseignant (non fictif) via l'ORM."""
+    teacher_to_update = db.session.query(Enseignant).filter_by(enseignantid=enseignant_id, estfictif=False).first()
+    if not teacher_to_update:
+        raise EntityNotFoundError("Enseignant non trouvé ou non modifiable (fictif).")
+
     try:
-        data["nomcomplet"] = f"{data['prenom']} {data['nom']}"
-        updated_teacher = old_db.update_enseignant(enseignant_id, data)
-        if not updated_teacher:
-            raise EntityNotFoundError("Enseignant non trouvé ou non modifiable (fictif).")
-        return updated_teacher
-    except psycopg2.errors.UniqueViolation:
-        raise DuplicateEntityError("Un autre enseignant avec ce nom/prénom existe déjà.")
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+        teacher_to_update.nom = data["nom"]
+        teacher_to_update.prenom = data["prenom"]
+        teacher_to_update.nomcomplet = f"{data['prenom']} {data['nom']}"
+        teacher_to_update.champno = data["champno"]
+        teacher_to_update.esttempsplein = data["esttempsplein"]
+        db.session.commit()
+        return _enseignant_to_dict(teacher_to_update)
+    except IntegrityError:
+        db.session.rollback()
+        raise DuplicateEntityError("Un autre enseignant avec ce nom/prénom existe déjà pour cette année.")
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la mise à jour de l'enseignant : {e}")
 
 
 def delete_teacher_service(enseignant_id: int) -> list[dict[str, Any]]:
-    if not old_db.get_enseignant_details(enseignant_id):
+    """Supprime un enseignant via l'ORM et retourne les cours qui lui étaient affectés."""
+    teacher_to_delete = db.session.query(Enseignant).options(joinedload(Enseignant.attributions)).filter_by(enseignantid=enseignant_id).first()
+
+    if not teacher_to_delete:
         raise EntityNotFoundError("Enseignant non trouvé.")
-    cours_affectes = old_db.get_affected_cours_for_enseignant(enseignant_id)
+
+    # La règle métier est de retourner la liste des cours affectés avant suppression.
+    cours_affectes = [{"CodeCours": attr.codecours, "annee_id_cours": attr.annee_id_cours} for attr in teacher_to_delete.attributions]
+
     try:
-        if not old_db.delete_enseignant(enseignant_id):
-            raise ServiceException("La suppression de l'enseignant a échoué en base de données.")
+        db.session.delete(teacher_to_delete)
+        db.session.commit()
         return cours_affectes
-    except psycopg2.Error as e:
+    except Exception as e:
+        db.session.rollback()
+        # Il est peu probable d'avoir une IntegrityError ici à cause de la cascade,
+        # mais une gestion d'erreur générique est une bonne pratique.
         raise ServiceException(f"Erreur de base de données lors de la suppression: {e}")
 
 

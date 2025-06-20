@@ -22,6 +22,7 @@ def load_active_school_year() -> None:
     """Charge l'année scolaire active pour la requête en cours."""
     # NOTE : Cette fonction utilise encore l'ancien module 'database'.
     from . import database as old_db
+
     g.toutes_les_annees = old_db.get_all_annees()
     has_dashboard_access = current_user.is_authenticated and (current_user.is_admin or current_user.is_dashboard_only)
     annee_id_session = session.get("annee_scolaire_id")
@@ -30,6 +31,7 @@ def load_active_school_year() -> None:
         has_dashboard_access,
         annee_id_session,
     )
+
 
 def get_database_uri() -> str:
     """Construit l'URI de la base de données pour SQLAlchemy en se basant sur FLASK_ENV."""
@@ -52,11 +54,13 @@ def get_database_uri() -> str:
 
     return f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
+
 def determine_active_school_year(
     toutes_les_annees: list[dict[str, Any]], has_dashboard_access: bool, annee_id_session: int | None
 ) -> dict[str, Any] | None:
     """Détermine l'année scolaire active à afficher."""
     from . import database as old_db
+
     annee_active: dict[str, Any] | None = None
     if has_dashboard_access and annee_id_session:
         annee_active = next((annee for annee in toutes_les_annees if annee["annee_id"] == annee_id_session), None)
@@ -65,8 +69,9 @@ def determine_active_school_year(
     if not annee_active and toutes_les_annees:
         annee_active = max(toutes_les_annees, key=lambda x: x["libelle_annee"])
         if has_dashboard_access:
-            flash("Aucune année scolaire n'est définie comme 'courante'. Affichage de la plus récente par défaut.","warning")
+            flash("Aucune année scolaire n'est définie comme 'courante'. Affichage de la plus récente par défaut.", "warning")
     return annee_active
+
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     """Crée et configure une instance de l'application Flask (Application Factory)."""
@@ -76,7 +81,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     app = Flask(__name__, instance_relative_config=True)
 
-    upload_folder = os.path.join(app.instance_path, 'uploads')
+    upload_folder = os.path.join(app.instance_path, "uploads")
 
     # --- CORRECTION FINALE : Suppression de la configuration de TESTING ---
     # La configuration de TESTING est maintenant entièrement gérée par le `test_config`
@@ -86,7 +91,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         UPLOAD_FOLDER=upload_folder,
         ALLOWED_EXTENSIONS={"xlsx"},
         SQLALCHEMY_DATABASE_URI=get_database_uri(),
-        SQLALCHEMY_TRACK_MODIFICATIONS=False
+        SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
 
     if test_config:
@@ -104,6 +109,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     migrate.init_app(app, db)
 
     from . import database
+
     database.init_app(app)
 
     login_manager = LoginManager()
@@ -131,10 +137,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             "current_user": current_user,
             "SCRIPT_YEAR": datetime.datetime.now().year,
             "annee_active": getattr(g, "annee_active", None),
-            "toutes_les_annees": getattr(g, "toutes_les_annees", [])
+            "toutes_les_annees": getattr(g, "toutes_les_annees", []),
         }
 
     from . import admin, api, auth, dashboard, views
+
     app.register_blueprint(auth.bp)
     app.register_blueprint(views.bp)
     app.add_url_rule("/", endpoint="index")
@@ -143,6 +150,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(api.bp)
 
     from . import commands
+
     commands.init_app(app)
 
     return app

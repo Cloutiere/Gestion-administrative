@@ -530,39 +530,6 @@ def get_fictif_enseignants_by_champ(champ_no: str, annee_id: int) -> list[dict[s
         return []
 
 
-def get_affected_cours_for_enseignant(enseignant_id: int) -> list[dict[str, Any]]:
-    """Récupère les cours affectés à un enseignant (code et année)."""
-    db_conn = get_db()
-    if not db_conn:
-        return []
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT DISTINCT CodeCours, annee_id_cours FROM AttributionsCours WHERE EnseignantID = %s;", (enseignant_id,))
-            return [dict(row) for row in cur.fetchall()]
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_affected_cours_for_enseignant pour enseignant {enseignant_id}: {e}")
-        return []
-
-
-def delete_enseignant(enseignant_id: int) -> bool:
-    """
-    Supprime un enseignant (et ses attributions par CASCADE).
-    REFACTOR: Ne gère plus d'erreur métier, juste la suppression.
-    """
-    db_conn = get_db()
-    if not db_conn:
-        return False
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("DELETE FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
-            db_conn.commit()
-            return cur.rowcount > 0
-    except psycopg2.Error:
-        if db_conn:
-            db_conn.rollback()
-        raise
-
-
 def reassign_cours_to_champ(code_cours: str, annee_id: int, nouveau_champ_no: str) -> dict[str, Any] | None:
     """Réassigne un cours à un nouveau champ pour une année donnée."""
     db_conn = get_db()
@@ -615,78 +582,6 @@ def reassign_cours_to_financement(code_cours: str, annee_id: int, nouveau_financ
             db_conn.rollback()
         current_app.logger.error(f"Erreur DAO reassign_cours_to_financement pour cours {code_cours}, annee {annee_id}: {e}")
         return False
-
-
-def create_enseignant(data: dict[str, Any], annee_id: int) -> dict[str, Any] | None:
-    """
-    Crée un nouvel enseignant pour une année.
-    REFACTOR: La logique de construction de 'nomcomplet' a été retirée.
-    """
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                """
-                INSERT INTO Enseignants (annee_id, NomComplet, Nom, Prenom,
-                                         ChampNo, EstTempsPlein, EstFictif)
-                VALUES (%(annee_id)s, %(nomcomplet)s, %(nom)s, %(prenom)s,
-                        %(champno)s, %(esttempsplein)s, FALSE)
-                RETURNING *;
-                """,
-                {**data, "annee_id": annee_id},
-            )
-            new_enseignant = cur.fetchone()
-            db_conn.commit()
-            return dict(new_enseignant) if new_enseignant else None
-    except psycopg2.Error:
-        if db_conn:
-            db_conn.rollback()
-        raise
-
-
-def get_enseignant_details(enseignant_id: int) -> dict[str, Any] | None:
-    """Récupère les détails d'un enseignant par son ID unique."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT * FROM Enseignants WHERE EnseignantID = %s;", (enseignant_id,))
-            return dict(row) if (row := cur.fetchone()) else None
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_enseignant_details pour {enseignant_id}: {e}")
-        return None
-
-
-def update_enseignant(enseignant_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
-    """
-    Met à jour un enseignant.
-    REFACTOR: La logique de construction de 'nomcomplet' a été retirée.
-    """
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                """
-                UPDATE Enseignants
-                SET NomComplet = %(nomcomplet)s, Nom = %(nom)s, Prenom = %(prenom)s,
-                    ChampNo = %(champno)s, EstTempsPlein = %(esttempsplein)s
-                WHERE EnseignantID = %(enseignantid)s AND EstFictif = FALSE
-                RETURNING *;
-                """,
-                {**data, "enseignantid": enseignant_id},
-            )
-            updated_enseignant = cur.fetchone()
-            db_conn.commit()
-            return dict(updated_enseignant) if updated_enseignant else None
-    except psycopg2.Error:
-        if db_conn:
-            db_conn.rollback()
-        raise
 
 
 def get_all_enseignants_grouped_by_champ(annee_id: int) -> dict[str, dict[str, Any]]:
