@@ -16,13 +16,13 @@ import openpyxl
 import psycopg2
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
-from psycopg2.extensions import connection as PgConnection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 # ANCIEN : On le garde pour les fonctions non encore refactorisées
 from . import database as old_db
 from .extensions import db
+
 # NOUVEAU: Import des modèles requis pour la refactorisation
 from .models import (
     AnneeScolaire,
@@ -369,43 +369,87 @@ def toggle_champ_confirm_service(champ_no: str, annee_id: int) -> bool:
     return nouveau_statut
 
 
+def _cours_to_dict(cours: Cours) -> dict[str, Any]:
+    """Utilitaire pour convertir un objet Cours en dictionnaire."""
+    return {
+        "codecours": cours.codecours,
+        "annee_id": cours.annee_id,
+        "champno": cours.champno,
+        "coursdescriptif": cours.coursdescriptif,
+        "nbperiodes": float(cours.nbperiodes),
+        "nbgroupeinitial": cours.nbgroupeinitial,
+        "estcoursautre": cours.estcoursautre,
+        "financement_code": cours.financement_code,
+    }
+
+
 def get_course_details_service(code_cours: str, annee_id: int) -> dict[str, Any]:
-    cours = old_db.get_cours_details(code_cours, annee_id)
+    """Récupère les détails d'un cours via l'ORM."""
+    cours = db.session.get(Cours, {"codecours": code_cours, "annee_id": annee_id})
     if not cours:
         raise EntityNotFoundError("Cours non trouvé pour cette année.")
-    return cours
+    return _cours_to_dict(cours)
 
 
 def create_course_service(data: dict[str, Any], annee_id: int) -> dict[str, Any]:
+    """Crée un nouveau cours via l'ORM."""
     try:
-        new_cours = old_db.create_cours(data, annee_id)
-        if not new_cours:
-            raise ServiceException("La création du cours a échoué pour une raison inconnue.")
-        return new_cours
-    except psycopg2.errors.UniqueViolation:
+        new_cours = Cours(
+            codecours=data["codecours"],
+            annee_id=annee_id,
+            champno=data["champno"],
+            coursdescriptif=data["coursdescriptif"],
+            nbperiodes=data["nbperiodes"],
+            nbgroupeinitial=data["nbgroupeinitial"],
+            estcoursautre=data["estcoursautre"],
+            financement_code=data.get("financement_code") or None,
+        )
+        db.session.add(new_cours)
+        db.session.commit()
+        return _cours_to_dict(new_cours)
+    except IntegrityError:
+        db.session.rollback()
         raise DuplicateEntityError("Un cours avec ce code existe déjà pour cette année.")
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la création du cours : {e}")
 
 
 def update_course_service(code_cours: str, annee_id: int, data: dict[str, Any]) -> dict[str, Any]:
+    """Met à jour un cours via l'ORM."""
+    cours_to_update = db.session.get(Cours, {"codecours": code_cours, "annee_id": annee_id})
+    if not cours_to_update:
+        raise EntityNotFoundError("Cours non trouvé pour cette année.")
+
     try:
-        updated_course = old_db.update_cours(code_cours, annee_id, data)
-        if not updated_course:
-            raise EntityNotFoundError("Cours non trouvé pour cette année.")
-        return updated_course
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+        cours_to_update.champno = data["champno"]
+        cours_to_update.coursdescriptif = data["coursdescriptif"]
+        cours_to_update.nbperiodes = data["nbperiodes"]
+        cours_to_update.nbgroupeinitial = data["nbgroupeinitial"]
+        cours_to_update.estcoursautre = data["estcoursautre"]
+        cours_to_update.financement_code = data.get("financement_code") or None
+        db.session.commit()
+        return _cours_to_dict(cours_to_update)
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la mise à jour du cours : {e}")
 
 
 def delete_course_service(code_cours: str, annee_id: int) -> None:
+    """Supprime un cours via l'ORM."""
+    cours_to_delete = db.session.get(Cours, {"codecours": code_cours, "annee_id": annee_id})
+    if not cours_to_delete:
+        raise EntityNotFoundError("Cours non trouvé pour cette année.")
+
     try:
-        if not old_db.delete_cours(code_cours, annee_id):
-            raise EntityNotFoundError("Cours non trouvé pour cette année.")
-    except psycopg2.errors.ForeignKeyViolation:
+        db.session.delete(cours_to_delete)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
         raise ForeignKeyError("Impossible de supprimer : ce cours est attribué à un ou plusieurs enseignants.")
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la suppression du cours : {e}")
 
 
 def reassign_course_to_champ_service(code_cours: str, annee_id: int, nouveau_champ_no: str) -> dict[str, Any]:

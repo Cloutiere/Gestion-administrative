@@ -8,11 +8,25 @@ données de test (SQLite en mémoire) fournie par les fixtures.
 
 import pytest
 
-from mon_application.models import AnneeScolaire, Champ, Cours, Enseignant, TypeFinancement
+from mon_application.models import (
+    AnneeScolaire,
+    AttributionCours,
+    Champ,
+    Cours,
+    Enseignant,
+    TypeFinancement,
+)
 from mon_application.services import (
+    DuplicateEntityError,
+    EntityNotFoundError,
+    ForeignKeyError,
+    ServiceException,
+    create_course_service,
+    delete_course_service,
+    get_course_details_service,
     save_imported_courses,
     save_imported_teachers,
-    ServiceException,
+    update_course_service,
 )
 
 
@@ -163,3 +177,105 @@ def test_save_imported_courses_rollback_on_invalid_fk(app, db):
 
     # Vérifier que la DB est vide, prouvant le rollback
     assert db.session.query(Cours).count() == 0
+
+
+class TestCourseServices:
+    """Regroupe les tests pour les services CRUD de l'entité Cours."""
+
+    def test_create_course_success(self, app, db):
+        """Vérifie la création réussie d'un cours via le service."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        data = {
+            "codecours": "TEST101",
+            "champno": champ.champno,
+            "coursdescriptif": "Cours test",
+            "nbperiodes": 3.5,
+            "nbgroupeinitial": 3,
+            "estcoursautre": True,
+        }
+
+        created_cours_dict = create_course_service(data, annee.annee_id)
+        assert created_cours_dict["codecours"] == "TEST101"
+        assert created_cours_dict["coursdescriptif"] == "Cours test"
+
+        cours_in_db = db.session.get(Cours, {"codecours": "TEST101", "annee_id": annee.annee_id})
+        assert cours_in_db is not None
+        assert cours_in_db.nbgroupeinitial == 3
+
+    def test_create_course_fails_on_duplicate(self, app, db):
+        """Vérifie que la création échoue avec la bonne exception en cas de doublon."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        data = {"codecours": "TEST101", "champno": champ.champno, "coursdescriptif": "Cours test", "nbperiodes": 4, "nbgroupeinitial": 1, "estcoursautre": False}
+        create_course_service(data, annee.annee_id)
+
+        with pytest.raises(DuplicateEntityError) as excinfo:
+            create_course_service(data, annee.annee_id)
+        assert "existe déjà" in str(excinfo.value)
+
+    def test_get_course_details_success(self, app, db):
+        """Vérifie que les détails d'un cours sont bien retournés."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Détails", nbperiodes=5, nbgroupeinitial=1, estcoursautre=False)
+        db.session.add(cours)
+        db.session.commit()
+
+        details = get_course_details_service("TEST101", annee.annee_id)
+        assert details["coursdescriptif"] == "Détails"
+        assert details["nbperiodes"] == 5.0
+
+    def test_get_course_details_fails_on_not_found(self, app, db):
+        """Vérifie qu'une exception est levée si le cours n'existe pas."""
+        annee, _, _, _ = _setup_initial_data(db)
+        with pytest.raises(EntityNotFoundError):
+            get_course_details_service("NONEXISTENT", annee.annee_id)
+
+    def test_update_course_success(self, app, db):
+        """Vérifie la mise à jour réussie d'un cours."""
+        annee, champ, champ_fran, _ = _setup_initial_data(db)
+        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Original", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        db.session.add(cours)
+        db.session.commit()
+
+        update_data = {
+            "champno": champ_fran.champno,
+            "coursdescriptif": "Modifié",
+            "nbperiodes": 9.99,
+            "nbgroupeinitial": 99,
+            "estcoursautre": True,
+        }
+        updated_dict = update_course_service("TEST101", annee.annee_id, update_data)
+        assert updated_dict["coursdescriptif"] == "Modifié"
+        assert updated_dict["champno"] == champ_fran.champno
+
+        cours_in_db = db.session.get(Cours, {"codecours": "TEST101", "annee_id": annee.annee_id})
+        assert cours_in_db.coursdescriptif == "Modifié"
+        assert float(cours_in_db.nbperiodes) == 9.99
+
+    def test_delete_course_success(self, app, db):
+        """Vérifie la suppression réussie d'un cours non utilisé."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="A supprimer", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        db.session.add(cours)
+        db.session.commit()
+        assert db.session.query(Cours).count() == 1
+
+        delete_course_service("TEST101", annee.annee_id)
+        assert db.session.query(Cours).count() == 0
+
+    def test_delete_course_fails_on_fk_constraint(self, app, db):
+        """Vérifie que la suppression échoue si le cours est utilisé par une attribution."""
+        annee, champ, _, _ = _setup_initial_data(db)
+        cours = Cours(codecours="USED101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Utilisé", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        prof = Enseignant(annee_id=annee.annee_id, nomcomplet="Prof Test", nom="Test", prenom="Prof", champno=champ.champno)
+        db.session.add_all([cours, prof])
+        db.session.commit()
+
+        attribution = AttributionCours(enseignantid=prof.enseignantid, codecours=cours.codecours, annee_id_cours=cours.annee_id)
+        db.session.add(attribution)
+        db.session.commit()
+
+        with pytest.raises(ForeignKeyError) as excinfo:
+            delete_course_service("USED101", annee.annee_id)
+
+        assert "Impossible de supprimer" in str(excinfo.value)
+        assert db.session.query(Cours).count() == 1
