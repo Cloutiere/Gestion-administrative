@@ -110,90 +110,8 @@ def init_app(app: Flask) -> None:
 
 
 # --- Fonctions d'accès aux données (DAO) - Années Scolaires ---
-def get_all_annees() -> list[dict[str, Any]]:
-    """Récupère toutes les années scolaires, ordonnées par libellé décroissant."""
-    db_conn = get_db()
-    if not db_conn:
-        return []
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires ORDER BY libelle_annee DESC;")
-            return [dict(row) for row in cur.fetchall()]
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_all_annees: {e}")
-        return []
-
-
-def get_annee_courante() -> dict[str, Any] | None:
-    """Récupère l'année scolaire marquée comme courante."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires WHERE est_courante = TRUE;")
-            return dict(row) if (row := cur.fetchone()) else None
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_annee_courante: {e}")
-        return None
-
-
-def get_annee_by_id(annee_id: int) -> dict[str, Any] | None:
-    """Récupère une année scolaire par son ID."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT annee_id, libelle_annee, est_courante FROM anneesscolaires WHERE annee_id = %s;", (annee_id,))
-            return dict(row) if (row := cur.fetchone()) else None
-    except psycopg2.Error as e:
-        current_app.logger.error(f"Erreur DAO get_annee_by_id: {e}")
-        return None
-
-
-def create_annee_scolaire(libelle: str) -> dict[str, Any] | None:
-    """Crée une nouvelle année scolaire."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(
-                "INSERT INTO anneesscolaires (libelle_annee) VALUES (%s) RETURNING annee_id, libelle_annee, est_courante;",
-                (libelle,),
-            )
-            new_annee = cur.fetchone()
-            db_conn.commit()
-            return dict(new_annee) if new_annee else None
-    except psycopg2.errors.UniqueViolation:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.warning(f"Tentative de création d'une année scolaire existante: {libelle}")
-        return None
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO create_annee_scolaire: {e}")
-        return None
-
-
-def set_annee_courante(annee_id: int) -> bool:
-    """Définit une année scolaire comme courante."""
-    db_conn = get_db()
-    if not db_conn:
-        return False
-    try:
-        with db_conn.cursor() as cur:
-            cur.execute("UPDATE anneesscolaires SET est_courante = FALSE;")
-            cur.execute("UPDATE anneesscolaires SET est_courante = TRUE WHERE annee_id = %s;", (annee_id,))
-            db_conn.commit()
-            return cur.rowcount > 0
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO set_annee_courante pour annee_id {annee_id}: {e}")
-        return False
+# CETTE SECTION EST MAINTENANT VIDE CAR LA GESTION DES ANNÉES SCOLAIRES
+# EST ENTIÈREMENT GÉRÉE PAR L'ORM SQLAlchemy.
 
 
 # --- Fonctions d'accès aux données (DAO) - Utilisateurs ---
@@ -300,13 +218,6 @@ def toggle_champ_annee_lock_status(champ_no: str, annee_id: int) -> bool | None:
 def toggle_champ_annee_confirm_status(champ_no: str, annee_id: int) -> bool | None:
     """Bascule le statut de confirmation d'un champ pour une année donnée."""
     return _toggle_champ_annee_status(champ_no, annee_id, "est_confirme")
-
-
-# --- Fonctions DAO - Types de Financement ---
-# Cette section est maintenant vide.
-
-
-# ... le reste du fichier database.py reste identique ...
 
 
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---

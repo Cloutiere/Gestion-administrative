@@ -20,12 +20,12 @@ from psycopg2.extensions import connection as PgConnection
 
 # NOUVEAU : Imports pour SQLAlchemy ORM
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, noload
 
 # ANCIEN : On le garde pour les fonctions non encore refactorisées
 from . import database as old_db
 from .extensions import db
-from .models import Champ, Cours, TypeFinancement, User
+from .models import AnneeScolaire, Champ, Cours, TypeFinancement, User
 
 
 # --- Exceptions Personnalisées pour la Couche de Service ---
@@ -62,7 +62,6 @@ class ForeignKeyError(ServiceException):
     """Levée lorsqu'une suppression est bloquée par une contrainte de clé étrangère."""
 
     def __init__(self, message="Impossible de supprimer, cette entité est en cours d'utilisation."):
-        # CORRECTION : Utiliser la variable 'message' passée en argument, et non 'self.message'.
         self.message = message
         super().__init__(self.message)
 
@@ -93,7 +92,7 @@ def register_first_admin_service(username: str, password: str, confirm_password:
     return new_admin
 
 
-# ... (le reste du fichier est identique) ...
+# ... (le reste du fichier est identique jusqu'aux fonctions d'années scolaires) ...
 def process_courses_excel(file_stream: Any) -> list[dict[str, Any]]:
     nouveaux_cours: list[dict[str, Any]] = []
     try:
@@ -224,36 +223,73 @@ def save_imported_teachers(teachers_data: list[dict[str, Any]], annee_id: int) -
     return stats
 
 
+# --- SECTION REFACTORISÉE : Années Scolaires avec ORM ---
+
 def get_all_annees_service() -> list[dict[str, Any]]:
-    return old_db.get_all_annees()
+    """Récupère toutes les années scolaires via l'ORM, ordonnées par libellé décroissant."""
+    try:
+        annees = db.session.query(AnneeScolaire).order_by(AnneeScolaire.libelle_annee.desc()).all()
+        return [
+            {"annee_id": a.annee_id, "libelle_annee": a.libelle_annee, "est_courante": a.est_courante}
+            for a in annees
+        ]
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la récupération des années: {e}")
 
 
 def create_annee_scolaire_service(libelle: str) -> dict[str, Any]:
-    conn = cast(PgConnection | None, old_db.get_db())
-    if not conn:
-        raise ServiceException("Pas de connexion à la base de données.")
+    """
+    Crée une nouvelle année scolaire via l'ORM.
+    Si aucune année n'est courante, la nouvelle année le devient automatiquement.
+    """
+    if db.session.query(AnneeScolaire).filter_by(libelle_annee=libelle).first():
+        raise DuplicateEntityError(f"L'année '{libelle}' existe déjà.")
+
     try:
-        with conn.cursor():
-            annee_courante_existante = old_db.get_annee_courante() is not None
-            new_annee = old_db.create_annee_scolaire(libelle)
-            if not new_annee:
-                raise DuplicateEntityError(f"L'année '{libelle}' existe déjà.")
-            if not annee_courante_existante:
-                old_db.set_annee_courante(new_annee["annee_id"])
-                new_annee["est_courante"] = True
-            conn.commit()
-            return new_annee
-    except psycopg2.Error as e:
-        if conn:
-            conn.rollback()
+        annee_courante_existante = db.session.query(AnneeScolaire).filter_by(est_courante=True).first()
+
+        new_annee = AnneeScolaire(libelle_annee=libelle)
+        if not annee_courante_existante:
+            new_annee.est_courante = True
+
+        db.session.add(new_annee)
+        db.session.commit()
+
+        return {
+            "annee_id": new_annee.annee_id,
+            "libelle_annee": new_annee.libelle_annee,
+            "est_courante": new_annee.est_courante,
+        }
+    except IntegrityError:
+        db.session.rollback()
+        raise DuplicateEntityError(f"L'année '{libelle}' existe déjà.")
+    except Exception as e:
+        db.session.rollback()
         raise ServiceException(f"Erreur de base de données lors de la création de l'année: {e}")
 
 
 def set_annee_courante_service(annee_id: int) -> None:
-    if not old_db.get_annee_by_id(annee_id):
+    """
+    Définit une année scolaire comme courante via l'ORM, en assurant une transaction atomique.
+    """
+    # CORRECTION : Le bloc try/except a été enlevé pour laisser remonter EntityNotFoundError.
+    annee_a_definir = db.session.get(AnneeScolaire, annee_id)
+    if not annee_a_definir:
         raise EntityNotFoundError("Année non trouvée.")
-    if not old_db.set_annee_courante(annee_id):
-        raise ServiceException("La mise à jour de l'année courante a échoué.")
+
+    ancienne_annee_courante = db.session.query(AnneeScolaire).filter_by(est_courante=True).first()
+
+    if ancienne_annee_courante and ancienne_annee_courante.annee_id != annee_a_definir.annee_id:
+        ancienne_annee_courante.est_courante = False
+
+    annee_a_definir.est_courante = True
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        # On lève une ServiceException seulement en cas d'erreur de commit, pas pour un not found.
+        raise ServiceException(f"La mise à jour de l'année courante a échoué en base de données : {e}")
 
 
 def get_all_champs_service() -> list[dict[str, Any]]:
