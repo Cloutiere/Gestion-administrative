@@ -18,21 +18,23 @@ from mon_application.models import (
     TypeFinancement,
 )
 from mon_application.services import (
-    add_attribution_service,
     BusinessRuleValidationError,
+    DuplicateEntityError,
+    EntityNotFoundError,
+    ForeignKeyError,
+    ServiceException,
+    add_attribution_service,
     create_course_service,
     create_teacher_service,
     delete_attribution_service,
     delete_course_service,
     delete_teacher_service,
-    DuplicateEntityError,
-    EntityNotFoundError,
-    ForeignKeyError,
     get_course_details_service,
     get_teacher_details_service,
     save_imported_courses,
     save_imported_teachers,
-    ServiceException,
+    toggle_champ_confirm_service,
+    toggle_champ_lock_service,
     update_course_service,
     update_teacher_service,
 )
@@ -213,7 +215,14 @@ class TestCourseServices:
     def test_create_course_fails_on_duplicate(self, app, db):
         """Vérifie que la création échoue avec la bonne exception en cas de doublon."""
         annee, champ, _, _ = _setup_initial_data(db)
-        data = {"codecours": "TEST101", "champno": champ.champno, "coursdescriptif": "Cours test", "nbperiodes": 4, "nbgroupeinitial": 1, "estcoursautre": False}
+        data = {
+            "codecours": "TEST101",
+            "champno": champ.champno,
+            "coursdescriptif": "Cours test",
+            "nbperiodes": 4,
+            "nbgroupeinitial": 1,
+            "estcoursautre": False,
+        }
         create_course_service(data, annee.annee_id)
 
         with pytest.raises(DuplicateEntityError) as excinfo:
@@ -223,7 +232,15 @@ class TestCourseServices:
     def test_get_course_details_success(self, app, db):
         """Vérifie que les détails d'un cours sont bien retournés."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Détails", nbperiodes=5, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="TEST101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="Détails",
+            nbperiodes=5,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         db.session.add(cours)
         db.session.commit()
 
@@ -240,7 +257,15 @@ class TestCourseServices:
     def test_update_course_success(self, app, db):
         """Vérifie la mise à jour réussie d'un cours."""
         annee, champ, champ_fran, _ = _setup_initial_data(db)
-        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Original", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="TEST101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="Original",
+            nbperiodes=1,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         db.session.add(cours)
         db.session.commit()
 
@@ -262,7 +287,15 @@ class TestCourseServices:
     def test_delete_course_success(self, app, db):
         """Vérifie la suppression réussie d'un cours non utilisé."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(codecours="TEST101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="A supprimer", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="TEST101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="A supprimer",
+            nbperiodes=1,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         db.session.add(cours)
         db.session.commit()
         assert db.session.query(Cours).count() == 1
@@ -273,7 +306,15 @@ class TestCourseServices:
     def test_delete_course_fails_on_fk_constraint(self, app, db):
         """Vérifie que la suppression échoue si le cours est utilisé par une attribution."""
         annee, champ, _, _ = _setup_initial_data(db)
-        cours = Cours(codecours="USED101", annee_id=annee.annee_id, champno=champ.champno, coursdescriptif="Utilisé", nbperiodes=1, nbgroupeinitial=1, estcoursautre=False)
+        cours = Cours(
+            codecours="USED101",
+            annee_id=annee.annee_id,
+            champno=champ.champno,
+            coursdescriptif="Utilisé",
+            nbperiodes=1,
+            nbgroupeinitial=1,
+            estcoursautre=False,
+        )
         prof = Enseignant(annee_id=annee.annee_id, nomcomplet="Prof Test", nom="Test", prenom="Prof", champno=champ.champno)
         db.session.add_all([cours, prof])
         db.session.commit()
@@ -479,3 +520,57 @@ class TestAttributionServices:
         with pytest.raises(BusinessRuleValidationError, match="champ est verrouillé"):
             delete_attribution_service(attr.attributionid)
         assert db.session.query(AttributionCours).count() == 1
+
+
+class TestChampStatusServices:
+    """Regroupe les tests pour les services de bascule de statut de champ."""
+
+    def test_toggle_lock_service_flow(self, app, db):
+        """Vérifie la séquence de bascule complète pour le verrouillage."""
+        annee, champ, _, _ = _setup_initial_data(db)
+
+        # 1. Premier toggle : Crée l'entrée et la met à True
+        nouveau_statut = toggle_champ_lock_service(champ.champno, annee.annee_id)
+        assert nouveau_statut is True
+        status_in_db = db.session.query(ChampAnneeStatut).one()
+        assert status_in_db.est_verrouille is True
+        assert status_in_db.est_confirme is False
+
+        # 2. Deuxième toggle : Met à jour à False
+        nouveau_statut = toggle_champ_lock_service(champ.champno, annee.annee_id)
+        assert nouveau_statut is False
+        db.session.refresh(status_in_db)
+        assert status_in_db.est_verrouille is False
+
+        # 3. Troisième toggle : Remet à True
+        nouveau_statut = toggle_champ_lock_service(champ.champno, annee.annee_id)
+        assert nouveau_statut is True
+        db.session.refresh(status_in_db)
+        assert status_in_db.est_verrouille is True
+
+    def test_toggle_confirm_service_flow(self, app, db):
+        """Vérifie la séquence de bascule pour la confirmation."""
+        annee, champ, _, _ = _setup_initial_data(db)
+
+        # Premier toggle : Crée l'entrée et la met à True
+        nouveau_statut = toggle_champ_confirm_service(champ.champno, annee.annee_id)
+        assert nouveau_statut is True
+        status_in_db = db.session.query(ChampAnneeStatut).one()
+        assert status_in_db.est_confirme is True
+        assert status_in_db.est_verrouille is False
+
+    def test_toggles_are_independent(self, app, db):
+        """Vérifie que basculer un statut n'affecte pas l'autre."""
+        annee, champ, _, _ = _setup_initial_data(db)
+
+        # Verrouiller le champ
+        toggle_champ_lock_service(champ.champno, annee.annee_id)
+        status_in_db = db.session.query(ChampAnneeStatut).one()
+        assert status_in_db.est_verrouille is True
+        assert status_in_db.est_confirme is False
+
+        # Confirmer le champ
+        toggle_champ_confirm_service(champ.champno, annee.annee_id)
+        db.session.refresh(status_in_db)
+        assert status_in_db.est_verrouille is True  # Ne doit pas avoir changé
+        assert status_in_db.est_confirme is True

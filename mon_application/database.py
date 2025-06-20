@@ -149,48 +149,6 @@ def get_all_champ_statuses_for_year(annee_id: int) -> dict[str, dict[str, bool]]
         return {}
 
 
-def _toggle_champ_annee_status(champ_no: str, annee_id: int, status_column: str) -> bool | None:
-    """Fonction utilitaire pour basculer un statut booléen pour un champ/année."""
-    db_conn = get_db()
-    if not db_conn:
-        return None
-    if status_column not in ("est_verrouille", "est_confirme"):
-        current_app.logger.error(f"Tentative de basculer une colonne de statut invalide: {status_column}")
-        return None
-
-    try:
-        with db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            query = psycopg2.sql.SQL(
-                """
-                INSERT INTO champ_annee_statuts (champ_no, annee_id, {col})
-                VALUES (%s, %s, TRUE)
-                ON CONFLICT (champ_no, annee_id)
-                DO UPDATE SET {col} = NOT champ_annee_statuts.{col}
-                RETURNING {col};
-                """
-            ).format(col=psycopg2.sql.Identifier(status_column))
-
-            cur.execute(query, (champ_no, annee_id))
-            result = cur.fetchone()
-            db_conn.commit()
-            return result[status_column] if result else None
-    except psycopg2.Error as e:
-        if db_conn:
-            db_conn.rollback()
-        current_app.logger.error(f"Erreur DAO _toggle_champ_annee_status pour {champ_no}, annee {annee_id}: {e}")
-        return None
-
-
-def toggle_champ_annee_lock_status(champ_no: str, annee_id: int) -> bool | None:
-    """Bascule le statut de verrouillage d'un champ pour une année donnée."""
-    return _toggle_champ_annee_status(champ_no, annee_id, "est_verrouille")
-
-
-def toggle_champ_annee_confirm_status(champ_no: str, annee_id: int) -> bool | None:
-    """Bascule le statut de confirmation d'un champ pour une année donnée."""
-    return _toggle_champ_annee_status(champ_no, annee_id, "est_confirme")
-
-
 # --- Fonctions DAO - Année-dépendantes (Enseignants, Cours, Attributions) ---
 def get_enseignants_par_champ(champ_no: str, annee_id: int) -> list[dict[str, Any]]:
     """Récupère les enseignants d'un champ pour une année donnée."""

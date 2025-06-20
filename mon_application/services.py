@@ -347,18 +347,53 @@ def get_all_champs_service() -> list[dict[str, Any]]:
         raise ServiceException(f"Erreur ORM lors de la récupération des champs : {e}")
 
 
+def _toggle_champ_status_service(champ_no: str, annee_id: int, status_attribute: str) -> bool:
+    """
+    Fonction helper pour basculer un statut booléen sur ChampAnneeStatut.
+    Crée l'entrée si elle n'existe pas (logique UPSERT).
+    """
+    if status_attribute not in ("est_verrouille", "est_confirme"):
+        raise ValueError("Attribut de statut invalide.")
+
+    status = db.session.query(ChampAnneeStatut).filter_by(champ_no=champ_no, annee_id=annee_id).first()
+
+    new_value: bool
+    if status:
+        current_value = getattr(status, status_attribute)
+        new_value = not current_value
+        setattr(status, status_attribute, new_value)
+    else:
+        # Le premier toggle met toujours à True
+        new_value = True
+        status = ChampAnneeStatut(champ_no=champ_no, annee_id=annee_id)
+        setattr(status, status_attribute, new_value)
+        db.session.add(status)
+
+    try:
+        db.session.commit()
+        return new_value
+    except IntegrityError as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur d'intégrité : le champ ou l'année n'existe pas. Détails: {e}")
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la mise à jour du statut: {e}")
+
+
 def toggle_champ_lock_service(champ_no: str, annee_id: int) -> bool:
-    nouveau_statut = old_db.toggle_champ_annee_lock_status(champ_no, annee_id)
-    if nouveau_statut is None:
-        raise ServiceException(f"Impossible de modifier le verrou du champ {champ_no}.")
-    return nouveau_statut
+    """Bascule le statut de verrouillage d'un champ pour une année donnée via l'ORM."""
+    try:
+        return _toggle_champ_status_service(champ_no, annee_id, "est_verrouille")
+    except ValueError:  # Devrait être impossible, mais par sécurité
+        raise ServiceException("Erreur interne: attribut de statut invalide.")
 
 
 def toggle_champ_confirm_service(champ_no: str, annee_id: int) -> bool:
-    nouveau_statut = old_db.toggle_champ_annee_confirm_status(champ_no, annee_id)
-    if nouveau_statut is None:
-        raise ServiceException(f"Impossible de modifier la confirmation du champ {champ_no}.")
-    return nouveau_statut
+    """Bascule le statut de confirmation d'un champ pour une année donnée via l'ORM."""
+    try:
+        return _toggle_champ_status_service(champ_no, annee_id, "est_confirme")
+    except ValueError:
+        raise ServiceException("Erreur interne: attribut de statut invalide.")
 
 
 def _cours_to_dict(cours: Cours) -> dict[str, Any]:
