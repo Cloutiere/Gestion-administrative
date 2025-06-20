@@ -26,11 +26,8 @@ dependencies = [
 dev = [
     "ruff",
     "pytest>=8.0.0",
-    # pytest-flask a été supprimé
     "python-dotenv>=1.0.0",
 ]
-
-# ... le reste du fichier est correct et reste identique ...
 
 # --- Configuration de Ruff (Linter et Formateur) ---
 [tool.ruff]
@@ -57,7 +54,7 @@ exclude = [
     "venv",
     "migrations",
 ]
-line-length = 150
+line-length = 200
 target-version = "py311"
 
 # --- Configuration du Linter de Ruff ([tool.ruff.lint]) ---

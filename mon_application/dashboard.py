@@ -119,9 +119,7 @@ def api_changer_annee_active() -> tuple[Response, int]:
     toutes_les_annees = cast(list[dict[str, Any]], getattr(g, "toutes_les_annees", []))
     annee_selectionnee = next((annee for annee in toutes_les_annees if annee["annee_id"] == annee_id), None)
     if annee_selectionnee:
-        current_app.logger.info(
-            f"Année de travail changée pour l'utilisateur '{current_user.username}' : " f"'{annee_selectionnee['libelle_annee']}'."
-        )
+        current_app.logger.info(f"Année de travail changée pour l'utilisateur '{current_user.username}' : " f"'{annee_selectionnee['libelle_annee']}'.")
     return jsonify({"success": True, "message": "Année de travail changée."}), 200
 
 

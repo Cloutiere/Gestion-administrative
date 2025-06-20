@@ -55,9 +55,7 @@ def register() -> str | Response:
 
     if request.method == "POST":
         try:
-            user = register_first_admin_service(
-                request.form["username"].strip(), request.form["password"].strip(), request.form["confirm_password"].strip()
-            )
+            user = register_first_admin_service(request.form["username"].strip(), request.form["password"].strip(), request.form["confirm_password"].strip())
             db.session.commit()
             flash(f"Compte admin '{user.username}' créé avec succès! Vous pouvez maintenant vous connecter.", "success")
             return redirect(url_for("auth.login"))

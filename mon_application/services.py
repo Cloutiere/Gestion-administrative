@@ -16,8 +16,9 @@ import openpyxl
 import psycopg2
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
+from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import aliased, joinedload
 
 # ANCIEN : On le garde pour les fonctions non encore refactorisées
 from . import database as old_db
@@ -163,9 +164,7 @@ def save_imported_courses(courses_data: list[dict[str, Any]], annee_id: int) -> 
     try:
         # Étape 1 : Compter les attributions qui seront supprimées par cascade pour les stats.
         # On le fait avant la suppression.
-        stats.deleted_attributions_count = (
-            db.session.query(AttributionCours.attributionid).filter(AttributionCours.annee_id_cours == annee_id).count()
-        )
+        stats.deleted_attributions_count = db.session.query(AttributionCours.attributionid).filter(AttributionCours.annee_id_cours == annee_id).count()
 
         # Étape 2 : Supprimer tous les cours de l'année.
         # L'option synchronize_session=False est plus performante pour les suppressions en masse.
@@ -242,10 +241,7 @@ def save_imported_teachers(teachers_data: list[dict[str, Any]], annee_id: int) -
     try:
         # Étape 1 : Compter les attributions qui seront supprimées par cascade
         stats.deleted_attributions_count = (
-            db.session.query(AttributionCours.attributionid)
-            .join(Enseignant, Enseignant.enseignantid == AttributionCours.enseignantid)
-            .filter(Enseignant.annee_id == annee_id)
-            .count()
+            db.session.query(AttributionCours.attributionid).join(Enseignant, Enseignant.enseignantid == AttributionCours.enseignantid).filter(Enseignant.annee_id == annee_id).count()
         )
 
         # Étape 2 : Supprimer tous les enseignants de l'année.
@@ -588,11 +584,7 @@ def delete_teacher_service(enseignant_id: int) -> list[dict[str, Any]]:
 def create_fictitious_teacher_service(champ_no: str, annee_id: int) -> dict[str, Any]:
     try:
         fictifs_existants = old_db.get_fictif_enseignants_by_champ(champ_no, annee_id)
-        numeros = [
-            int(f["nomcomplet"].split("-")[-1])
-            for f in fictifs_existants
-            if f["nomcomplet"].startswith(f"{champ_no}-Tâche restante-") and f["nomcomplet"].split("-")[-1].isdigit()
-        ]
+        numeros = [int(f["nomcomplet"].split("-")[-1]) for f in fictifs_existants if f["nomcomplet"].startswith(f"{champ_no}-Tâche restante-") and f["nomcomplet"].split("-")[-1].isdigit()]
         next_num = max(numeros) + 1 if numeros else 1
         nom_tache = f"{champ_no}-Tâche restante-{next_num}"
         nouveau_fictif = old_db.create_fictif_enseignant(nom_tache, champ_no, annee_id)
@@ -868,7 +860,98 @@ def get_data_for_user_admin_page_service() -> dict[str, Any]:
 
 
 def get_dashboard_summary_service(annee_id: int) -> dict[str, Any]:
-    return old_db.get_dashboard_summary_data(annee_id)
+    """Service principal qui orchestre la récupération des données du tableau de bord."""
+    try:
+        return get_dashboard_summary_service_orm(annee_id)
+    except Exception as e:
+        # Log de l'erreur originale pour le débogage
+        # current_app.logger.error(f"Erreur ORM dans get_dashboard_summary_service: {e}", exc_info=True)
+        # Retourne une ServiceException pour une gestion propre dans la couche supérieure
+        raise ServiceException(f"Erreur lors du calcul du sommaire du tableau de bord: {e}")
+
+
+def get_dashboard_summary_service_orm(annee_id: int) -> dict[str, Any]:
+    """Calcule et récupère les données du tableau de bord en utilisant SQLAlchemy ORM."""
+    # Étape 1: Créer une sous-requête pour calculer les périodes totales par enseignant
+    ac_alias = aliased(AttributionCours)
+    c_alias = aliased(Cours)
+    teacher_periods_subquery = (
+        db.session.query(Enseignant.enseignantid, func.coalesce(func.sum(c_alias.nbperiodes * ac_alias.nbgroupespris), 0).label("total_periodes"))
+        .outerjoin(ac_alias, Enseignant.enseignantid == ac_alias.enseignantid)
+        .outerjoin(c_alias, (ac_alias.codecours == c_alias.codecours) & (ac_alias.annee_id_cours == c_alias.annee_id))
+        .filter(Enseignant.annee_id == annee_id)
+        .group_by(Enseignant.enseignantid)
+        .subquery()
+    )
+    tps_alias = aliased(teacher_periods_subquery, name="tps")
+
+    # Étape 2: Agréger les statistiques par champ
+    is_tp_non_fictif = (Enseignant.esttempsplein == True) & (Enseignant.estfictif == False)  # noqa: E712
+    champ_stats_query = (
+        db.session.query(
+            Enseignant.champno,
+            func.count(case((is_tp_non_fictif, Enseignant.enseignantid), else_=None)).label("nb_enseignants_tp"),
+            func.coalesce(func.sum(case((is_tp_non_fictif, tps_alias.c.total_periodes), else_=0)), 0).label("periodes_choisies_tp"),
+        )
+        .join(tps_alias, Enseignant.enseignantid == tps_alias.c.enseignantid)
+        .filter(Enseignant.annee_id == annee_id)
+        .group_by(Enseignant.champno)
+        .subquery()
+    )
+    cs_alias = aliased(champ_stats_query, name="cs")
+
+    # Étape 3: Requête finale pour joindre toutes les infos
+    all_champs_data = (
+        db.session.query(
+            Champ.champno,
+            Champ.champnom,
+            func.coalesce(ChampAnneeStatut.est_verrouille, False).label("est_verrouille"),
+            func.coalesce(ChampAnneeStatut.est_confirme, False).label("est_confirme"),
+            func.coalesce(cs_alias.c.nb_enseignants_tp, 0).label("nb_enseignants_tp"),
+            func.coalesce(cs_alias.c.periodes_choisies_tp, 0).label("periodes_choisies_tp"),
+        )
+        .outerjoin(cs_alias, Champ.champno == cs_alias.c.champno)
+        .outerjoin(ChampAnneeStatut, (Champ.champno == ChampAnneeStatut.champ_no) & (ChampAnneeStatut.annee_id == annee_id))
+        .order_by(Champ.champno)
+        .all()
+    )
+
+    # Étape 4: Calculs finaux et formatage en Python
+    moyennes_par_champ = {}
+    for row in all_champs_data:
+        nb_tp = int(row.nb_enseignants_tp)
+        periodes_tp = float(row.periodes_choisies_tp)
+        moyenne = (periodes_tp / nb_tp) if nb_tp > 0 else 0.0
+        moyennes_par_champ[row.champno] = {
+            "champ_nom": row.champnom,
+            "est_verrouille": row.est_verrouille,
+            "est_confirme": row.est_confirme,
+            "nb_enseignants_tp": nb_tp,
+            "periodes_choisies_tp": periodes_tp,
+            "moyenne": moyenne,
+            "periodes_magiques": periodes_tp - (nb_tp * 24),
+        }
+
+    total_periodes_global_tp = sum(r["periodes_choisies_tp"] for r in moyennes_par_champ.values())
+    nb_enseignants_tp_global = sum(r["nb_enseignants_tp"] for r in moyennes_par_champ.values())
+    total_periodes_confirme_tp = sum(r["periodes_choisies_tp"] for r in moyennes_par_champ.values() if r["est_confirme"])
+    nb_enseignants_confirme_tp = sum(r["nb_enseignants_tp"] for r in moyennes_par_champ.values() if r["est_confirme"])
+
+    moyenne_generale = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
+    moyenne_prelim_conf = (total_periodes_confirme_tp / nb_enseignants_confirme_tp) if nb_enseignants_confirme_tp > 0 else 0.0
+
+    grand_totals = {
+        "total_enseignants_tp": float(nb_enseignants_tp_global),
+        "total_periodes_choisies_tp": total_periodes_global_tp,
+        "total_periodes_magiques": sum(r["periodes_magiques"] for r in moyennes_par_champ.values()),
+    }
+
+    return {
+        "moyennes_par_champ": moyennes_par_champ,
+        "moyenne_generale": moyenne_generale,
+        "moyenne_preliminaire_confirmee": moyenne_prelim_conf,
+        "grand_totals": grand_totals,
+    }
 
 
 def get_detailed_tasks_data_service(annee_id: int) -> list[dict[str, Any]]:

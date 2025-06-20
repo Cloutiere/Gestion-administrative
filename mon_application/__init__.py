@@ -55,9 +55,7 @@ def get_database_uri() -> str:
     return f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
 
-def determine_active_school_year(
-    toutes_les_annees: list[dict[str, Any]], has_dashboard_access: bool, annee_id_session: int | None
-) -> dict[str, Any] | None:
+def determine_active_school_year(toutes_les_annees: list[dict[str, Any]], has_dashboard_access: bool, annee_id_session: int | None) -> dict[str, Any] | None:
     """Détermine l'année scolaire active à afficher."""
     from . import database as old_db
 

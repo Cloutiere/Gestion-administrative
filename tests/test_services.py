@@ -30,6 +30,7 @@ from mon_application.services import (
     delete_course_service,
     delete_teacher_service,
     get_course_details_service,
+    get_dashboard_summary_service_orm,
     get_teacher_details_service,
     save_imported_courses,
     save_imported_teachers,
@@ -574,3 +575,95 @@ class TestChampStatusServices:
         db.session.refresh(status_in_db)
         assert status_in_db.est_verrouille is True  # Ne doit pas avoir changé
         assert status_in_db.est_confirme is True
+
+
+class TestDashboardServices:
+    """Regroupe les tests pour les services liés au tableau de bord."""
+
+    def test_get_dashboard_summary_service_orm_logic(self, app, db):
+        """Vérifie la logique de calcul complexe du sommaire du tableau de bord."""
+        # --- Arrange ---
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee_id = annee.annee_id
+        champ_scie = Champ(champno="SCIE", champnom="Sciences")
+        db.session.add(champ_scie)
+
+        # Enseignants
+        tp_math_1 = Enseignant(annee_id=annee_id, nom="Gauss", prenom="Carl", nomcomplet="Carl Gauss", champno="MATH", esttempsplein=True)
+        tp_math_2 = Enseignant(annee_id=annee_id, nom="Euler", prenom="Leonhard", nomcomplet="Leonhard Euler", champno="MATH", esttempsplein=True)
+        pp_math = Enseignant(annee_id=annee_id, nom="Noether", prenom="Emmy", nomcomplet="Emmy Noether", champno="MATH", esttempsplein=False)
+        tp_fran_1 = Enseignant(annee_id=annee_id, nom="Hugo", prenom="Victor", nomcomplet="Victor Hugo", champno="FRAN", esttempsplein=True)
+        tp_fran_2 = Enseignant(annee_id=annee_id, nom="Dumas", prenom="Alexandre", nomcomplet="Alexandre Dumas", champno="FRAN", esttempsplein=True)
+        fictif_fran = Enseignant(annee_id=annee_id, nomcomplet="Tâche FRAN", champno="FRAN", estfictif=True)
+        db.session.add_all([tp_math_1, tp_math_2, pp_math, tp_fran_1, tp_fran_2, fictif_fran])
+
+        # Cours
+        cours_m1 = Cours(codecours="M1", annee_id=annee_id, champno="MATH", coursdescriptif="Algèbre", nbperiodes=2.5, nbgroupeinitial=1)
+        cours_m2 = Cours(codecours="M2", annee_id=annee_id, champno="MATH", coursdescriptif="Analyse", nbperiodes=3.0, nbgroupeinitial=1)
+        cours_f1 = Cours(codecours="F1", annee_id=annee_id, champno="FRAN", coursdescriptif="Littérature", nbperiodes=4.0, nbgroupeinitial=1)
+        db.session.add_all([cours_m1, cours_m2, cours_f1])
+        db.session.commit()
+
+        # Attributions
+        db.session.add_all(
+            [
+                AttributionCours(enseignantid=tp_math_1.enseignantid, codecours="M1", annee_id_cours=annee_id),  # 2.5 p
+                AttributionCours(enseignantid=tp_math_2.enseignantid, codecours="M2", annee_id_cours=annee_id),  # 3.0 p
+                AttributionCours(enseignantid=pp_math.enseignantid, codecours="M1", annee_id_cours=annee_id),  # Non compté
+                AttributionCours(enseignantid=tp_fran_1.enseignantid, codecours="F1", annee_id_cours=annee_id),  # 4.0 p
+                AttributionCours(enseignantid=fictif_fran.enseignantid, codecours="F1", annee_id_cours=annee_id),  # Non compté
+            ]
+        )
+
+        # Statuts de champ
+        db.session.add(ChampAnneeStatut(champ_no="MATH", annee_id=annee_id, est_confirme=True))
+        db.session.add(ChampAnneeStatut(champ_no="FRAN", annee_id=annee_id, est_verrouille=True))
+        db.session.commit()
+
+        # --- Act ---
+        summary = get_dashboard_summary_service_orm(annee_id)
+
+        # --- Assert ---
+        assert "moyennes_par_champ" in summary
+        champs_summary = summary["moyennes_par_champ"]
+        assert len(champs_summary) == 3  # MATH, FRAN, SCIE
+
+        # Vérification pour MATH (confirmé)
+        math_summary = champs_summary["MATH"]
+        assert math_summary["champ_nom"] == "Mathématiques"
+        assert math_summary["est_verrouille"] is False
+        assert math_summary["est_confirme"] is True
+        assert math_summary["nb_enseignants_tp"] == 2  # Gauss, Euler
+        assert math_summary["periodes_choisies_tp"] == pytest.approx(2.5 + 3.0)
+        assert math_summary["moyenne"] == pytest.approx((2.5 + 3.0) / 2)
+        assert math_summary["periodes_magiques"] == pytest.approx(5.5 - (2 * 24))
+
+        # Vérification pour FRAN (verrouillé)
+        fran_summary = champs_summary["FRAN"]
+        assert fran_summary["champ_nom"] == "Français"
+        assert fran_summary["est_verrouille"] is True
+        assert fran_summary["est_confirme"] is False
+        assert fran_summary["nb_enseignants_tp"] == 2  # Hugo, Dumas
+        assert fran_summary["periodes_choisies_tp"] == pytest.approx(4.0)  # Dumas a 0 période
+        assert fran_summary["moyenne"] == pytest.approx(4.0 / 2)
+        assert fran_summary["periodes_magiques"] == pytest.approx(4.0 - (2 * 24))
+
+        # Vérification pour SCIE (aucun enseignant, aucun statut)
+        scie_summary = champs_summary["SCIE"]
+        assert scie_summary["champ_nom"] == "Sciences"
+        assert scie_summary["est_verrouille"] is False
+        assert scie_summary["est_confirme"] is False
+        assert scie_summary["nb_enseignants_tp"] == 0
+        assert scie_summary["periodes_choisies_tp"] == 0.0
+        assert scie_summary["moyenne"] == 0.0
+        assert scie_summary["periodes_magiques"] == 0.0
+
+        # Vérification des totaux et moyennes globales
+        grand_totals = summary["grand_totals"]
+        assert grand_totals["total_enseignants_tp"] == 4  # 2 MATH + 2 FRAN
+        assert grand_totals["total_periodes_choisies_tp"] == pytest.approx(5.5 + 4.0)
+        assert grand_totals["total_periodes_magiques"] == pytest.approx((5.5 - 48) + (4.0 - 48))
+
+        assert summary["moyenne_generale"] == pytest.approx(9.5 / 4)
+        # Seul MATH est confirmé
+        assert summary["moyenne_preliminaire_confirmee"] == pytest.approx(5.5 / 2)
