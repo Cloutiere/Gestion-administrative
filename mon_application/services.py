@@ -13,7 +13,6 @@ from collections import defaultdict
 from typing import Any, cast
 
 import openpyxl
-import psycopg2
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 from sqlalchemy import case, func
@@ -32,6 +31,7 @@ from .models import (
     ChampAnneeStatut,
     Cours,
     Enseignant,
+    PreparationHoraire,
     TypeFinancement,
     User,
 )
@@ -343,6 +343,31 @@ def get_all_champs_service() -> list[dict[str, Any]]:
         raise ServiceException(f"Erreur ORM lors de la récupération des champs : {e}")
 
 
+def get_champ_details_service(champ_no: str, annee_id: int) -> dict[str, Any]:
+    """Récupère les détails d'un champ et ses statuts pour une année donnée via l'ORM."""
+    champ = db.session.get(Champ, champ_no)
+    if not champ:
+        raise EntityNotFoundError(f"Le champ '{champ_no}' n'a pas été trouvé.")
+
+    statut = db.session.query(ChampAnneeStatut).filter_by(champ_no=champ_no, annee_id=annee_id).first()
+
+    return {
+        "ChampNo": champ.champno,
+        "ChampNom": champ.champnom,
+        "est_verrouille": statut.est_verrouille if statut else False,
+        "est_confirme": statut.est_confirme if statut else False,
+    }
+
+
+def get_all_champ_statuses_for_year_service(annee_id: int) -> dict[str, dict[str, bool]]:
+    """Récupère les statuts (verrouillé/confirmé) de tous les champs pour une année via l'ORM."""
+    try:
+        statuses_orm = db.session.query(ChampAnneeStatut).filter_by(annee_id=annee_id).all()
+        return {status.champ_no: {"est_verrouille": status.est_verrouille, "est_confirme": status.est_confirme} for status in statuses_orm}
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la récupération des statuts de champs : {e}")
+
+
 def _toggle_champ_status_service(champ_no: str, annee_id: int, status_attribute: str) -> bool:
     """
     Fonction helper pour basculer un statut booléen sur ChampAnneeStatut.
@@ -476,21 +501,43 @@ def delete_course_service(code_cours: str, annee_id: int) -> None:
 
 
 def reassign_course_to_champ_service(code_cours: str, annee_id: int, nouveau_champ_no: str) -> dict[str, Any]:
+    """Réassigne un cours à un nouveau champ en utilisant l'ORM."""
+    cours = db.session.get(Cours, {"codecours": code_cours, "annee_id": annee_id})
+    if not cours:
+        raise EntityNotFoundError(f"Cours {code_cours} non trouvé pour l'année {annee_id}.")
+
+    nouveau_champ = db.session.get(Champ, nouveau_champ_no)
+    if not nouveau_champ:
+        raise BusinessRuleValidationError(f"Le champ de destination '{nouveau_champ_no}' est invalide.")
+
     try:
-        result = old_db.reassign_cours_to_champ(code_cours, annee_id, nouveau_champ_no)
-        if not result:
-            raise ServiceException("Impossible de réassigner le cours (champ invalide ou cours non trouvé).")
-        return result
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+        cours.champno = nouveau_champ_no
+        db.session.commit()
+        return {
+            "nouveau_champ_no": nouveau_champ.champno,
+            "nouveau_champ_nom": nouveau_champ.champnom,
+        }
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la réassignation du cours: {e}")
 
 
 def reassign_course_to_financement_service(code_cours: str, annee_id: int, code_financement: str | None) -> None:
+    """Réassigne un cours à un nouveau type de financement en utilisant l'ORM."""
+    cours = db.session.get(Cours, {"codecours": code_cours, "annee_id": annee_id})
+    if not cours:
+        raise EntityNotFoundError(f"Cours {code_cours} non trouvé pour l'année {annee_id}.")
+
+    # Valider que le financement existe s'il n'est pas None
+    if code_financement and not db.session.get(TypeFinancement, code_financement):
+        raise BusinessRuleValidationError(f"Le type de financement '{code_financement}' est invalide.")
+
     try:
-        if not old_db.reassign_cours_to_financement(code_cours, annee_id, code_financement):
-            raise ServiceException("Impossible de réassigner le financement (cours non trouvé).")
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+        cours.financement_code = code_financement
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la réassignation du financement: {e}")
 
 
 def _enseignant_to_dict(enseignant: Enseignant) -> dict[str, Any]:
@@ -582,17 +629,46 @@ def delete_teacher_service(enseignant_id: int) -> list[dict[str, Any]]:
 
 
 def create_fictitious_teacher_service(champ_no: str, annee_id: int) -> dict[str, Any]:
+    """Crée un enseignant fictif (tâche) pour un champ/année via l'ORM."""
     try:
-        fictifs_existants = old_db.get_fictif_enseignants_by_champ(champ_no, annee_id)
-        numeros = [int(f["nomcomplet"].split("-")[-1]) for f in fictifs_existants if f["nomcomplet"].startswith(f"{champ_no}-Tâche restante-") and f["nomcomplet"].split("-")[-1].isdigit()]
+        # 1. Récupérer les tâches existantes pour ce champ avec l'ORM
+        fictifs_existants = (
+            db.session.query(Enseignant)
+            .filter(
+                Enseignant.champno == champ_no,
+                Enseignant.annee_id == annee_id,
+                Enseignant.estfictif == True,  # noqa: E712
+                Enseignant.nomcomplet.like(f"{champ_no}-Tâche restante-%"),
+            )
+            .all()
+        )
+
+        # 2. Déterminer le prochain numéro disponible
+        numeros = [int(f.nomcomplet.split("-")[-1]) for f in fictifs_existants if f.nomcomplet.split("-")[-1].isdigit()]
         next_num = max(numeros) + 1 if numeros else 1
         nom_tache = f"{champ_no}-Tâche restante-{next_num}"
-        nouveau_fictif = old_db.create_fictif_enseignant(nom_tache, champ_no, annee_id)
-        if not nouveau_fictif:
-            raise ServiceException("La création de la tâche restante a échoué.")
-        return nouveau_fictif
-    except psycopg2.Error as e:
-        raise ServiceException(f"Erreur de base de données: {e}")
+
+        # 3. Créer le nouvel objet Enseignant
+        nouveau_fictif = Enseignant(
+            annee_id=annee_id,
+            nomcomplet=nom_tache,
+            champno=champ_no,
+            estfictif=True,
+            esttempsplein=True,  # Les tâches sont considérées TP par défaut
+        )
+
+        # 4. Sauvegarder et commiter la transaction
+        db.session.add(nouveau_fictif)
+        db.session.commit()
+
+        return _enseignant_to_dict(nouveau_fictif)
+    except IntegrityError as e:
+        db.session.rollback()
+        # Devrait être rare, mais peut arriver si le champ_no n'existe pas
+        raise ServiceException(f"Erreur d'intégrité lors de la création de la tâche: {e}")
+    except Exception as e:
+        db.session.rollback()
+        raise ServiceException(f"Erreur de base de données lors de la création de la tâche: {e}")
 
 
 def get_all_financements_service() -> list[dict[str, Any]]:
@@ -836,13 +912,49 @@ def delete_attribution_service(attribution_id: int) -> dict[str, Any]:
         raise ServiceException(f"Échec de la suppression de l'attribution : {e}")
 
 
+def _get_all_cours_grouped_by_champ_orm(annee_id: int) -> dict[str, dict[str, Any]]:
+    """Récupère tous les cours d'une année via l'ORM, regroupés par champ."""
+    cours_list = db.session.query(Cours).options(joinedload(Cours.champ)).filter(Cours.annee_id == annee_id).order_by(Cours.champno, Cours.codecours).all()
+
+    cours_par_champ: defaultdict[str, dict[str, Any]] = defaultdict(lambda: {"champ_nom": "", "cours": []})
+    for cours in cours_list:
+        champ_no = cours.champno
+        if not cours_par_champ[champ_no]["champ_nom"]:
+            cours_par_champ[champ_no]["champ_nom"] = cours.champ.champnom
+        cours_par_champ[champ_no]["cours"].append(_cours_to_dict(cours))
+    return dict(cours_par_champ)
+
+
+def _get_all_enseignants_grouped_by_champ_orm(annee_id: int) -> dict[str, dict[str, Any]]:
+    """Récupère tous les enseignants d'une année via l'ORM, regroupés par champ."""
+    enseignants_list = (
+        db.session.query(Enseignant)
+        .options(joinedload(Enseignant.champ))
+        .filter(Enseignant.annee_id == annee_id, Enseignant.estfictif == False)  # noqa: E712
+        .order_by(Enseignant.champno, Enseignant.nom, Enseignant.prenom)
+        .all()
+    )
+
+    enseignants_par_champ: defaultdict[str, dict[str, Any]] = defaultdict(lambda: {"champ_nom": "", "enseignants": []})
+    for enseignant in enseignants_list:
+        champ_no = enseignant.champno
+        if not enseignants_par_champ[champ_no]["champ_nom"]:
+            enseignants_par_champ[champ_no]["champ_nom"] = enseignant.champ.champnom
+        enseignants_par_champ[champ_no]["enseignants"].append(_enseignant_to_dict(enseignant))
+    return dict(enseignants_par_champ)
+
+
 def get_data_for_admin_page_service(annee_id: int) -> dict[str, Any]:
-    return {
-        "cours_par_champ": old_db.get_all_cours_grouped_by_champ(annee_id),
-        "enseignants_par_champ": old_db.get_all_enseignants_grouped_by_champ(annee_id),
-        "tous_les_champs": get_all_champs_service(),
-        "tous_les_financements": get_all_financements_service(),
-    }
+    """Récupère toutes les données nécessaires pour la page d'administration via l'ORM."""
+    try:
+        return {
+            "cours_par_champ": _get_all_cours_grouped_by_champ_orm(annee_id),
+            "enseignants_par_champ": _get_all_enseignants_grouped_by_champ_orm(annee_id),
+            "tous_les_champs": get_all_champs_service(),
+            "tous_les_financements": get_all_financements_service(),
+        }
+    except Exception as e:
+        raise ServiceException(f"Erreur lors de l'agrégation des données pour la page admin: {e}")
 
 
 def get_data_for_user_admin_page_service() -> dict[str, Any]:
@@ -954,10 +1066,73 @@ def get_dashboard_summary_service_orm(annee_id: int) -> dict[str, Any]:
     }
 
 
+def _get_all_teachers_with_details_service(annee_id: int) -> list[dict[str, Any]]:
+    """
+    Récupère tous les enseignants d'une année avec leurs attributions et calculs de périodes.
+    Utilise l'ORM avec chargement optimisé pour éviter les requêtes N+1.
+    """
+    try:
+        enseignants = (
+            db.session.query(Enseignant)
+            .options(joinedload(Enseignant.attributions).joinedload(AttributionCours.cours))
+            .filter(Enseignant.annee_id == annee_id)
+            .order_by(Enseignant.estfictif, Enseignant.nom, Enseignant.prenom)
+            .all()
+        )
+
+        results = []
+        for enseignant in enseignants:
+            periodes_cours = 0.0
+            periodes_autres = 0.0
+            attributions_details = []
+
+            for attr in enseignant.attributions:
+                # La relation attr.cours est déjà chargée grâce au joinedload
+                cours_info = attr.cours
+                periodes_a_ajouter = float(cours_info.nbperiodes) * attr.nbgroupespris
+
+                if cours_info.estcoursautre:
+                    periodes_autres += periodes_a_ajouter
+                else:
+                    periodes_cours += periodes_a_ajouter
+
+                attributions_details.append(
+                    {
+                        "AttributionID": attr.attributionid,
+                        "CodeCours": cours_info.codecours,
+                        "NbGroupesPris": attr.nbgroupespris,
+                        "CoursDescriptif": cours_info.coursdescriptif,
+                        "NbPeriodes": float(cours_info.nbperiodes),
+                        "EstCoursAutre": cours_info.estcoursautre,
+                        "annee_id": cours_info.annee_id,
+                        "financement_code": cours_info.financement_code,
+                    }
+                )
+
+            results.append(
+                {
+                    **_enseignant_to_dict(enseignant),
+                    "attributions": attributions_details,
+                    "periodes": {
+                        "periodes_cours": periodes_cours,
+                        "periodes_autres": periodes_autres,
+                        "total_periodes": periodes_cours + periodes_autres,
+                    },
+                }
+            )
+        return results
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la récupération des détails des enseignants : {e}")
+
+
 def get_detailed_tasks_data_service(annee_id: int) -> list[dict[str, Any]]:
-    tous_les_enseignants_details = old_db.get_all_enseignants_avec_details(annee_id)
+    """
+    Orchestre la récupération et le formatage des données pour la page principale des tâches.
+    Utilise maintenant entièrement l'ORM.
+    """
+    tous_les_enseignants_details = _get_all_teachers_with_details_service(annee_id)
     tous_les_champs = get_all_champs_service()
-    statuts_champs = old_db.get_all_champ_statuses_for_year(annee_id)
+    statuts_champs = get_all_champ_statuses_for_year_service(annee_id)
     enseignants_par_champ_temp: dict[str, dict[str, Any]] = {
         str(champ["champno"]): {
             "champno": str(champ["champno"]),
@@ -976,19 +1151,74 @@ def get_detailed_tasks_data_service(annee_id: int) -> list[dict[str, Any]]:
 
 
 def get_attributions_for_export_service(annee_id: int) -> dict[str, dict[str, Any]]:
-    attributions_raw = old_db.get_all_attributions_for_export(annee_id)
+    """
+    Récupère les attributions formatées pour l'export via l'ORM et les groupe par champ.
+    """
+    try:
+        # Requête ORM qui remplace l'ancien appel à `database.py`.
+        # Les `.label()` assurent que les noms de colonnes correspondent à l'ancienne structure.
+        query_results = (
+            db.session.query(
+                Champ.champno.label("champno"),
+                Champ.champnom.label("champnom"),
+                Enseignant.nom.label("nom"),
+                Enseignant.prenom.label("prenom"),
+                Cours.codecours.label("codecours"),
+                Cours.coursdescriptif.label("coursdescriptif"),
+                Cours.estcoursautre.label("estcoursautre"),
+                Cours.financement_code.label("financement_code"),
+                func.sum(AttributionCours.nbgroupespris).label("total_groupes_pris"),
+                Cours.nbperiodes.label("nbperiodes"),
+            )
+            .select_from(AttributionCours)
+            .join(AttributionCours.enseignant)
+            .join(AttributionCours.cours)
+            .join(Cours.champ)
+            .filter(Enseignant.annee_id == annee_id, Enseignant.estfictif == False)  # noqa: E712
+            .group_by(
+                Champ.champno,
+                Champ.champnom,
+                Enseignant.nom,
+                Enseignant.prenom,
+                Cours.codecours,
+                Cours.coursdescriptif,
+                Cours.estcoursautre,
+                Cours.financement_code,
+                Cours.nbperiodes,
+            )
+            .order_by(
+                Champ.champno.asc(),
+                Enseignant.nom.asc(),
+                Enseignant.prenom.asc(),
+                Cours.codecours.asc(),
+            )
+            .all()
+        )
+
+        # Convertir les `KeyedTuple` en une liste de dictionnaires.
+        attributions_raw = [dict(row._mapping) for row in query_results]
+
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la récupération des attributions pour l'export: {e}")
+
     if not attributions_raw:
         return {}
+
+    # Le reste de la logique pour grouper les données reste identique.
     attributions_par_champ: dict[str, dict[str, Any]] = {}
     for attr in attributions_raw:
         champ_no = attr["champno"]
         if champ_no not in attributions_par_champ:
             attributions_par_champ[champ_no] = {"nom": attr["champnom"], "attributions": []}
-        attributions_par_champ[champ_no]["attributions"].append(attr)
+        # On convertit le nbperiodes en float pour être cohérent avec l'ancienne version
+        attr_copy = attr.copy()
+        attr_copy["nbperiodes"] = float(attr_copy["nbperiodes"])
+        attributions_par_champ[champ_no]["attributions"].append(attr_copy)
+
     return attributions_par_champ
 
 
-def get_remaining_periods_for_export_service(annee_id: int) -> dict[str, dict[str, Any]]:
+def get_periodes_restantes_for_export_service(annee_id: int) -> dict[str, dict[str, Any]]:
     periodes_restantes_raw = old_db.get_periodes_restantes_for_export(annee_id)
     if not periodes_restantes_raw:
         return {}
@@ -1001,91 +1231,203 @@ def get_remaining_periods_for_export_service(annee_id: int) -> dict[str, dict[st
     return periodes_par_champ
 
 
+def _create_teacher_sort_key(teacher_data: dict[str, Any]) -> tuple:
+    """Crée une clé de tri complexe pour les enseignants et les tâches."""
+    is_fictif = teacher_data["estfictif"]
+    nom_complet = teacher_data["nomcomplet"]
+
+    # Ordre de base : Réels (0), Tâches (1), Non attribué (2), Autres fictifs (3)
+    sort_order = 0
+    if is_fictif:
+        if "Tâche restante" in nom_complet:
+            sort_order = 1
+        elif "Non attribué" in nom_complet:
+            sort_order = 2
+        else:
+            sort_order = 3
+
+    # Numéro de tâche pour le tri secondaire
+    task_num = 0
+    if sort_order == 1:
+        try:
+            # Extrait le numéro à la fin du nom de la tâche
+            task_num = int(nom_complet.split("-")[-1])
+        except (ValueError, IndexError):
+            pass  # Reste à 0 si le format est inattendu
+
+    # Le nom et le prénom ne sont pertinents que pour les enseignants réels
+    nom = teacher_data.get("nom", "") or ""
+    prenom = teacher_data.get("prenom", "") or ""
+
+    return (sort_order, task_num, nom, prenom)
+
+
 def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, Any]]:
-    tous_les_financements = get_all_financements_service()
-    libelle_to_header_map = {f["libelle"].upper(): f"PÉRIODES {f['libelle'].upper()}" for f in tous_les_financements}
-    libelle_to_header_map["SOUTIEN EN SPORT-ÉTUDES"] = "PÉRIODES SOUTIEN SPORT-ÉTUDES"
-    code_to_libelle_map = {f["code"]: f["libelle"].upper() for f in tous_les_financements}
-    donnees_raw = old_db.get_data_for_org_scolaire_export(annee_id)
-    if not donnees_raw:
-        return {}
-    pivot_data: dict[str, dict[str, Any]] = {}
-    ALL_HEADERS = [
-        "PÉRIODES RÉGULIER",
-        "PÉRIODES ADAPTATION SCOLAIRE",
-        "PÉRIODES SPORT-ÉTUDES",
-        "PÉRIODES ENSEIGNANT RESSOURCE",
-        "PÉRIODES AIDESEC",
-        "PÉRIODES DIPLÔMA",
-        "PÉRIODES MESURE SEUIL (UTILISÉE COORDINATION PP)",
-        "PÉRIODES MESURE SEUIL (RESSOURCES AUTRES)",
-        "PÉRIODES MESURE SEUIL (POUR FABLAB)",
-        "PÉRIODES MESURE SEUIL (BONIFIER ALTERNE)",
-        "PÉRIODES ALTERNE",
-        "PÉRIODES FORMANUM",
-        "PÉRIODES MENTORAT",
-        "PÉRIODES COORDINATION SPORT-ÉTUDES",
-        "PÉRIODES SOUTIEN SPORT-ÉTUDES",
-    ]
-    for item in donnees_raw:
-        champ_no = item["champno"]
-        enseignant_key = f"fictif-{item['nomcomplet']}" if item["estfictif"] else f"reel-{item['nom']}-{item['prenom']}"
-        if enseignant_key not in pivot_data.setdefault(champ_no, {}):
-            pivot_data[champ_no][enseignant_key] = {
-                "nom": item["nom"],
-                "prenom": item["prenom"],
-                "nomcomplet": item["nomcomplet"],
-                "estfictif": item["estfictif"],
-                "champnom": item["champnom"],
-                **{header: 0.0 for header in ALL_HEADERS},
+    """
+    Construit les données pour l'export "Organisation Scolaire" via l'ORM et Python.
+    Remplace la complexe requête SQL monolithique.
+    """
+    try:
+        # --- Étape 1 : Collecte des données de base avec l'ORM ---
+        all_financements = db.session.query(TypeFinancement).all()
+        header_map = {f"PÉRIODES {f.libelle.upper()}": f.code for f in all_financements}
+        code_to_header_map = {code: header for header, code in header_map.items()}
+        all_headers = sorted(list(header_map.keys()))
+        all_headers.insert(0, "PÉRIODES RÉGULIER")
+
+        # --- Étape 2 : Initialiser le pivot avec TOUS les enseignants de l'année ---
+        pivot_data: defaultdict[str, dict[str, Any]] = defaultdict(lambda: {})
+        all_teachers = db.session.query(Enseignant).options(joinedload(Enseignant.champ)).filter_by(annee_id=annee_id).all()
+
+        for enseignant in all_teachers:
+            champ = enseignant.champ
+            enseignant_key = f"{'fictif' if enseignant.estfictif else 'reel'}-{enseignant.nomcomplet}"
+
+            # Nettoyer le nom de la tâche pour l'affichage
+            display_nomcomplet = enseignant.nomcomplet
+            if enseignant.estfictif and enseignant.nomcomplet.startswith(f"{champ.champno}-"):
+                display_nomcomplet = display_nomcomplet.replace(f"{champ.champno}-", "", 1).strip()
+
+            pivot_data[champ.champno][enseignant_key] = {
+                "nom": enseignant.nom,
+                "prenom": enseignant.prenom,
+                "nomcomplet": display_nomcomplet,
+                "estfictif": enseignant.estfictif,
+                "champnom": champ.champnom,
+                **{header: 0.0 for header in all_headers},
             }
-        total_p = float(item["total_periodes"] or 0.0)
-        financement_code = item["financement_code"]
-        target_col = "PÉRIODES RÉGULIER"
-        if financement_code and financement_code in code_to_libelle_map:
-            libelle_upper = code_to_libelle_map[financement_code]
-            if libelle_upper in libelle_to_header_map:
-                target_col = libelle_to_header_map[libelle_upper]
-        if target_col in pivot_data[champ_no][enseignant_key]:
-            pivot_data[champ_no][enseignant_key][target_col] += total_p
-    donnees_par_champ: dict[str, dict[str, Any]] = {}
-    for champ_no, enseignants in pivot_data.items():
-        if enseignants:
+
+        # --- Étape 3 : Traiter les attributions pour remplir le pivot ---
+        attributions = (
+            db.session.query(AttributionCours).options(joinedload(AttributionCours.enseignant), joinedload(AttributionCours.cours)).join(Enseignant).filter(Enseignant.annee_id == annee_id).all()
+        )
+        for attr in attributions:
+            enseignant = attr.enseignant
+            cours = attr.cours
+            enseignant_key = f"{'fictif' if enseignant.estfictif else 'reel'}-{enseignant.nomcomplet}"
+
+            # Le `pivot_data` est déjà initialisé, on ne fait qu'ajouter les périodes
+            if enseignant_key in pivot_data[enseignant.champno]:
+                total_p = float(cours.nbperiodes) * attr.nbgroupespris
+                target_col = code_to_header_map.get(cours.financement_code, "PÉRIODES RÉGULIER")
+                pivot_data[enseignant.champno][enseignant_key][target_col] += total_p
+
+        # --- Étape 4 : Calculer et ajouter les tâches non-attribuées ---
+        cours_with_groups_taken = (
+            db.session.query(AttributionCours.codecours, func.sum(AttributionCours.nbgroupespris).label("groupes_pris"))
+            .filter(AttributionCours.annee_id_cours == annee_id)
+            .group_by(AttributionCours.codecours)
+            .all()
+        )
+        groups_taken_map = {c.codecours: c.groupes_pris for c in cours_with_groups_taken}
+        all_courses = db.session.query(Cours).options(joinedload(Cours.champ)).filter_by(annee_id=annee_id).all()
+
+        unassigned_tasks: defaultdict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        for cours in all_courses:
+            remaining_groups = cours.nbgroupeinitial - groups_taken_map.get(cours.codecours, 0)
+            if remaining_groups > 0:
+                total_p = float(cours.nbperiodes) * remaining_groups
+                target_col = code_to_header_map.get(cours.financement_code, "PÉRIODES RÉGULIER")
+                unassigned_tasks[cours.champno][target_col] += total_p
+
+        # Ajouter les tâches non attribuées au pivot
+        for champ_no, periods_by_funding in unassigned_tasks.items():
+            if any(p > 0 for p in periods_by_funding.values()):
+                champ_nom = db.session.get(Champ, champ_no).champnom
+                unassigned_key = "fictif-Non attribué"
+                pivot_data[champ_no][unassigned_key] = {
+                    "nom": "Non attribué",
+                    "prenom": None,
+                    "nomcomplet": "Non attribué",
+                    "estfictif": True,
+                    "champnom": champ_nom,
+                    **{header: periods_by_funding.get(header, 0.0) for header in all_headers},
+                }
+
+        # --- Étape 5 : Formater et trier la sortie finale ---
+        donnees_par_champ: dict[str, dict[str, Any]] = {}
+        for champ_no, enseignants_data in pivot_data.items():
+            # Filtrer les enseignants sans aucune période (ceux qui existent mais n'ont rien)
+            filtered_enseignants = [data for data in enseignants_data.values() if sum(data.get(h, 0.0) for h in all_headers) > 0 or data.get("nomcomplet") == "Non attribué" or not data["estfictif"]]
+            if not filtered_enseignants:
+                continue
+
+            sorted_enseignants = sorted(filtered_enseignants, key=_create_teacher_sort_key)
+
             donnees_par_champ[champ_no] = {
-                "nom": next(iter(enseignants.values()))["champnom"],
-                "donnees": list(enseignants.values()),
+                "nom": sorted_enseignants[0]["champnom"],
+                "donnees": sorted_enseignants,
             }
-    return donnees_par_champ
+
+        return dict(sorted(donnees_par_champ.items()))
+
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la génération de l'export Organisation Scolaire: {e}")
 
 
 def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
+    """
+    Récupère les données pour la préparation de l'horaire via l'ORM SQLAlchemy.
+    Cette fonction est entièrement refactorisée et n'utilise plus `database.py`.
+    """
     try:
+        # Récupération des données de base avec l'ORM
         all_champs = get_all_champs_service()
-        all_cours_raw = old_db.get_all_cours_for_preparation(annee_id)
-        all_assignments_raw = old_db.get_assignments_for_preparation(annee_id)
-        saved_assignments_raw = old_db.get_saved_preparation_horaire(annee_id)
+        all_cours_raw = db.session.query(Cours).filter_by(annee_id=annee_id).order_by(Cours.champno, Cours.codecours).all()
+        all_assignments_raw = (
+            db.session.query(AttributionCours)
+            .join(AttributionCours.enseignant)
+            .filter(Enseignant.annee_id == annee_id, Enseignant.estfictif == False)  # noqa: E712
+            .options(joinedload(AttributionCours.enseignant), joinedload(AttributionCours.cours))
+            .order_by(AttributionCours.codecours, Enseignant.nomcomplet)
+            .all()
+        )
+        saved_assignments_raw = db.session.query(PreparationHoraire).filter_by(annee_id=annee_id).all()
+
+        # Transformation des données comme dans la version originale
         cours_par_champ: defaultdict[str, list] = defaultdict(list)
         cours_details: dict[str, dict] = {}
         for cours in all_cours_raw:
-            cours_par_champ[cours["champno"]].append(cours)
-            cours_details[cours["codecours"]] = cours
+            cours_dict = {"codecours": cours.codecours, "champno": cours.champno, "annee_id": cours.annee_id}
+            cours_par_champ[cours.champno].append(cours_dict)
+            cours_details[cours.codecours] = cours_dict
+
         enseignants_par_cours: defaultdict[str, list] = defaultdict(list)
         for assignment in all_assignments_raw:
-            enseignants_par_cours[assignment["codecours"]].append(assignment)
+            enseignant = assignment.enseignant
+            # "Déplier" les groupes: créer une entrée par groupe pris
+            for _ in range(assignment.nbgroupespris):
+                enseignants_par_cours[assignment.codecours].append({"codecours": assignment.codecours, "nomcomplet": enseignant.nomcomplet, "enseignantid": enseignant.enseignantid})
+
         saved_placements = defaultdict(lambda: defaultdict(list))
         for saved in saved_assignments_raw:
-            key = (saved["secondaire_level"], saved["codecours"])
-            saved_placements[key][saved["colonne_assignee"]].append(saved["enseignant_id"])
+            key = (saved.secondaire_level, saved.codecours)
+            saved_placements[key][saved.colonne_assignee].append(saved.enseignant_id)
+
+        # Construction de la grille finale
         prepared_grid: dict[int, list] = {level: [] for level in range(1, 6)}
         cours_traites = set()
         for (level, codecours), columns in saved_placements.items():
             cours_info = cours_details.get(codecours)
             if not cours_info:
                 continue
+
             all_teachers_for_course = enseignants_par_cours.get(codecours, [])
-            placed_teacher_ids = {tid for teacher_ids in columns.values() for tid in teacher_ids}
-            unassigned_teachers = [t for t in all_teachers_for_course if t["enseignantid"] not in placed_teacher_ids]
             teachers_lookup = {t["enseignantid"]: t for t in all_teachers_for_course}
+
+            # --- LOGIQUE CORRIGÉE ---
+            unassigned_teachers = []
+            if all_teachers_for_course:
+                # Compter combien de fois chaque enseignant a été placé
+                placed_assignments_count = sum(len(ids) for ids in columns.values())
+                unassigned_count = len(all_teachers_for_course) - placed_assignments_count
+
+                if unassigned_count > 0:
+                    # Le prototype peut être n'importe quelle entrée, car les détails sont les mêmes
+                    teacher_prototype = all_teachers_for_course[0]
+                    unassigned_teachers = [teacher_prototype] * unassigned_count
+            # --- FIN DE LA LOGIQUE CORRIGÉE ---
+
             prepared_grid[level].append(
                 {
                     "cours": cours_info,
@@ -1096,6 +1438,7 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
                 }
             )
             cours_traites.add(codecours)
+
         return {
             "all_champs": all_champs,
             "cours_par_champ": dict(cours_par_champ),
@@ -1103,19 +1446,30 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
             "prepared_grid": prepared_grid,
         }
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        raise ServiceException(f"Erreur lors de la préparation des données pour l'horaire : {e}")
+        raise ServiceException(f"Erreur ORM lors de la préparation des données pour l'horaire : {e}")
 
 
 def save_preparation_horaire_service(annee_id: int, assignments_data: list[dict[str, Any]]) -> None:
+    """
+    Sauvegarde (en remplaçant) les assignations de la préparation de l'horaire pour une année.
+    Opération transactionnelle utilisant l'ORM SQLAlchemy.
+    """
     required_keys = ["secondaire_level", "codecours", "annee_id_cours", "enseignant_id", "colonne_assignee"]
     for item in assignments_data:
         if not all(key in item for key in required_keys):
             raise BusinessRuleValidationError("Données de sauvegarde invalides ou incomplètes.")
+
     try:
-        if not old_db.save_preparation_horaire_data(annee_id, assignments_data):
-            raise ServiceException("La sauvegarde en base de données a échoué.")
+        # 1. Supprimer toutes les anciennes données pour cette année scolaire (atomiquement)
+        db.session.query(PreparationHoraire).filter_by(annee_id=annee_id).delete(synchronize_session=False)
+
+        # 2. Préparer les nouvelles données pour l'insertion
+        if assignments_data:
+            new_assignments = [PreparationHoraire(annee_id=annee_id, **data) for data in assignments_data]
+            db.session.add_all(new_assignments)
+
+        # 3. Commiter la transaction
+        db.session.commit()
     except Exception as e:
-        raise ServiceException(f"Erreur lors de la sauvegarde de la préparation de l'horaire : {e}")
+        db.session.rollback()
+        raise ServiceException(f"Erreur ORM lors de la sauvegarde de la préparation de l'horaire : {e}")

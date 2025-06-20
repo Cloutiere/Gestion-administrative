@@ -15,6 +15,7 @@ from mon_application.models import (
     ChampAnneeStatut,
     Cours,
     Enseignant,
+    PreparationHoraire,
     TypeFinancement,
 )
 from mon_application.services import (
@@ -23,17 +24,28 @@ from mon_application.services import (
     EntityNotFoundError,
     ForeignKeyError,
     ServiceException,
+    _get_all_teachers_with_details_service,
     add_attribution_service,
     create_course_service,
+    create_fictitious_teacher_service,
     create_teacher_service,
     delete_attribution_service,
     delete_course_service,
     delete_teacher_service,
+    get_all_champ_statuses_for_year_service,
+    get_attributions_for_export_service,
+    get_champ_details_service,
     get_course_details_service,
     get_dashboard_summary_service_orm,
+    get_data_for_admin_page_service,
+    get_org_scolaire_export_data_service,  # NOUVEL IMPORT
+    get_preparation_horaire_data_service,
     get_teacher_details_service,
+    reassign_course_to_champ_service,
+    reassign_course_to_financement_service,
     save_imported_courses,
     save_imported_teachers,
+    save_preparation_horaire_service,
     toggle_champ_confirm_service,
     toggle_champ_lock_service,
     update_course_service,
@@ -438,6 +450,36 @@ class TestTeacherServices:
         assert db.session.query(Enseignant).count() == 0
         assert db.session.query(AttributionCours).count() == 0
 
+    def test_create_fictitious_teacher_service_orm(self, app, db):
+        """Vérifie la création et la numérotation correcte des tâches via l'ORM."""
+        # --- Arrange ---
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee_id = annee.annee_id
+
+        # --- Act & Assert ---
+        # 1. Créer la première tâche pour MATH, doit être numérotée "1"
+        fictif1_math = create_fictitious_teacher_service(champ_math.champno, annee_id)
+        assert fictif1_math["nomcomplet"] == "MATH-Tâche restante-1"
+        assert fictif1_math["estfictif"] is True
+        assert fictif1_math["champno"] == champ_math.champno
+
+        # Vérifier en BDD
+        fictif_in_db = db.session.get(Enseignant, fictif1_math["enseignantid"])
+        assert fictif_in_db is not None
+        assert fictif_in_db.nomcomplet == "MATH-Tâche restante-1"
+
+        # 2. Créer la seconde tâche pour MATH, doit être numérotée "2"
+        fictif2_math = create_fictitious_teacher_service(champ_math.champno, annee_id)
+        assert fictif2_math["nomcomplet"] == "MATH-Tâche restante-2"
+
+        # 3. Créer la première tâche pour FRAN, doit être numérotée "1" (indépendant)
+        fictif1_fran = create_fictitious_teacher_service(champ_fran.champno, annee_id)
+        assert fictif1_fran["nomcomplet"] == "FRAN-Tâche restante-1"
+
+        # 4. Vérifier le compte total en BDD
+        assert db.session.query(Enseignant).filter_by(estfictif=True).count() == 3
+        assert db.session.query(Enseignant).filter_by(estfictif=False).count() == 0
+
 
 class TestAttributionServices:
     """Regroupe les tests pour les services CRUD de l'entité AttributionCours."""
@@ -576,6 +618,65 @@ class TestChampStatusServices:
         assert status_in_db.est_verrouille is True  # Ne doit pas avoir changé
         assert status_in_db.est_confirme is True
 
+    def test_get_all_champ_statuses_for_year_service(self, app, db):
+        """Vérifie la récupération des statuts pour une année spécifique via ORM."""
+        # --- Arrange ---
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee2025 = AnneeScolaire(annee_id=2025, libelle_annee="2025-2026")
+        champ_scie = Champ(champno="SCIE", champnom="Sciences")
+        db.session.add_all([annee2025, champ_scie])
+
+        # Statuts pour l'année 2024 (celle qu'on va tester)
+        statut_math_2024 = ChampAnneeStatut(champ_no=champ_math.champno, annee_id=annee.annee_id, est_verrouille=True, est_confirme=True)
+        statut_fran_2024 = ChampAnneeStatut(champ_no=champ_fran.champno, annee_id=annee.annee_id, est_verrouille=False, est_confirme=True)
+
+        # Statut pour une autre année (doit être ignoré)
+        statut_math_2025 = ChampAnneeStatut(champ_no=champ_math.champno, annee_id=annee2025.annee_id, est_verrouille=True, est_confirme=False)
+
+        db.session.add_all([statut_math_2024, statut_fran_2024, statut_math_2025])
+        db.session.commit()
+
+        # --- Act ---
+        statuses = get_all_champ_statuses_for_year_service(annee.annee_id)
+
+        # --- Assert ---
+        assert isinstance(statuses, dict)
+        # Seuls les statuts pour 2024 doivent être retournés
+        assert len(statuses) == 2
+        # Vérifier le contenu pour MATH
+        assert "MATH" in statuses
+        assert statuses["MATH"] == {"est_verrouille": True, "est_confirme": True}
+        # Vérifier le contenu pour FRAN
+        assert "FRAN" in statuses
+        assert statuses["FRAN"] == {"est_verrouille": False, "est_confirme": True}
+        # Vérifier que SCIE (sans statut) et le statut de 2025 ne sont pas présents
+        assert "SCIE" not in statuses
+
+    def test_get_champ_details_service(self, app, db):
+        """Vérifie la récupération des détails d'un champ et ses statuts via l'ORM."""
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        # Cas 1: Champ avec statut défini
+        statut = ChampAnneeStatut(champ_no=champ_math.champno, annee_id=annee.annee_id, est_verrouille=True)
+        db.session.add(statut)
+        db.session.commit()
+
+        details_math = get_champ_details_service(champ_math.champno, annee.annee_id)
+        assert details_math["ChampNo"] == "MATH"
+        assert details_math["ChampNom"] == "Mathématiques"
+        assert details_math["est_verrouille"] is True
+        assert details_math["est_confirme"] is False
+
+        # Cas 2: Champ sans statut défini (devrait retourner les valeurs par défaut)
+        details_fran = get_champ_details_service(champ_fran.champno, annee.annee_id)
+        assert details_fran["ChampNo"] == "FRAN"
+        assert details_fran["ChampNom"] == "Français"
+        assert details_fran["est_verrouille"] is False
+        assert details_fran["est_confirme"] is False
+
+        # Cas 3: Champ inexistant
+        with pytest.raises(EntityNotFoundError):
+            get_champ_details_service("INEXISTANT", annee.annee_id)
+
 
 class TestDashboardServices:
     """Regroupe les tests pour les services liés au tableau de bord."""
@@ -667,3 +768,501 @@ class TestDashboardServices:
         assert summary["moyenne_generale"] == pytest.approx(9.5 / 4)
         # Seul MATH est confirmé
         assert summary["moyenne_preliminaire_confirmee"] == pytest.approx(5.5 / 2)
+
+
+class TestTaskPageServices:
+    """
+    Regroupe les tests pour les services qui fournissent des données à la
+    page principale des tâches.
+    """
+
+    def test_get_all_teachers_with_details_service(self, app, db):
+        """
+        Vérifie que le service ORM récupère correctement tous les enseignants,
+        leurs attributions et calcule les totaux de périodes avec précision.
+        """
+        # --- Arrange ---
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee_id = annee.annee_id
+
+        # Enseignants
+        prof_a = Enseignant(annee_id=annee_id, nom="A", prenom="Prof", nomcomplet="Prof A", champno="MATH")
+        prof_b = Enseignant(annee_id=annee_id, nom="B", prenom="Prof", nomcomplet="Prof B", champno="FRAN", esttempsplein=False)
+        prof_fictif = Enseignant(annee_id=annee_id, nomcomplet="Tâche MATH", champno="MATH", estfictif=True)
+        prof_sans_cours = Enseignant(annee_id=annee_id, nom="C", prenom="Prof", nomcomplet="Prof C", champno="MATH")
+        db.session.add_all([prof_a, prof_b, prof_fictif, prof_sans_cours])
+
+        # Cours
+        cours_math1 = Cours(codecours="M1", annee_id=annee_id, champno="MATH", coursdescriptif="Algèbre", nbperiodes=2.5, nbgroupeinitial=2)
+        cours_math2_autre = Cours(codecours="M2", annee_id=annee_id, champno="MATH", coursdescriptif="Soutien", nbperiodes=1.5, nbgroupeinitial=1, estcoursautre=True)
+        cours_fran1 = Cours(codecours="F1", annee_id=annee_id, champno="FRAN", coursdescriptif="Grammaire", nbperiodes=4.0, nbgroupeinitial=1)
+        db.session.add_all([cours_math1, cours_math2_autre, cours_fran1])
+        db.session.commit()
+
+        # Attributions
+        attr1 = AttributionCours(enseignantid=prof_a.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1)
+        attr2 = AttributionCours(enseignantid=prof_a.enseignantid, codecours="M2", annee_id_cours=annee_id, nbgroupespris=1)
+        attr3 = AttributionCours(enseignantid=prof_b.enseignantid, codecours="F1", annee_id_cours=annee_id, nbgroupespris=1)
+        attr4 = AttributionCours(enseignantid=prof_fictif.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1)
+        db.session.add_all([attr1, attr2, attr3, attr4])
+        db.session.commit()
+
+        # --- Act ---
+        result = _get_all_teachers_with_details_service(annee_id)
+
+        # --- Assert ---
+        assert len(result) == 4  # Les 4 enseignants créés
+        assert all("attributions" in r and "periodes" in r for r in result)
+
+        # Dictionnaire pour un accès facile
+        result_by_name = {r["nomcomplet"]: r for r in result}
+
+        # Vérification détaillée pour Prof A
+        prof_a_data = result_by_name["Prof A"]
+        assert prof_a_data["nom"] == "A"
+        assert prof_a_data["esttempsplein"] is True
+        assert len(prof_a_data["attributions"]) == 2
+        periodes = prof_a_data["periodes"]
+        assert periodes["periodes_cours"] == pytest.approx(2.5)
+        assert periodes["periodes_autres"] == pytest.approx(1.5)
+        assert periodes["total_periodes"] == pytest.approx(4.0)
+
+        # Vérification détaillée pour Prof B
+        prof_b_data = result_by_name["Prof B"]
+        assert prof_b_data["esttempsplein"] is False
+        assert len(prof_b_data["attributions"]) == 1
+        assert prof_b_data["attributions"][0]["CodeCours"] == "F1"
+        periodes_b = prof_b_data["periodes"]
+        assert periodes_b["periodes_cours"] == pytest.approx(4.0)
+        assert periodes_b["periodes_autres"] == 0.0
+        assert periodes_b["total_periodes"] == pytest.approx(4.0)
+
+        # Vérification pour l'enseignant sans cours
+        prof_c_data = result_by_name["Prof C"]
+        assert len(prof_c_data["attributions"]) == 0
+        periodes_c = prof_c_data["periodes"]
+        assert periodes_c["periodes_cours"] == 0.0
+        assert periodes_c["periodes_autres"] == 0.0
+        assert periodes_c["total_periodes"] == 0.0
+
+        # Vérification pour l'enseignant fictif
+        prof_fictif_data = result_by_name["Tâche MATH"]
+        assert prof_fictif_data["estfictif"] is True
+        assert len(prof_fictif_data["attributions"]) == 1
+        periodes_f = prof_fictif_data["periodes"]
+        assert periodes_f["periodes_cours"] == pytest.approx(2.5)
+        assert periodes_f["periodes_autres"] == 0.0
+        assert periodes_f["total_periodes"] == pytest.approx(2.5)
+
+
+class TestAdminPageServices:
+    """Regroupe les tests pour les services de la page d'administration."""
+
+    def test_get_data_for_admin_page_service_orm(self, app, db):
+        """Vérifie que les données pour la page admin sont correctement groupées par l'ORM."""
+        # --- Arrange ---
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee_id = annee.annee_id
+        # Données de test
+        cours_m1 = Cours(annee_id=annee_id, codecours="M1", champno="MATH", coursdescriptif="M1 desc", nbperiodes=1, nbgroupeinitial=1)
+        cours_m2 = Cours(annee_id=annee_id, codecours="M2", champno="MATH", coursdescriptif="M2 desc", nbperiodes=1, nbgroupeinitial=1)
+        cours_f1 = Cours(annee_id=annee_id, codecours="F1", champno="FRAN", coursdescriptif="F1 desc", nbperiodes=1, nbgroupeinitial=1)
+        ens_math = Enseignant(annee_id=annee_id, nom="E-Math", prenom="P", nomcomplet="P E-Math", champno="MATH")
+        ens_fran = Enseignant(annee_id=annee_id, nom="E-Fran", prenom="P", nomcomplet="P E-Fran", champno="FRAN")
+        # Enseignant fictif qui ne doit pas apparaître
+        ens_fictif = Enseignant(annee_id=annee_id, nomcomplet="Fictif", champno="MATH", estfictif=True)
+        db.session.add_all([cours_m1, cours_m2, cours_f1, ens_math, ens_fran, ens_fictif])
+        db.session.commit()
+
+        # --- Act ---
+        data = get_data_for_admin_page_service(annee_id)
+
+        # --- Assert ---
+        assert "cours_par_champ" in data
+        assert "enseignants_par_champ" in data
+        assert "tous_les_champs" in data
+        assert "tous_les_financements" in data
+
+        # Vérification des cours
+        cours_par_champ = data["cours_par_champ"]
+        assert "MATH" in cours_par_champ
+        assert "FRAN" in cours_par_champ
+        assert len(cours_par_champ["MATH"]["cours"]) == 2
+        assert cours_par_champ["MATH"]["cours"][0]["codecours"] == "M1"
+        assert cours_par_champ["FRAN"]["champ_nom"] == "Français"
+        assert len(cours_par_champ["FRAN"]["cours"]) == 1
+
+        # Vérification des enseignants
+        enseignants_par_champ = data["enseignants_par_champ"]
+        assert "MATH" in enseignants_par_champ
+        assert len(enseignants_par_champ["MATH"]["enseignants"]) == 1
+        assert enseignants_par_champ["MATH"]["enseignants"][0]["nom"] == "E-Math"
+        assert "FRAN" in enseignants_par_champ
+        assert len(enseignants_par_champ["FRAN"]["enseignants"]) == 1
+
+    def test_reassign_course_to_champ_service_success(self, app, db):
+        """Vérifie la réassignation réussie d'un cours à un autre champ."""
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        cours = Cours(annee_id=annee.annee_id, codecours="C1", champno="MATH", coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        db.session.add(cours)
+        db.session.commit()
+
+        result = reassign_course_to_champ_service("C1", annee.annee_id, "FRAN")
+
+        assert result["nouveau_champ_no"] == "FRAN"
+        assert result["nouveau_champ_nom"] == "Français"
+        db.session.refresh(cours)
+        assert cours.champno == "FRAN"
+
+    def test_reassign_course_to_champ_service_fails(self, app, db):
+        """Vérifie les cas d'échec de la réassignation de champ."""
+        annee, _, _, _ = _setup_initial_data(db)
+        # Échec si le cours n'existe pas
+        with pytest.raises(EntityNotFoundError):
+            reassign_course_to_champ_service("C-NON", annee.annee_id, "MATH")
+
+        # Échec si le champ de destination n'existe pas
+        cours = Cours(annee_id=annee.annee_id, codecours="C1", champno="MATH", coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        db.session.add(cours)
+        db.session.commit()
+        with pytest.raises(BusinessRuleValidationError):
+            reassign_course_to_champ_service("C1", annee.annee_id, "CHAMP-NON")
+
+    def test_reassign_course_to_financement_service_success(self, app, db):
+        """Vérifie la réassignation réussie d'un cours à un financement."""
+        annee, champ_math, _, financement_reg = _setup_initial_data(db)
+        fin_spe = TypeFinancement(code="SPE", libelle="Spécial")
+        cours = Cours(annee_id=annee.annee_id, codecours="C1", champno="MATH", coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        db.session.add_all([fin_spe, cours])
+        db.session.commit()
+        assert cours.financement_code is None
+
+        # Assignation
+        reassign_course_to_financement_service("C1", annee.annee_id, "REG")
+        db.session.refresh(cours)
+        assert cours.financement_code == "REG"
+
+        # Changement
+        reassign_course_to_financement_service("C1", annee.annee_id, "SPE")
+        db.session.refresh(cours)
+        assert cours.financement_code == "SPE"
+
+        # Désassignation
+        reassign_course_to_financement_service("C1", annee.annee_id, None)
+        db.session.refresh(cours)
+        assert cours.financement_code is None
+
+    def test_reassign_course_to_financement_service_fails(self, app, db):
+        """Vérifie les cas d'échec de la réassignation de financement."""
+        annee, champ_math, _, _ = _setup_initial_data(db)
+        cours = Cours(annee_id=annee.annee_id, codecours="C1", champno="MATH", coursdescriptif="D", nbperiodes=1, nbgroupeinitial=1)
+        db.session.add(cours)
+        db.session.commit()
+
+        # Échec si le cours n'existe pas
+        with pytest.raises(EntityNotFoundError):
+            reassign_course_to_financement_service("C-NON", annee.annee_id, "REG")
+
+        # Échec si le financement n'existe pas
+        with pytest.raises(BusinessRuleValidationError):
+            reassign_course_to_financement_service("C1", annee.annee_id, "FIN-NON")
+
+
+class TestPreparationHoraireServices:
+    """Regroupe les tests pour les services de Préparation de l'horaire refactorisés."""
+
+    def _setup_preparation_data(self, db, annee, champ):
+        """Helper pour créer les données de base pour les tests d'horaire."""
+        # Un cours avec 3 groupes disponibles
+        cours = Cours(annee_id=annee.annee_id, codecours="MATH101", champno=champ.champno, coursdescriptif="Algèbre 1", nbgroupeinitial=3, nbperiodes=1)
+        # Un enseignant non-fictif
+        prof = Enseignant(annee_id=annee.annee_id, nom="Turing", prenom="Alan", nomcomplet="Alan Turing", champno=champ.champno)
+        db.session.add_all([cours, prof])
+        db.session.commit()
+
+        # Attribuer 2 des 3 groupes à cet enseignant
+        attr = AttributionCours(enseignantid=prof.enseignantid, codecours=cours.codecours, annee_id_cours=annee.annee_id, nbgroupespris=2)
+        db.session.add(attr)
+        db.session.commit()
+        return cours, prof
+
+    def test_get_preparation_horaire_data_service_orm(self, app, db):
+        """Vérifie que la récupération des données pour l'horaire via l'ORM est correcte."""
+        # --- Arrange ---
+        annee, champ_math, _, _ = _setup_initial_data(db)
+        cours, prof = self._setup_preparation_data(db, annee, champ_math)
+
+        # Pré-sauvegarder une assignation pour vérifier la grille
+        saved_assignment = PreparationHoraire(
+            annee_id=annee.annee_id,
+            secondaire_level=1,
+            codecours=cours.codecours,
+            annee_id_cours=annee.annee_id,
+            enseignant_id=prof.enseignantid,
+            colonne_assignee="col1",
+        )
+        db.session.add(saved_assignment)
+        db.session.commit()
+
+        # --- Act ---
+        data = get_preparation_horaire_data_service(annee.annee_id)
+
+        # --- Assert ---
+        # 1. Vérifier la structure générale
+        assert "all_champs" in data
+        assert "cours_par_champ" in data
+        assert "enseignants_par_cours" in data
+        assert "prepared_grid" in data
+
+        # 2. Vérifier que les cours sont corrects
+        assert "MATH" in data["cours_par_champ"]
+        assert len(data["cours_par_champ"]["MATH"]) == 1
+        assert data["cours_par_champ"]["MATH"][0]["codecours"] == "MATH101"
+
+        # 3. Vérifier que les groupes sont "dépliés"
+        enseignants = data["enseignants_par_cours"]["MATH101"]
+        assert len(enseignants) == 2  # nbgroupespris=2
+        assert enseignants[0]["enseignantid"] == prof.enseignantid
+        assert enseignants[1]["enseignantid"] == prof.enseignantid
+
+        # 4. Vérifier la grille pré-remplie
+        grid = data["prepared_grid"]
+        assert len(grid[1]) == 1  # Un seul cours au niveau 1
+        grid_item = grid[1][0]
+        assert grid_item["cours"]["codecours"] == "MATH101"
+        assert "col1" in grid_item["assigned_teachers_by_col"]
+        assert grid_item["assigned_teachers_by_col"]["col1"] == [prof.enseignantid]
+        # Un enseignant non assigné (le 2ème groupe)
+        assert len(grid_item["unassigned_teachers"]) == 1
+        assert grid_item["unassigned_teachers"][0]["enseignantid"] == prof.enseignantid
+
+    def test_save_preparation_horaire_service_orm_transaction(self, app, db):
+        """Vérifie la nature transactionnelle de la sauvegarde (supprimer puis insérer)."""
+        # --- Arrange ---
+        annee, champ_math, _, _ = _setup_initial_data(db)
+        cours, prof = self._setup_preparation_data(db, annee, champ_math)
+        assert db.session.query(PreparationHoraire).count() == 0
+
+        # --- Act 1 & Assert 1: Sauvegarde initiale ---
+        assignments_1 = [
+            {
+                "secondaire_level": 1,
+                "codecours": cours.codecours,
+                "annee_id_cours": annee.annee_id,
+                "enseignant_id": prof.enseignantid,
+                "colonne_assignee": "col1",
+            },
+            {
+                "secondaire_level": 1,
+                "codecours": cours.codecours,
+                "annee_id_cours": annee.annee_id,
+                "enseignant_id": prof.enseignantid,
+                "colonne_assignee": "col2",
+            },
+        ]
+        save_preparation_horaire_service(annee.annee_id, assignments_1)
+        assert db.session.query(PreparationHoraire).count() == 2
+
+        # --- Act 2 & Assert 2: Remplacer par de nouvelles données ---
+        assignments_2 = [
+            {
+                "secondaire_level": 2,
+                "codecours": cours.codecours,
+                "annee_id_cours": annee.annee_id,
+                "enseignant_id": prof.enseignantid,
+                "colonne_assignee": "colA",
+            }
+        ]
+        save_preparation_horaire_service(annee.annee_id, assignments_2)
+        assert db.session.query(PreparationHoraire).count() == 1
+        saved = db.session.query(PreparationHoraire).one()
+        assert saved.secondaire_level == 2
+        assert saved.colonne_assignee == "colA"
+
+        # --- Act 3 & Assert 3: Vider les données ---
+        save_preparation_horaire_service(annee.annee_id, [])
+        assert db.session.query(PreparationHoraire).count() == 0
+
+    def test_save_preparation_horaire_service_orm_fails_on_invalid_data(self, app, db):
+        """Vérifie que le service lève une exception si les données sont mal formées."""
+        annee, _, _, _ = _setup_initial_data(db)
+        # Données avec une clé manquante ("enseignant_id")
+        invalid_assignments = [{"secondaire_level": 1, "codecours": "C1", "annee_id_cours": annee.annee_id, "colonne_assignee": "col1"}]
+        with pytest.raises(BusinessRuleValidationError, match="invalides ou incomplètes"):
+            save_preparation_horaire_service(annee.annee_id, invalid_assignments)
+
+
+# NOUVELLE CLASSE DE TESTS POUR LES SERVICES D'EXPORT
+class TestExportServices:
+    """Regroupe les tests pour les services d'export refactorisés avec l'ORM."""
+
+    def test_get_attributions_for_export_service_orm(self, app, db):
+        """
+        Vérifie que le service d'export des attributions retourne les bonnes données,
+        agrège correctement les groupes et exclut les enseignants fictifs.
+        """
+        # --- Arrange ---
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee_id = annee.annee_id
+
+        # Enseignants (réels et fictif)
+        prof_a_math = Enseignant(annee_id=annee_id, nom="Archimède", prenom="Syra", nomcomplet="Syra Archimède", champno="MATH")
+        prof_b_math = Enseignant(annee_id=annee_id, nom="Zeno", prenom="Citium", nomcomplet="Citium Zeno", champno="MATH")
+        prof_c_fran = Enseignant(annee_id=annee_id, nom="Voltaire", prenom="François", nomcomplet="François Voltaire", champno="FRAN")
+        prof_fictif = Enseignant(annee_id=annee_id, nomcomplet="Tâche MATH", champno="MATH", estfictif=True)
+        db.session.add_all([prof_a_math, prof_b_math, prof_c_fran, prof_fictif])
+
+        # Cours
+        cours_m1 = Cours(codecours="M1", annee_id=annee_id, champno="MATH", coursdescriptif="Géométrie", nbperiodes=4.0, nbgroupeinitial=5)
+        cours_m2 = Cours(codecours="M2", annee_id=annee_id, champno="MATH", coursdescriptif="Calcul", nbperiodes=5.0, nbgroupeinitial=3)
+        cours_f1 = Cours(codecours="F1", annee_id=annee_id, champno="FRAN", coursdescriptif="Candide", nbperiodes=3.0, nbgroupeinitial=2)
+        db.session.add_all([cours_m1, cours_m2, cours_f1])
+        db.session.commit()
+
+        # Attributions
+        # Prof A prend 1 groupe de M1
+        attr1 = AttributionCours(enseignantid=prof_a_math.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1)
+        # Prof A prend 2 groupes de M2 (via 2 attributions distinctes pour tester le SUM)
+        attr2 = AttributionCours(enseignantid=prof_a_math.enseignantid, codecours="M2", annee_id_cours=annee_id, nbgroupespris=1)
+        attr3 = AttributionCours(enseignantid=prof_a_math.enseignantid, codecours="M2", annee_id_cours=annee_id, nbgroupespris=1)
+        # Prof B prend 1 groupe de M1
+        attr4 = AttributionCours(enseignantid=prof_b_math.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1)
+        # Prof C prend 1 groupe de F1
+        attr5 = AttributionCours(enseignantid=prof_c_fran.enseignantid, codecours="F1", annee_id_cours=annee_id, nbgroupespris=1)
+        # Le prof fictif prend 1 groupe de M1 (doit être ignoré)
+        attr_fictif = AttributionCours(enseignantid=prof_fictif.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1)
+        db.session.add_all([attr1, attr2, attr3, attr4, attr5, attr_fictif])
+        db.session.commit()
+
+        # --- Act ---
+        result = get_attributions_for_export_service(annee_id)
+
+        # --- Assert ---
+        # 1. Structure générale et clés de champ
+        assert isinstance(result, dict)
+        assert "MATH" in result
+        assert "FRAN" in result
+        assert len(result.keys()) == 2
+
+        # 2. Vérification du champ MATH
+        math_data = result["MATH"]
+        assert math_data["nom"] == "Mathématiques"
+        assert len(math_data["attributions"]) == 3  # A(M1), A(M2), B(M1)
+
+        # L'ordre doit être Archimède(M1), Archimède(M2), Zeno(M1)
+        attributions_math = math_data["attributions"]
+        assert attributions_math[0]["nom"] == "Archimède" and attributions_math[0]["codecours"] == "M1"
+        assert attributions_math[1]["nom"] == "Archimède" and attributions_math[1]["codecours"] == "M2"
+        assert attributions_math[2]["nom"] == "Zeno" and attributions_math[2]["codecours"] == "M1"
+
+        # 3. Vérification de l'agrégation (le point crucial)
+        attr_archimede_m2 = next(a for a in attributions_math if a["nom"] == "Archimède" and a["codecours"] == "M2")
+        assert attr_archimede_m2["total_groupes_pris"] == 2
+        assert attr_archimede_m2["prenom"] == "Syra"
+
+        # 4. Vérification d'une attribution simple
+        attr_archimede_m1 = next(a for a in attributions_math if a["nom"] == "Archimède" and a["codecours"] == "M1")
+        assert attr_archimede_m1["total_groupes_pris"] == 1
+
+        # 5. Vérification du champ FRAN
+        fran_data = result["FRAN"]
+        assert fran_data["nom"] == "Français"
+        assert len(fran_data["attributions"]) == 1
+        assert fran_data["attributions"][0]["nom"] == "Voltaire"
+        assert fran_data["attributions"][0]["total_groupes_pris"] == 1
+
+    def test_get_attributions_for_export_service_orm_empty(self, app, db):
+        """Vérifie que le service retourne un dictionnaire vide si aucune attribution n'existe."""
+        annee, _, _, _ = _setup_initial_data(db)
+        # Aucune attribution n'est créée
+
+        result = get_attributions_for_export_service(annee.annee_id)
+        assert result == {}
+
+    def test_get_org_scolaire_export_data_service_orm(self, app, db):
+        """
+        Teste la logique complexe de l'export Organisation Scolaire, incluant le pivotage,
+        l'agrégation, la gestion des non-attribués et le tri.
+        """
+        # --- Arrange ---
+        # Données de base
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee_id = annee.annee_id
+        fin_sport = TypeFinancement(code="SPORT", libelle="Sport-Études")
+        db.session.add(fin_sport)
+
+        # Enseignants pour tester le tri et les champs
+        prof_b_math = Enseignant(annee_id=annee_id, nom="Babbage", prenom="Charles", nomcomplet="Charles Babbage", champno="MATH")
+        prof_a_math = Enseignant(annee_id=annee_id, nom="Archimede", prenom="Syra", nomcomplet="Syra Archimede", champno="MATH")
+        prof_c_fran = Enseignant(annee_id=annee_id, nom="Camus", prenom="Albert", nomcomplet="Albert Camus", champno="FRAN")
+        tache_math_10 = Enseignant(annee_id=annee_id, nomcomplet="MATH-Tâche restante-10", champno="MATH", estfictif=True)
+        tache_math_2 = Enseignant(annee_id=annee_id, nomcomplet="MATH-Tâche restante-2", champno="MATH", estfictif=True)
+        db.session.add_all([prof_a_math, prof_b_math, prof_c_fran, tache_math_2, tache_math_10])
+
+        # Cours
+        # Cours régulier entièrement attribué à Prof A
+        cours_m1_reg = Cours(codecours="M1R", annee_id=annee_id, champno="MATH", coursdescriptif="Arithmétique", nbperiodes=2.0, nbgroupeinitial=1)
+        # Cours spécial entièrement attribué à Tâche 2
+        cours_m2_sport = Cours(codecours="M2S", annee_id=annee_id, champno="MATH", coursdescriptif="Stats Sport", nbperiodes=1.5, nbgroupeinitial=1, financement_code="SPORT")
+        # Cours partiellement attribué (2/3 groupes), reste 1 groupe non attribué
+        cours_f1_part = Cours(codecours="F1P", annee_id=annee_id, champno="FRAN", coursdescriptif="Grammaire", nbperiodes=3.0, nbgroupeinitial=3)
+        # Cours entièrement non attribué
+        cours_f2_unassigned = Cours(codecours="F2U", annee_id=annee_id, champno="FRAN", coursdescriptif="Poésie", nbperiodes=2.5, nbgroupeinitial=2)
+        db.session.add_all([cours_m1_reg, cours_m2_sport, cours_f1_part, cours_f2_unassigned])
+        db.session.commit()
+
+        # Attributions
+        db.session.add_all(
+            [
+                AttributionCours(enseignantid=prof_a_math.enseignantid, codecours="M1R", annee_id_cours=annee_id, nbgroupespris=1),
+                AttributionCours(enseignantid=tache_math_2.enseignantid, codecours="M2S", annee_id_cours=annee_id, nbgroupespris=1),
+                AttributionCours(enseignantid=prof_c_fran.enseignantid, codecours="F1P", annee_id_cours=annee_id, nbgroupespris=2),
+            ]
+        )
+        db.session.commit()
+
+        # --- Act ---
+        result = get_org_scolaire_export_data_service(annee_id)
+
+        # --- Assert ---
+        # 1. Structure globale
+        assert "MATH" in result
+        assert "FRAN" in result
+        assert len(result) == 2
+        assert result["MATH"]["nom"] == "Mathématiques"
+        assert result["FRAN"]["nom"] == "Français"
+
+        # 2. Vérification des données MATH et du tri
+        math_data = result["MATH"]["donnees"]
+        assert len(math_data) == 3  # Archimede, Babbage, Tâche 2 (Tâche 10 n'a pas de cours)
+        # Tri : Archimede (A) avant Babbage (B), puis Tâche 2
+        assert math_data[0]["nomcomplet"] == "Syra Archimede"
+        assert math_data[1]["nomcomplet"] == "Charles Babbage"
+        assert math_data[2]["nomcomplet"] == "Tâche restante-2"
+
+        # 3. Vérification du pivot et des valeurs pour MATH
+        prof_a_row = math_data[0]
+        assert prof_a_row["PÉRIODES RÉGULIER"] == pytest.approx(2.0)
+        assert prof_a_row["PÉRIODES SPORT-ÉTUDES"] == pytest.approx(0.0)
+
+        tache_2_row = math_data[2]
+        assert tache_2_row["PÉRIODES RÉGULIER"] == pytest.approx(0.0)
+        assert tache_2_row["PÉRIODES SPORT-ÉTUDES"] == pytest.approx(1.5)
+
+        # 4. Vérification des données FRAN et des non-attribués
+        fran_data = result["FRAN"]["donnees"]
+        assert len(fran_data) == 2  # Camus et la ligne "Non attribué"
+        # Tri: Enseignant réel avant "Non attribué"
+        assert fran_data[0]["nomcomplet"] == "Albert Camus"
+        assert fran_data[1]["nomcomplet"] == "Non attribué"
+
+        # 5. Vérification du pivot et des valeurs pour FRAN
+        prof_c_row = fran_data[0]
+        assert prof_c_row["PÉRIODES RÉGULIER"] == pytest.approx(3.0 * 2)  # 2 groupes
+        assert prof_c_row["PÉRIODES SPORT-ÉTUDES"] == pytest.approx(0.0)
+
+        unassigned_row = fran_data[1]
+        assert unassigned_row["estfictif"] is True
+        # Calcul des périodes non-attribuées :
+        # 1 groupe de F1P (1 * 3.0) + 2 groupes de F2U (2 * 2.5) = 3.0 + 5.0 = 8.0
+        assert unassigned_row["PÉRIODES RÉGULIER"] == pytest.approx(8.0)
