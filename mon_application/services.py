@@ -298,6 +298,36 @@ def get_active_year_service() -> dict[str, Any]:
         raise ServiceException(f"Erreur ORM lors de la récupération de l'année active : {e}")
 
 
+def determine_active_school_year_service(all_years: list[dict[str, Any]], has_dashboard_access: bool, annee_id_session: int | None) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Détermine l'année scolaire active à afficher en se basant sur la logique métier.
+    Retourne l'année active (dict) et un message d'avertissement potentiel (str).
+    """
+    annee_active = None
+    warning_message = None
+    annee_courante_existante = False
+
+    # 1. Tenter de trouver l'année de la session si l'utilisateur y a droit
+    if has_dashboard_access and annee_id_session:
+        annee_active = next((annee for annee in all_years if annee["annee_id"] == annee_id_session), None)
+
+    # 2. Si non trouvée, chercher l'année marquée comme "courante"
+    if not annee_active:
+        annee_courante = next((annee for annee in all_years if annee["est_courante"]), None)
+        if annee_courante:
+            annee_active = annee_courante
+            annee_courante_existante = True
+
+    # 3. Si toujours pas d'année, prendre la plus récente comme solution de repli
+    if not annee_active and all_years:
+        # La liste est déjà triée par libellé décroissant par `get_all_annees_service`
+        annee_active = all_years[0]
+        if has_dashboard_access and not annee_courante_existante:
+            warning_message = "Aucune année scolaire n'est définie comme 'courante'. Affichage de la plus récente par défaut."
+
+    return annee_active, warning_message
+
+
 def create_annee_scolaire_service(libelle: str) -> dict[str, Any]:
     """
     Crée une nouvelle année scolaire via l'ORM.
@@ -1007,6 +1037,33 @@ def _get_all_enseignants_grouped_by_champ_orm(annee_id: int) -> dict[str, dict[s
     return dict(enseignants_par_champ)
 
 
+def _create_teacher_sort_key(teacher_data: dict[str, Any]) -> tuple:
+    """Crée une clé de tri complexe pour les enseignants et les tâches."""
+    is_fictif = teacher_data["estfictif"]
+    nom_complet = teacher_data["nomcomplet"]
+
+    sort_order = 0
+    if is_fictif:
+        if "Tâche restante" in nom_complet:
+            sort_order = 1
+        elif "Non attribué" in nom_complet:
+            sort_order = 2
+        else:
+            sort_order = 3
+    task_num = 0
+    if sort_order == 1:
+        try:
+            task_num = int(nom_complet.split("-")[-1])
+        except (ValueError, IndexError):
+            pass
+    nom = teacher_data.get("nom", "") or ""
+    prenom = teacher_data.get("prenom", "") or ""
+    return (sort_order, task_num, nom, prenom)
+
+
+# --- Services d'agrégation de données pour les vues ---
+
+
 def get_data_for_admin_page_service(annee_id: int) -> dict[str, Any]:
     """Récupère toutes les données nécessaires pour la page d'administration via l'ORM."""
     try:
@@ -1032,6 +1089,41 @@ def get_data_for_user_admin_page_service() -> dict[str, Any]:
         }
     except Exception as e:
         raise ServiceException(f"Erreur lors de l'agrégation des données utilisateur : {e}")
+
+
+def get_data_for_champ_page_service(champ_no: str, annee_id: int) -> dict[str, Any]:
+    """
+    Récupère et agrège toutes les données nécessaires pour la page de détail d'un champ.
+    """
+    try:
+        # 1. Récupérer les détails du champ (lève une exception si non trouvé)
+        champ_details = get_champ_details_service(champ_no, annee_id)
+
+        # 2. Récupérer tous les enseignants de l'année (requête optimisée unique)
+        all_teachers_details = _get_all_teachers_with_details_service(annee_id)
+        # Filtrer en Python pour ne garder que ceux du champ concerné
+        enseignants_du_champ = [teacher for teacher in all_teachers_details if teacher["champno"] == champ_no]
+        sorted_enseignants = sorted(enseignants_du_champ, key=_create_teacher_sort_key)
+
+        # 3. Récupérer tous les cours du champ pour l'année
+        cours_du_champ_orm = db.session.query(Cours).filter_by(champno=champ_no, annee_id=annee_id).order_by(Cours.codecours).all()
+        cours_du_champ = [_cours_to_dict(c) for c in cours_du_champ_orm]
+
+        # 4. Récupérer tous les champs pour les menus déroulants
+        tous_les_champs = get_all_champs_service()
+
+        return {
+            "champ": champ_details,
+            "enseignants": sorted_enseignants,
+            "cours": cours_du_champ,
+            "tous_les_champs": tous_les_champs,
+        }
+    except EntityNotFoundError as e:
+        # Laisser passer cette exception pour que la vue puisse la gérer (ex: 404)
+        raise e
+    except Exception as e:
+        # Encapsuler les autres erreurs
+        raise ServiceException(f"Erreur lors de l'agrégation des données pour la page du champ {champ_no}: {e}")
 
 
 def get_dashboard_summary_service(annee_id: int) -> dict[str, Any]:
@@ -1348,30 +1440,6 @@ def get_periodes_restantes_for_export_service(annee_id: int) -> dict[str, dict[s
         periodes_par_champ[champ_no]["periodes"].append(periode_copy)
 
     return dict(periodes_par_champ)
-
-
-def _create_teacher_sort_key(teacher_data: dict[str, Any]) -> tuple:
-    """Crée une clé de tri complexe pour les enseignants et les tâches."""
-    is_fictif = teacher_data["estfictif"]
-    nom_complet = teacher_data["nomcomplet"]
-
-    sort_order = 0
-    if is_fictif:
-        if "Tâche restante" in nom_complet:
-            sort_order = 1
-        elif "Non attribué" in nom_complet:
-            sort_order = 2
-        else:
-            sort_order = 3
-    task_num = 0
-    if sort_order == 1:
-        try:
-            task_num = int(nom_complet.split("-")[-1])
-        except (ValueError, IndexError):
-            pass
-    nom = teacher_data.get("nom", "") or ""
-    prenom = teacher_data.get("prenom", "") or ""
-    return (sort_order, task_num, nom, prenom)
 
 
 def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, Any]]:
