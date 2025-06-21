@@ -6,6 +6,7 @@ Il contient la factory de l'application `create_app`.
 
 import datetime
 import os
+from numbers import Number  # Import pour une vérification de type robuste
 from typing import Any
 
 from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
@@ -36,14 +37,15 @@ def load_active_school_year() -> None:
         has_dashboard_access = current_user.is_admin or current_user.is_dashboard_only
         annee_id_session = session.get("annee_scolaire_id")
 
-        annee_active, warning_message = determine_active_school_year_service(toutes_les_annees, has_dashboard_access, annee_id_session)
+        annee_active, warning_message = determine_active_school_year_service(
+            toutes_les_annees, has_dashboard_access, annee_id_session
+        )
         g.annee_active = annee_active
 
         if warning_message:
             flash(warning_message, "warning")
 
     except Exception as e:
-        # Utiliser get_current_object() pour obtenir l'instance de l'app dans ce contexte
         from flask import current_app
 
         current_app.logger.error(f"Impossible de charger les années scolaires : {e}")
@@ -67,6 +69,19 @@ def get_database_uri() -> str:
         raise ValueError(f"Variables de BDD manquantes pour l'environnement '{flask_env}' (préfixe '{prefix}')")
 
     return f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+
+
+# --- Définition du filtre Jinja personnalisé (version robuste) ---
+def format_periodes_filter(value: Any) -> str:
+    """
+    Filtre Jinja pour formater un nombre de périodes.
+    Affiche une décimale et utilise une virgule comme séparateur.
+    Gère les valeurs non-numériques (None, Undefined) en retournant "0".
+    """
+    # Si la valeur n'est pas un nombre (int ou float), on retourne "0".
+    if not isinstance(value, Number) or value == 0:
+        return "0"
+    return f"{value:.1f}".replace(".", ",")
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
@@ -122,6 +137,9 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             "annee_active": getattr(g, "annee_active", None),
             "toutes_les_annees": getattr(g, "toutes_les_annees", []),
         }
+
+    # --- Enregistrement du filtre Jinja ---
+    app.add_template_filter(format_periodes_filter, "format_periodes")
 
     from . import admin, api, auth, dashboard, views
 

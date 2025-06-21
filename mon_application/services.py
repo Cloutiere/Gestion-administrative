@@ -1096,7 +1096,6 @@ def get_data_for_champ_page_service(champ_no: str, annee_id: int) -> dict[str, A
 
         # 2. Récupérer tous les enseignants de l'année (requête optimisée unique)
         all_teachers_details = _get_all_teachers_with_details_service(annee_id)
-        # Filtrer en Python pour ne garder que ceux du champ concerné
         enseignants_du_champ = [teacher for teacher in all_teachers_details if teacher["champno"] == champ_no]
         sorted_enseignants = sorted(enseignants_du_champ, key=_create_teacher_sort_key)
 
@@ -1104,7 +1103,16 @@ def get_data_for_champ_page_service(champ_no: str, annee_id: int) -> dict[str, A
         cours_du_champ_orm = db.session.query(Cours).filter_by(champno=champ_no, annee_id=annee_id).order_by(Cours.codecours).all()
         cours_du_champ = [_cours_to_dict(c) for c in cours_du_champ_orm]
 
-        # 4. Récupérer tous les champs pour les menus déroulants
+        # 4. Calculer la moyenne initiale pour le champ
+        nb_enseignants_tp = sum(1 for ens in enseignants_du_champ if ens["esttempsplein"] and not ens["estfictif"])
+        total_periodes_cours = sum(c["nbperiodes"] * c["nbgroupeinitial"] for c in cours_du_champ)
+        moyenne_champ_initiale = total_periodes_cours / nb_enseignants_tp if nb_enseignants_tp > 0 else 0.0
+
+        # 5. Filtrer les cours pour les différentes listes attendues par le template
+        cours_enseignement_champ = [c for c in cours_du_champ if not c["estcoursautre"]]
+        cours_autres_taches_champ = [c for c in cours_du_champ if c["estcoursautre"]]
+
+        # 6. Récupérer tous les champs pour les menus déroulants
         tous_les_champs = get_all_champs_service()
 
         return {
@@ -1112,12 +1120,13 @@ def get_data_for_champ_page_service(champ_no: str, annee_id: int) -> dict[str, A
             "enseignants": sorted_enseignants,
             "cours": cours_du_champ,
             "tous_les_champs": tous_les_champs,
+            "moyenne_champ_initiale": moyenne_champ_initiale,
+            "cours_enseignement_champ": cours_enseignement_champ,
+            "cours_autres_taches_champ": cours_autres_taches_champ,
         }
     except EntityNotFoundError as e:
-        # Laisser passer cette exception pour que la vue puisse la gérer (ex: 404)
         raise e
     except Exception as e:
-        # Encapsuler les autres erreurs
         raise ServiceException(f"Erreur lors de l'agrégation des données pour la page du champ {champ_no}: {e}")
 
 
@@ -1239,7 +1248,8 @@ def _calculate_teacher_details(enseignant: Enseignant) -> dict[str, Any]:
         )
     return {
         "attributions": attributions_details,
-        "periodes": {
+        # CORRECTION: Renommé "periodes" en "periodes_actuelles" pour correspondre au template
+        "periodes_actuelles": {
             "periodes_cours": periodes_cours,
             "periodes_autres": periodes_autres,
             "total_periodes": periodes_cours + periodes_autres,
@@ -1282,8 +1292,9 @@ def get_teacher_update_payload_service(enseignant_id: int) -> dict[str, Any]:
 
         details = _calculate_teacher_details(enseignant)
         # Le format de réponse attendu par l'API est directement le contenu du dictionnaire de détails
+        # CORRECTION: Utilisation de la clé "periodes_actuelles" pour la cohérence
         return {
-            "periodes_enseignant": details["periodes"],
+            "periodes_enseignant": details["periodes_actuelles"],
             "attributions_enseignant": details["attributions"],
         }
     except Exception as e:

@@ -34,7 +34,7 @@ bp = Blueprint("views", __name__)
 def index():
     """Page d'accueil, redirige vers le tableau de bord ou la page de connexion."""
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard.main"))
+        return redirect(url_for("dashboard.page_sommaire"))
     return redirect(url_for("auth.login"))
 
 
@@ -63,13 +63,14 @@ def page_champ(champ_no):
     try:
         annee_id = g.annee_active["annee_id"]
         page_data = get_data_for_champ_page_service(champ_no, annee_id)
-        return render_template("views/page_champ.html", **page_data)
+        # CORRECTION : Chemin du template simplifié.
+        return render_template("page_champ.html", **page_data)
 
     except EntityNotFoundError:
         abort(404)
     except ServiceException as e:
         flash(f"Une erreur est survenue lors du chargement de la page : {e.message}", "danger")
-        return redirect(url_for("dashboard.main"))
+        return redirect(url_for("dashboard.page_sommaire"))
 
 
 @bp.route("/export/attributions")
@@ -78,7 +79,7 @@ def page_export():
     """Génère et télécharge le fichier Excel des attributions."""
     if not g.annee_active:
         flash("Aucune année scolaire active. Impossible de générer l'export.", "danger")
-        return redirect(url_for("dashboard.main"))
+        return redirect(url_for("dashboard.page_sommaire"))
 
     try:
         # Import local pour éviter les dépendances circulaires
@@ -87,7 +88,7 @@ def page_export():
         return generate_attributions_excel(g.annee_active["annee_id"])
     except ServiceException as e:
         flash(f"Erreur lors de la génération de l'export des attributions: {e.message}", "danger")
-        return redirect(request.referrer or url_for("dashboard.main"))
+        return redirect(request.referrer or url_for("dashboard.page_sommaire"))
 
 
 @bp.route("/export/periodes_restantes")
@@ -96,7 +97,7 @@ def export_periodes_restantes():
     """Génère et télécharge le fichier Excel des périodes restantes (tâches)."""
     if not g.annee_active:
         flash("Aucune année scolaire active. Impossible de générer l'export.", "danger")
-        return redirect(url_for("dashboard.main"))
+        return redirect(url_for("dashboard.page_sommaire"))
     try:
         # Import local
         from .exports import generate_periodes_restantes_excel
@@ -104,7 +105,7 @@ def export_periodes_restantes():
         return generate_periodes_restantes_excel(g.annee_active["annee_id"])
     except ServiceException as e:
         flash(f"Erreur lors de la génération de l'export des périodes restantes: {e.message}", "danger")
-        return redirect(request.referrer or url_for("dashboard.main"))
+        return redirect(request.referrer or url_for("dashboard.page_sommaire"))
 
 
 @bp.route("/export/organisation_scolaire")
@@ -113,7 +114,7 @@ def export_organisation_scolaire():
     """Génère et télécharge le fichier Excel de l'organisation scolaire."""
     if not g.annee_active:
         flash("Aucune année scolaire active. Impossible de générer l'export.", "danger")
-        return redirect(url_for("dashboard.main"))
+        return redirect(url_for("dashboard.page_sommaire"))
     try:
         # Import local
         from .exports import generate_org_scolaire_excel
@@ -121,4 +122,4 @@ def export_organisation_scolaire():
         return generate_org_scolaire_excel(g.annee_active["annee_id"])
     except ServiceException as e:
         flash(f"Erreur lors de la génération de l'export de l'organisation scolaire: {e.message}", "danger")
-        return redirect(request.referrer or url_for("dashboard.main"))
+        return redirect(request.referrer or url_for("dashboard.page_sommaire"))
