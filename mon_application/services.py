@@ -19,8 +19,6 @@ from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased, joinedload
 
-# ANCIEN : On le garde pour les fonctions non encore refactorisées
-from . import database as old_db
 from .extensions import db
 
 # NOUVEAU: Import des modèles requis pour la refactorisation
@@ -280,6 +278,24 @@ def get_all_annees_service() -> list[dict[str, Any]]:
         return [{"annee_id": a.annee_id, "libelle_annee": a.libelle_annee, "est_courante": a.est_courante} for a in annees]
     except Exception as e:
         raise ServiceException(f"Erreur ORM lors de la récupération des années: {e}")
+
+
+def get_active_year_service() -> dict[str, Any]:
+    """Récupère l'année scolaire active via l'ORM."""
+    try:
+        active_year = db.session.query(AnneeScolaire).filter_by(est_courante=True).one_or_none()
+        if not active_year:
+            raise BusinessRuleValidationError("Aucune année scolaire active n'est définie. Veuillez en configurer une dans le panneau d'administration.")
+        return {
+            "annee_id": active_year.annee_id,
+            "libelle_annee": active_year.libelle_annee,
+            "est_courante": active_year.est_courante,
+        }
+    except Exception as e:
+        # Re-lever les exceptions métier, sinon encapsuler
+        if isinstance(e, BusinessRuleValidationError):
+            raise
+        raise ServiceException(f"Erreur ORM lors de la récupération de l'année active : {e}")
 
 
 def create_annee_scolaire_service(libelle: str) -> dict[str, Any]:
@@ -562,6 +578,14 @@ def get_teacher_details_service(enseignant_id: int) -> dict[str, Any]:
     return _enseignant_to_dict(enseignant)
 
 
+def get_any_teacher_by_id_service(enseignant_id: int) -> dict[str, Any]:
+    """Récupère les détails de n'importe quel enseignant (réel ou fictif) par son ID."""
+    enseignant = db.session.get(Enseignant, enseignant_id)
+    if not enseignant:
+        raise EntityNotFoundError("Enseignant non trouvé.")
+    return _enseignant_to_dict(enseignant)
+
+
 def create_teacher_service(data: dict[str, Any], annee_id: int) -> dict[str, Any]:
     """Crée un nouvel enseignant via l'ORM."""
     try:
@@ -615,7 +639,7 @@ def delete_teacher_service(enseignant_id: int) -> list[dict[str, Any]]:
         raise EntityNotFoundError("Enseignant non trouvé.")
 
     # La règle métier est de retourner la liste des cours affectés avant suppression.
-    cours_affectes = [{"CodeCours": attr.codecours, "annee_id_cours": attr.annee_id_cours} for attr in teacher_to_delete.attributions]
+    cours_affectes = [{"codecours": attr.codecours, "annee_id_cours": attr.annee_id_cours} for attr in teacher_to_delete.attributions]
 
     try:
         db.session.delete(teacher_to_delete)
@@ -715,10 +739,6 @@ def delete_financement_service(code: str) -> None:
     financement = db.session.get(TypeFinancement, code)
     if not financement:
         raise EntityNotFoundError("Type de financement non trouvé.")
-
-    cours_utilisant = db.session.query(Cours.codecours).filter_by(financement_code=code).first()
-    if cours_utilisant:
-        raise ForeignKeyError("Impossible de supprimer : ce financement est utilisé par des cours.")
 
     db.session.delete(financement)
     try:
@@ -842,6 +862,41 @@ def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
         raise ServiceException(f"La suppression de l'utilisateur a échoué: {e}")
 
 
+# --- Services pour les Attributions ---
+
+def get_attribution_details_service(attribution_id: int) -> dict[str, Any]:
+    """Récupère les détails d'une attribution, y compris le champno de l'enseignant."""
+    attribution = db.session.get(AttributionCours, attribution_id)
+    if not attribution:
+        raise EntityNotFoundError("Attribution non trouvée.")
+
+    return {
+        "attributionid": attribution.attributionid,
+        "enseignantid": attribution.enseignantid,
+        "champno": attribution.enseignant.champno,
+        "estfictif": attribution.enseignant.estfictif,
+    }
+
+
+def get_remaining_groups_for_course_service(code_cours: str, annee_id: int) -> int:
+    """
+    Calcule le nombre de groupes restants pour un cours via l'ORM.
+    Utilisé par l'API pour mettre à jour l'interface utilisateur.
+    """
+    cours = db.session.get(Cours, {"codecours": code_cours, "annee_id": annee_id})
+    if not cours:
+        # Retourne 0 si le cours n'existe pas, car il n'y a pas de groupes.
+        return 0
+
+    groupes_pris = (
+        db.session.query(func.coalesce(func.sum(AttributionCours.nbgroupespris), 0))
+        .filter_by(codecours=code_cours, annee_id_cours=annee_id)
+        .scalar()
+    )
+
+    return cours.nbgroupeinitial - (groupes_pris or 0)
+
+
 def add_attribution_service(enseignant_id: int, code_cours: str, annee_id: int) -> int:
     """Ajoute une attribution de cours à un enseignant via l'ORM."""
     # 1. Valider les entités et les règles métier
@@ -859,8 +914,8 @@ def add_attribution_service(enseignant_id: int, code_cours: str, annee_id: int) 
         raise BusinessRuleValidationError("Les modifications sont désactivées car le champ est verrouillé.")
 
     # Règle: Vérifier les groupes restants
-    groupes_pris = sum(attr.nbgroupespris for attr in cours.attributions)
-    if (cours.nbgroupeinitial - groupes_pris) < 1:
+    groupes_restants = get_remaining_groups_for_course_service(code_cours, annee_id)
+    if groupes_restants < 1:
         raise BusinessRuleValidationError("Plus de groupes disponibles pour ce cours.")
 
     # 2. Exécuter l'opération
@@ -882,24 +937,32 @@ def add_attribution_service(enseignant_id: int, code_cours: str, annee_id: int) 
 def delete_attribution_service(attribution_id: int) -> dict[str, Any]:
     """Supprime une attribution de cours via l'ORM."""
     # 1. Récupérer l'entité et valider les règles métier
-    attribution = db.session.get(AttributionCours, attribution_id)
+    attribution = (
+        db.session.query(AttributionCours)
+        .options(
+            joinedload(AttributionCours.enseignant).joinedload(Enseignant.champ).joinedload(Champ.statuts_annee)
+        )
+        .filter(AttributionCours.attributionid == attribution_id)
+        .first()
+    )
+
     if not attribution:
         raise EntityNotFoundError("Attribution non trouvée.")
 
     enseignant = attribution.enseignant
+    annee_id = enseignant.annee_id
+
     # Règle: Vérifier le verrouillage du champ
-    statut_champ = db.session.query(ChampAnneeStatut).filter_by(champ_no=enseignant.champno, annee_id=enseignant.annee_id).first()
+    statut_champ = db.session.query(ChampAnneeStatut).filter_by(champ_no=enseignant.champno, annee_id=annee_id).first()
+
     if statut_champ and statut_champ.est_verrouille and not enseignant.estfictif:
         raise BusinessRuleValidationError("Les modifications sont désactivées car le champ est verrouillé.")
 
     # 2. Préparer les données à retourner (contrat de la fonction)
     attr_info = {
-        "EnseignantID": enseignant.enseignantid,
-        "CodeCours": attribution.codecours,
+        "enseignantid": enseignant.enseignantid,
+        "codecours": attribution.codecours,
         "annee_id_cours": attribution.annee_id_cours,
-        "EstFictif": enseignant.estfictif,
-        "ChampNo": enseignant.champno,
-        "est_verrouille": statut_champ.est_verrouille if statut_champ else False,
     }
 
     # 3. Exécuter l'opération
@@ -976,15 +1039,11 @@ def get_dashboard_summary_service(annee_id: int) -> dict[str, Any]:
     try:
         return get_dashboard_summary_service_orm(annee_id)
     except Exception as e:
-        # Log de l'erreur originale pour le débogage
-        # current_app.logger.error(f"Erreur ORM dans get_dashboard_summary_service: {e}", exc_info=True)
-        # Retourne une ServiceException pour une gestion propre dans la couche supérieure
         raise ServiceException(f"Erreur lors du calcul du sommaire du tableau de bord: {e}")
 
 
 def get_dashboard_summary_service_orm(annee_id: int) -> dict[str, Any]:
     """Calcule et récupère les données du tableau de bord en utilisant SQLAlchemy ORM."""
-    # Étape 1: Créer une sous-requête pour calculer les périodes totales par enseignant
     ac_alias = aliased(AttributionCours)
     c_alias = aliased(Cours)
     teacher_periods_subquery = (
@@ -997,7 +1056,6 @@ def get_dashboard_summary_service_orm(annee_id: int) -> dict[str, Any]:
     )
     tps_alias = aliased(teacher_periods_subquery, name="tps")
 
-    # Étape 2: Agréger les statistiques par champ
     is_tp_non_fictif = (Enseignant.esttempsplein == True) & (Enseignant.estfictif == False)  # noqa: E712
     champ_stats_query = (
         db.session.query(
@@ -1012,7 +1070,6 @@ def get_dashboard_summary_service_orm(annee_id: int) -> dict[str, Any]:
     )
     cs_alias = aliased(champ_stats_query, name="cs")
 
-    # Étape 3: Requête finale pour joindre toutes les infos
     all_champs_data = (
         db.session.query(
             Champ.champno,
@@ -1028,7 +1085,6 @@ def get_dashboard_summary_service_orm(annee_id: int) -> dict[str, Any]:
         .all()
     )
 
-    # Étape 4: Calculs finaux et formatage en Python
     moyennes_par_champ = {}
     for row in all_champs_data:
         nb_tp = int(row.nb_enseignants_tp)
@@ -1048,21 +1104,59 @@ def get_dashboard_summary_service_orm(annee_id: int) -> dict[str, Any]:
     nb_enseignants_tp_global = sum(r["nb_enseignants_tp"] for r in moyennes_par_champ.values())
     total_periodes_confirme_tp = sum(r["periodes_choisies_tp"] for r in moyennes_par_champ.values() if r["est_confirme"])
     nb_enseignants_confirme_tp = sum(r["nb_enseignants_tp"] for r in moyennes_par_champ.values() if r["est_confirme"])
-
     moyenne_generale = (total_periodes_global_tp / nb_enseignants_tp_global) if nb_enseignants_tp_global > 0 else 0.0
     moyenne_prelim_conf = (total_periodes_confirme_tp / nb_enseignants_confirme_tp) if nb_enseignants_confirme_tp > 0 else 0.0
-
     grand_totals = {
         "total_enseignants_tp": float(nb_enseignants_tp_global),
         "total_periodes_choisies_tp": total_periodes_global_tp,
         "total_periodes_magiques": sum(r["periodes_magiques"] for r in moyennes_par_champ.values()),
     }
-
     return {
         "moyennes_par_champ": moyennes_par_champ,
         "moyenne_generale": moyenne_generale,
         "moyenne_preliminaire_confirmee": moyenne_prelim_conf,
         "grand_totals": grand_totals,
+    }
+
+
+def _calculate_teacher_details(enseignant: Enseignant) -> dict[str, Any]:
+    """
+    Fonction helper pour calculer les détails (périodes, attributions) pour UN enseignant.
+    L'enseignant doit être pré-chargé avec ses attributions et cours via joinedload.
+    """
+    periodes_cours = 0.0
+    periodes_autres = 0.0
+    attributions_details = []
+
+    for attr in enseignant.attributions:
+        # La relation `attr.cours` devrait déjà être chargée
+        cours_info = attr.cours
+        periodes_a_ajouter = float(cours_info.nbperiodes) * attr.nbgroupespris
+
+        if cours_info.estcoursautre:
+            periodes_autres += periodes_a_ajouter
+        else:
+            periodes_cours += periodes_a_ajouter
+
+        attributions_details.append(
+            {
+                "AttributionID": attr.attributionid,
+                "CodeCours": cours_info.codecours,
+                "NbGroupesPris": attr.nbgroupespris,
+                "CoursDescriptif": cours_info.coursdescriptif,
+                "NbPeriodes": float(cours_info.nbperiodes),
+                "EstCoursAutre": cours_info.estcoursautre,
+                "annee_id": cours_info.annee_id,
+                "financement_code": cours_info.financement_code,
+            }
+        )
+    return {
+        "attributions": attributions_details,
+        "periodes": {
+            "periodes_cours": periodes_cours,
+            "periodes_autres": periodes_autres,
+            "total_periodes": periodes_cours + periodes_autres,
+        },
     }
 
 
@@ -1079,50 +1173,39 @@ def _get_all_teachers_with_details_service(annee_id: int) -> list[dict[str, Any]
             .order_by(Enseignant.estfictif, Enseignant.nom, Enseignant.prenom)
             .all()
         )
-
         results = []
         for enseignant in enseignants:
-            periodes_cours = 0.0
-            periodes_autres = 0.0
-            attributions_details = []
-
-            for attr in enseignant.attributions:
-                # La relation attr.cours est déjà chargée grâce au joinedload
-                cours_info = attr.cours
-                periodes_a_ajouter = float(cours_info.nbperiodes) * attr.nbgroupespris
-
-                if cours_info.estcoursautre:
-                    periodes_autres += periodes_a_ajouter
-                else:
-                    periodes_cours += periodes_a_ajouter
-
-                attributions_details.append(
-                    {
-                        "AttributionID": attr.attributionid,
-                        "CodeCours": cours_info.codecours,
-                        "NbGroupesPris": attr.nbgroupespris,
-                        "CoursDescriptif": cours_info.coursdescriptif,
-                        "NbPeriodes": float(cours_info.nbperiodes),
-                        "EstCoursAutre": cours_info.estcoursautre,
-                        "annee_id": cours_info.annee_id,
-                        "financement_code": cours_info.financement_code,
-                    }
-                )
-
-            results.append(
-                {
-                    **_enseignant_to_dict(enseignant),
-                    "attributions": attributions_details,
-                    "periodes": {
-                        "periodes_cours": periodes_cours,
-                        "periodes_autres": periodes_autres,
-                        "total_periodes": periodes_cours + periodes_autres,
-                    },
-                }
-            )
+            details = _calculate_teacher_details(enseignant)
+            results.append({**_enseignant_to_dict(enseignant), **details})
         return results
     except Exception as e:
         raise ServiceException(f"Erreur ORM lors de la récupération des détails des enseignants : {e}")
+
+
+def get_teacher_update_payload_service(enseignant_id: int) -> dict[str, Any]:
+    """
+    Récupère les données nécessaires (périodes, attributions) pour mettre à jour
+    l'interface d'un enseignant après une action.
+    """
+    try:
+        enseignant = (
+            db.session.query(Enseignant)
+            .options(joinedload(Enseignant.attributions).joinedload(AttributionCours.cours))
+            .filter(Enseignant.enseignantid == enseignant_id)
+            .one_or_none()
+        )
+
+        if not enseignant:
+            raise EntityNotFoundError("Enseignant non trouvé.")
+
+        details = _calculate_teacher_details(enseignant)
+        # Le format de réponse attendu par l'API est directement le contenu du dictionnaire de détails
+        return {
+            "periodes_enseignant": details["periodes"],
+            "attributions_enseignant": details["attributions"],
+        }
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la récupération du payload de mise à jour de l'enseignant : {e}")
 
 
 def get_detailed_tasks_data_service(annee_id: int) -> list[dict[str, Any]]:
@@ -1153,10 +1236,10 @@ def get_detailed_tasks_data_service(annee_id: int) -> list[dict[str, Any]]:
 def get_attributions_for_export_service(annee_id: int) -> dict[str, dict[str, Any]]:
     """
     Récupère les attributions formatées pour l'export via l'ORM et les groupe par champ.
+    Cette version est entièrement refactorisée pour utiliser SQLAlchemy ORM.
     """
     try:
-        # Requête ORM qui remplace l'ancien appel à `database.py`.
-        # Les `.label()` assurent que les noms de colonnes correspondent à l'ancienne structure.
+        # Étape 1 : Requête ORM pour récupérer toutes les données nécessaires en une seule fois.
         query_results = (
             db.session.query(
                 Champ.champno.label("champno"),
@@ -1186,16 +1269,10 @@ def get_attributions_for_export_service(annee_id: int) -> dict[str, dict[str, An
                 Cours.financement_code,
                 Cours.nbperiodes,
             )
-            .order_by(
-                Champ.champno.asc(),
-                Enseignant.nom.asc(),
-                Enseignant.prenom.asc(),
-                Cours.codecours.asc(),
-            )
+            .order_by(Champ.champno, Enseignant.nom, Enseignant.prenom, Cours.codecours)
             .all()
         )
-
-        # Convertir les `KeyedTuple` en une liste de dictionnaires.
+        # Étape 2 : Conversion des résultats en une liste de dictionnaires pour un traitement facile.
         attributions_raw = [dict(row._mapping) for row in query_results]
 
     except Exception as e:
@@ -1204,31 +1281,73 @@ def get_attributions_for_export_service(annee_id: int) -> dict[str, dict[str, An
     if not attributions_raw:
         return {}
 
-    # Le reste de la logique pour grouper les données reste identique.
-    attributions_par_champ: dict[str, dict[str, Any]] = {}
+    # Étape 3 : Formatage des données dans la structure attendue, regroupée par champ.
+    attributions_par_champ: defaultdict[str, dict[str, Any]] = defaultdict(lambda: {"nom": "", "attributions": []})
     for attr in attributions_raw:
         champ_no = attr["champno"]
-        if champ_no not in attributions_par_champ:
-            attributions_par_champ[champ_no] = {"nom": attr["champnom"], "attributions": []}
-        # On convertit le nbperiodes en float pour être cohérent avec l'ancienne version
+        if not attributions_par_champ[champ_no]["nom"]:
+            attributions_par_champ[champ_no]["nom"] = attr["champnom"]
+
         attr_copy = attr.copy()
+        # Assurer que le type de données est correct pour les calculs futurs.
         attr_copy["nbperiodes"] = float(attr_copy["nbperiodes"])
         attributions_par_champ[champ_no]["attributions"].append(attr_copy)
 
-    return attributions_par_champ
+    return dict(attributions_par_champ)
 
 
 def get_periodes_restantes_for_export_service(annee_id: int) -> dict[str, dict[str, Any]]:
-    periodes_restantes_raw = old_db.get_periodes_restantes_for_export(annee_id)
+    """
+    Récupère les périodes restantes (attributions à des enseignants fictifs) pour l'export.
+    Cette version est entièrement refactorisée pour utiliser SQLAlchemy ORM.
+    """
+    try:
+        # Requête ORM pour récupérer les attributions des enseignants fictifs.
+        query_results = (
+            db.session.query(
+                Enseignant.champno.label("champno"),
+                Champ.champnom.label("champnom"),
+                Enseignant.nomcomplet.label("nomcomplet"),
+                Cours.codecours.label("codecours"),
+                Cours.coursdescriptif.label("coursdescriptif"),
+                func.sum(AttributionCours.nbgroupespris).label("total_groupes_pris"),
+                Cours.nbperiodes.label("nbperiodes"),
+            )
+            .select_from(AttributionCours)
+            .join(AttributionCours.enseignant)
+            .join(Enseignant.champ)
+            .join(AttributionCours.cours)
+            .filter(Enseignant.annee_id == annee_id, Enseignant.estfictif == True)  # noqa: E712
+            .group_by(
+                Enseignant.champno,
+                Champ.champnom,
+                Enseignant.nomcomplet,
+                Cours.codecours,
+                Cours.coursdescriptif,
+                Cours.nbperiodes,
+            )
+            .order_by(Enseignant.champno.asc(), Enseignant.nomcomplet.asc(), Cours.codecours.asc())
+            .all()
+        )
+        periodes_restantes_raw = [dict(row._mapping) for row in query_results]
+    except Exception as e:
+        raise ServiceException(f"Erreur ORM lors de la récupération des périodes restantes pour l'export: {e}")
+
     if not periodes_restantes_raw:
         return {}
-    periodes_par_champ: dict[str, dict[str, Any]] = {}
+
+    # Formatage des données dans la structure attendue, regroupée par champ.
+    periodes_par_champ: defaultdict[str, dict[str, Any]] = defaultdict(lambda: {"nom": "", "periodes": []})
     for periode in periodes_restantes_raw:
         champ_no = periode["champno"]
-        if champ_no not in periodes_par_champ:
-            periodes_par_champ[champ_no] = {"nom": periode["champnom"], "periodes": []}
-        periodes_par_champ[champ_no]["periodes"].append(periode)
-    return periodes_par_champ
+        if not periodes_par_champ[champ_no]["nom"]:
+            periodes_par_champ[champ_no]["nom"] = periode["champnom"]
+
+        periode_copy = periode.copy()
+        periode_copy["nbperiodes"] = float(periode_copy["nbperiodes"])
+        periodes_par_champ[champ_no]["periodes"].append(periode_copy)
+
+    return dict(periodes_par_champ)
 
 
 def _create_teacher_sort_key(teacher_data: dict[str, Any]) -> tuple:
@@ -1236,7 +1355,6 @@ def _create_teacher_sort_key(teacher_data: dict[str, Any]) -> tuple:
     is_fictif = teacher_data["estfictif"]
     nom_complet = teacher_data["nomcomplet"]
 
-    # Ordre de base : Réels (0), Tâches (1), Non attribué (2), Autres fictifs (3)
     sort_order = 0
     if is_fictif:
         if "Tâche restante" in nom_complet:
@@ -1245,49 +1363,37 @@ def _create_teacher_sort_key(teacher_data: dict[str, Any]) -> tuple:
             sort_order = 2
         else:
             sort_order = 3
-
-    # Numéro de tâche pour le tri secondaire
     task_num = 0
     if sort_order == 1:
         try:
-            # Extrait le numéro à la fin du nom de la tâche
             task_num = int(nom_complet.split("-")[-1])
         except (ValueError, IndexError):
-            pass  # Reste à 0 si le format est inattendu
-
-    # Le nom et le prénom ne sont pertinents que pour les enseignants réels
+            pass
     nom = teacher_data.get("nom", "") or ""
     prenom = teacher_data.get("prenom", "") or ""
-
     return (sort_order, task_num, nom, prenom)
 
 
 def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, Any]]:
     """
     Construit les données pour l'export "Organisation Scolaire" via l'ORM et Python.
-    Remplace la complexe requête SQL monolithique.
     """
     try:
-        # --- Étape 1 : Collecte des données de base avec l'ORM ---
         all_financements = db.session.query(TypeFinancement).all()
         header_map = {f"PÉRIODES {f.libelle.upper()}": f.code for f in all_financements}
         code_to_header_map = {code: header for header, code in header_map.items()}
         all_headers = sorted(list(header_map.keys()))
         all_headers.insert(0, "PÉRIODES RÉGULIER")
 
-        # --- Étape 2 : Initialiser le pivot avec TOUS les enseignants de l'année ---
         pivot_data: defaultdict[str, dict[str, Any]] = defaultdict(lambda: {})
         all_teachers = db.session.query(Enseignant).options(joinedload(Enseignant.champ)).filter_by(annee_id=annee_id).all()
 
         for enseignant in all_teachers:
             champ = enseignant.champ
             enseignant_key = f"{'fictif' if enseignant.estfictif else 'reel'}-{enseignant.nomcomplet}"
-
-            # Nettoyer le nom de la tâche pour l'affichage
             display_nomcomplet = enseignant.nomcomplet
             if enseignant.estfictif and enseignant.nomcomplet.startswith(f"{champ.champno}-"):
                 display_nomcomplet = display_nomcomplet.replace(f"{champ.champno}-", "", 1).strip()
-
             pivot_data[champ.champno][enseignant_key] = {
                 "nom": enseignant.nom,
                 "prenom": enseignant.prenom,
@@ -1297,7 +1403,6 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
                 **{header: 0.0 for header in all_headers},
             }
 
-        # --- Étape 3 : Traiter les attributions pour remplir le pivot ---
         attributions = (
             db.session.query(AttributionCours).options(joinedload(AttributionCours.enseignant), joinedload(AttributionCours.cours)).join(Enseignant).filter(Enseignant.annee_id == annee_id).all()
         )
@@ -1305,14 +1410,11 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
             enseignant = attr.enseignant
             cours = attr.cours
             enseignant_key = f"{'fictif' if enseignant.estfictif else 'reel'}-{enseignant.nomcomplet}"
-
-            # Le `pivot_data` est déjà initialisé, on ne fait qu'ajouter les périodes
             if enseignant_key in pivot_data[enseignant.champno]:
                 total_p = float(cours.nbperiodes) * attr.nbgroupespris
                 target_col = code_to_header_map.get(cours.financement_code, "PÉRIODES RÉGULIER")
                 pivot_data[enseignant.champno][enseignant_key][target_col] += total_p
 
-        # --- Étape 4 : Calculer et ajouter les tâches non-attribuées ---
         cours_with_groups_taken = (
             db.session.query(AttributionCours.codecours, func.sum(AttributionCours.nbgroupespris).label("groupes_pris"))
             .filter(AttributionCours.annee_id_cours == annee_id)
@@ -1322,7 +1424,7 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
         groups_taken_map = {c.codecours: c.groupes_pris for c in cours_with_groups_taken}
         all_courses = db.session.query(Cours).options(joinedload(Cours.champ)).filter_by(annee_id=annee_id).all()
 
-        unassigned_tasks: defaultdict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        unassigned_tasks: defaultdict[str, dict[str, Any]] = defaultdict(lambda: defaultdict(float))
         for cours in all_courses:
             remaining_groups = cours.nbgroupeinitial - groups_taken_map.get(cours.codecours, 0)
             if remaining_groups > 0:
@@ -1330,35 +1432,41 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
                 target_col = code_to_header_map.get(cours.financement_code, "PÉRIODES RÉGULIER")
                 unassigned_tasks[cours.champno][target_col] += total_p
 
-        # Ajouter les tâches non attribuées au pivot
+        # CORRIGÉ : Logique revue pour ajouter la ligne "Non attribué" correctement
         for champ_no, periods_by_funding in unassigned_tasks.items():
             if any(p > 0 for p in periods_by_funding.values()):
-                champ_nom = db.session.get(Champ, champ_no).champnom
                 unassigned_key = "fictif-Non attribué"
-                pivot_data[champ_no][unassigned_key] = {
-                    "nom": "Non attribué",
-                    "prenom": None,
-                    "nomcomplet": "Non attribué",
-                    "estfictif": True,
-                    "champnom": champ_nom,
-                    **{header: periods_by_funding.get(header, 0.0) for header in all_headers},
-                }
+                champ = db.session.get(Champ, champ_no)
 
-        # --- Étape 5 : Formater et trier la sortie finale ---
+                # Initialise le dictionnaire du champ s'il n'existe pas encore
+                if champ_no not in pivot_data:
+                    pivot_data[champ_no] = {}
+
+                # Initialise ou met à jour la ligne "Non attribué"
+                if unassigned_key not in pivot_data[champ_no]:
+                    pivot_data[champ_no][unassigned_key] = {
+                        "nom": "Non attribué",
+                        "prenom": None,
+                        "nomcomplet": "Non attribué",
+                        "estfictif": True,
+                        "champnom": champ.champnom if champ else "N/A",
+                        **{header: 0.0 for header in all_headers},
+                    }
+
+                for header, value in periods_by_funding.items():
+                    pivot_data[champ_no][unassigned_key][header] += value
+
         donnees_par_champ: dict[str, dict[str, Any]] = {}
         for champ_no, enseignants_data in pivot_data.items():
-            # Filtrer les enseignants sans aucune période (ceux qui existent mais n'ont rien)
-            filtered_enseignants = [data for data in enseignants_data.values() if sum(data.get(h, 0.0) for h in all_headers) > 0 or data.get("nomcomplet") == "Non attribué" or not data["estfictif"]]
+            filtered_enseignants = [
+                data
+                for data in enseignants_data.values()
+                if sum(data.get(h, 0.0) for h in all_headers) > 0 or not data["estfictif"]
+            ]
             if not filtered_enseignants:
                 continue
-
             sorted_enseignants = sorted(filtered_enseignants, key=_create_teacher_sort_key)
-
-            donnees_par_champ[champ_no] = {
-                "nom": sorted_enseignants[0]["champnom"],
-                "donnees": sorted_enseignants,
-            }
-
+            donnees_par_champ[champ_no] = {"nom": sorted_enseignants[0]["champnom"], "donnees": sorted_enseignants}
         return dict(sorted(donnees_par_champ.items()))
 
     except Exception as e:
@@ -1368,10 +1476,8 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
     """
     Récupère les données pour la préparation de l'horaire via l'ORM SQLAlchemy.
-    Cette fonction est entièrement refactorisée et n'utilise plus `database.py`.
     """
     try:
-        # Récupération des données de base avec l'ORM
         all_champs = get_all_champs_service()
         all_cours_raw = db.session.query(Cours).filter_by(annee_id=annee_id).order_by(Cours.champno, Cours.codecours).all()
         all_assignments_raw = (
@@ -1384,7 +1490,6 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
         )
         saved_assignments_raw = db.session.query(PreparationHoraire).filter_by(annee_id=annee_id).all()
 
-        # Transformation des données comme dans la version originale
         cours_par_champ: defaultdict[str, list] = defaultdict(list)
         cours_details: dict[str, dict] = {}
         for cours in all_cours_raw:
@@ -1395,7 +1500,6 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
         enseignants_par_cours: defaultdict[str, list] = defaultdict(list)
         for assignment in all_assignments_raw:
             enseignant = assignment.enseignant
-            # "Déplier" les groupes: créer une entrée par groupe pris
             for _ in range(assignment.nbgroupespris):
                 enseignants_par_cours[assignment.codecours].append({"codecours": assignment.codecours, "nomcomplet": enseignant.nomcomplet, "enseignantid": enseignant.enseignantid})
 
@@ -1404,30 +1508,20 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
             key = (saved.secondaire_level, saved.codecours)
             saved_placements[key][saved.colonne_assignee].append(saved.enseignant_id)
 
-        # Construction de la grille finale
         prepared_grid: dict[int, list] = {level: [] for level in range(1, 6)}
-        cours_traites = set()
         for (level, codecours), columns in saved_placements.items():
             cours_info = cours_details.get(codecours)
             if not cours_info:
                 continue
-
             all_teachers_for_course = enseignants_par_cours.get(codecours, [])
             teachers_lookup = {t["enseignantid"]: t for t in all_teachers_for_course}
-
-            # --- LOGIQUE CORRIGÉE ---
             unassigned_teachers = []
             if all_teachers_for_course:
-                # Compter combien de fois chaque enseignant a été placé
                 placed_assignments_count = sum(len(ids) for ids in columns.values())
                 unassigned_count = len(all_teachers_for_course) - placed_assignments_count
-
                 if unassigned_count > 0:
-                    # Le prototype peut être n'importe quelle entrée, car les détails sont les mêmes
                     teacher_prototype = all_teachers_for_course[0]
                     unassigned_teachers = [teacher_prototype] * unassigned_count
-            # --- FIN DE LA LOGIQUE CORRIGÉE ---
-
             prepared_grid[level].append(
                 {
                     "cours": cours_info,
@@ -1437,8 +1531,6 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
                     "teachers_lookup": teachers_lookup,
                 }
             )
-            cours_traites.add(codecours)
-
         return {
             "all_champs": all_champs,
             "cours_par_champ": dict(cours_par_champ),
@@ -1452,7 +1544,6 @@ def get_preparation_horaire_data_service(annee_id: int) -> dict[str, Any]:
 def save_preparation_horaire_service(annee_id: int, assignments_data: list[dict[str, Any]]) -> None:
     """
     Sauvegarde (en remplaçant) les assignations de la préparation de l'horaire pour une année.
-    Opération transactionnelle utilisant l'ORM SQLAlchemy.
     """
     required_keys = ["secondaire_level", "codecours", "annee_id_cours", "enseignant_id", "colonne_assignee"]
     for item in assignments_data:
@@ -1460,15 +1551,10 @@ def save_preparation_horaire_service(annee_id: int, assignments_data: list[dict[
             raise BusinessRuleValidationError("Données de sauvegarde invalides ou incomplètes.")
 
     try:
-        # 1. Supprimer toutes les anciennes données pour cette année scolaire (atomiquement)
         db.session.query(PreparationHoraire).filter_by(annee_id=annee_id).delete(synchronize_session=False)
-
-        # 2. Préparer les nouvelles données pour l'insertion
         if assignments_data:
             new_assignments = [PreparationHoraire(annee_id=annee_id, **data) for data in assignments_data]
             db.session.add_all(new_assignments)
-
-        # 3. Commiter la transaction
         db.session.commit()
     except Exception as e:
         db.session.rollback()

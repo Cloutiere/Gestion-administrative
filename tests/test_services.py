@@ -38,7 +38,8 @@ from mon_application.services import (
     get_course_details_service,
     get_dashboard_summary_service_orm,
     get_data_for_admin_page_service,
-    get_org_scolaire_export_data_service,  # NOUVEL IMPORT
+    get_org_scolaire_export_data_service,
+    get_periodes_restantes_for_export_service,  # NOUVEL IMPORT
     get_preparation_horaire_data_service,
     get_teacher_details_service,
     reassign_course_to_champ_service,
@@ -446,7 +447,7 @@ class TestTeacherServices:
         affected_courses = delete_teacher_service(teacher_id)
 
         assert len(affected_courses) == 1
-        assert affected_courses[0]["CodeCours"] == "PHYS101"
+        assert affected_courses[0]["codecours"] == "PHYS101"
         assert db.session.query(Enseignant).count() == 0
         assert db.session.query(AttributionCours).count() == 0
 
@@ -545,7 +546,7 @@ class TestAttributionServices:
         attr_id = attr.attributionid
 
         result = delete_attribution_service(attr_id)
-        assert result["CodeCours"] == "C1"
+        assert result["codecours"] == "C1"
         assert db.session.query(AttributionCours).count() == 0
 
     def test_delete_attribution_fails_if_champ_is_locked(self, app, db):
@@ -1092,7 +1093,6 @@ class TestPreparationHoraireServices:
             save_preparation_horaire_service(annee.annee_id, invalid_assignments)
 
 
-# NOUVELLE CLASSE DE TESTS POUR LES SERVICES D'EXPORT
 class TestExportServices:
     """Regroupe les tests pour les services d'export refactorisés avec l'ORM."""
 
@@ -1266,3 +1266,80 @@ class TestExportServices:
         # Calcul des périodes non-attribuées :
         # 1 groupe de F1P (1 * 3.0) + 2 groupes de F2U (2 * 2.5) = 3.0 + 5.0 = 8.0
         assert unassigned_row["PÉRIODES RÉGULIER"] == pytest.approx(8.0)
+
+    def test_get_periodes_restantes_for_export_service_orm(self, app, db):
+        """
+        Vérifie que le service d'export des périodes restantes retourne les bonnes
+        données, en ne sélectionnant que les enseignants fictifs.
+        """
+        # --- Arrange ---
+        annee, champ_math, champ_fran, _ = _setup_initial_data(db)
+        annee_id = annee.annee_id
+
+        # Enseignants
+        prof_reel = Enseignant(annee_id=annee_id, nom="Reel", prenom="Prof", nomcomplet="Prof Reel", champno="MATH")
+        tache_math = Enseignant(annee_id=annee_id, nomcomplet="MATH-Tâche-1", champno="MATH", estfictif=True)
+        tache_fran = Enseignant(annee_id=annee_id, nomcomplet="FRAN-Tâche-A", champno="FRAN", estfictif=True)
+        db.session.add_all([prof_reel, tache_math, tache_fran])
+
+        # Cours
+        cours_m1 = Cours(codecours="M1", annee_id=annee_id, champno="MATH", coursdescriptif="Géométrie", nbperiodes=4.0, nbgroupeinitial=5)
+        cours_f1 = Cours(codecours="F1", annee_id=annee_id, champno="FRAN", coursdescriptif="Candide", nbperiodes=3.0, nbgroupeinitial=2)
+        db.session.add_all([cours_m1, cours_f1])
+        db.session.commit()
+
+        # Attributions
+        db.session.add_all([
+            # Attribution à un prof réel (doit être ignorée)
+            AttributionCours(enseignantid=prof_reel.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1),
+            # Attribution à une tâche fictive de MATH (doit être incluse)
+            AttributionCours(enseignantid=tache_math.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=2),
+            # Attribution à une tâche fictive de FRAN (doit être incluse)
+            AttributionCours(enseignantid=tache_fran.enseignantid, codecours="F1", annee_id_cours=annee_id, nbgroupespris=1),
+        ])
+        db.session.commit()
+
+        # --- Act ---
+        result = get_periodes_restantes_for_export_service(annee_id)
+
+        # --- Assert ---
+        # 1. Structure générale
+        assert "MATH" in result
+        assert "FRAN" in result
+        assert len(result.keys()) == 2
+
+        # 2. Vérification du champ MATH
+        math_data = result["MATH"]
+        assert math_data["nom"] == "Mathématiques"
+        assert len(math_data["periodes"]) == 1
+        tache_math_attr = math_data["periodes"][0]
+        assert tache_math_attr["nomcomplet"] == "MATH-Tâche-1"
+        assert tache_math_attr["codecours"] == "M1"
+        assert tache_math_attr["total_groupes_pris"] == 2
+        assert isinstance(tache_math_attr["nbperiodes"], float)
+
+        # 3. Vérification du champ FRAN
+        fran_data = result["FRAN"]
+        assert fran_data["nom"] == "Français"
+        assert len(fran_data["periodes"]) == 1
+        tache_fran_attr = fran_data["periodes"][0]
+        assert tache_fran_attr["nomcomplet"] == "FRAN-Tâche-A"
+        assert tache_fran_attr["codecours"] == "F1"
+        assert tache_fran_attr["total_groupes_pris"] == 1
+
+    def test_get_periodes_restantes_for_export_service_orm_empty(self, app, db):
+        """
+        Vérifie que le service retourne un dictionnaire vide si aucune attribution
+        n'est faite à un enseignant fictif.
+        """
+        annee, champ_math, _, _ = _setup_initial_data(db)
+        prof_reel = Enseignant(annee_id=annee.annee_id, nom="Reel", prenom="Prof", nomcomplet="Prof Reel", champno="MATH")
+        cours_m1 = Cours(codecours="M1", annee_id=annee.annee_id, champno="MATH", coursdescriptif="Géométrie", nbperiodes=4.0, nbgroupeinitial=1)
+        db.session.add_all([prof_reel, cours_m1])
+        db.session.commit()
+        # Attribution uniquement à un prof réel
+        db.session.add(AttributionCours(enseignantid=prof_reel.enseignantid, codecours="M1", annee_id_cours=annee.annee_id))
+        db.session.commit()
+
+        result = get_periodes_restantes_for_export_service(annee.annee_id)
+        assert result == {}

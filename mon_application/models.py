@@ -63,8 +63,9 @@ class Champ(db.Model):
 
     # Relations
     utilisateurs_autorises = db.relationship("User", secondary="user_champ_access", back_populates="champs_autorises")
-    cours = db.relationship("Cours", back_populates="champ")
-    enseignants = db.relationship("Enseignant", back_populates="champ")
+    # CORRIGÉ : passive_deletes=True pour laisser la BDD gérer les contraintes FK.
+    cours = db.relationship("Cours", back_populates="champ", passive_deletes=True)
+    enseignants = db.relationship("Enseignant", back_populates="champ", passive_deletes=True)
     statuts_annee = db.relationship("ChampAnneeStatut", back_populates="champ", cascade="all, delete-orphan")
 
 
@@ -76,7 +77,8 @@ class TypeFinancement(db.Model):
     libelle = db.Column(db.Text, nullable=False)
 
     # Relation
-    cours = db.relationship("Cours", back_populates="financement")
+    # CORRIGÉ : passive_deletes=True pour laisser la BDD gérer les contraintes FK.
+    cours = db.relationship("Cours", back_populates="financement", passive_deletes=True)
 
 
 class AnneeScolaire(db.Model):
@@ -103,7 +105,8 @@ class Enseignant(db.Model):
     nomcomplet = db.Column(db.Text, nullable=False)
     nom = db.Column(db.Text)
     prenom = db.Column(db.Text)
-    champno = db.Column(db.Text, db.ForeignKey("champs.champno"), nullable=False)
+    # CORRIGÉ : Ajout de ondelete="RESTRICT" pour renforcer la contrainte.
+    champno = db.Column(db.Text, db.ForeignKey("champs.champno", ondelete="RESTRICT"), nullable=False)
     esttempsplein = db.Column(db.Boolean, nullable=False, default=True)
     estfictif = db.Column(db.Boolean, nullable=False, default=False)
 
@@ -122,19 +125,22 @@ class Cours(db.Model):
     __tablename__ = "cours"
     codecours = db.Column(db.Text, primary_key=True)
     annee_id = db.Column(db.Integer, db.ForeignKey("anneesscolaires.annee_id"), primary_key=True)
-    champno = db.Column(db.Text, db.ForeignKey("champs.champno"), nullable=False)
+    # CORRIGÉ : Ajout de ondelete="RESTRICT" pour renforcer la contrainte.
+    champno = db.Column(db.Text, db.ForeignKey("champs.champno", ondelete="RESTRICT"), nullable=False)
     coursdescriptif = db.Column(db.Text, nullable=False)
     nbperiodes = db.Column(db.Numeric(5, 2), nullable=False)
     nbgroupeinitial = db.Column(db.Integer, nullable=False)
     estcoursautre = db.Column(db.Boolean, nullable=False, default=False)
-    financement_code = db.Column(db.Text, db.ForeignKey("typesfinancement.code"))
+    # CORRIGÉ : Ajout de ondelete="RESTRICT" pour renforcer la contrainte.
+    financement_code = db.Column(db.Text, db.ForeignKey("typesfinancement.code", ondelete="RESTRICT"))
 
     # Relations
     annee_scolaire = db.relationship("AnneeScolaire", back_populates="cours")
     champ = db.relationship("Champ", back_populates="cours")
     financement = db.relationship("TypeFinancement", back_populates="cours")
-    # MODIFIÉ : Le cascade est retiré pour que la suppression échoue si des attributions existent.
-    attributions = db.relationship("AttributionCours", back_populates="cours")
+    # Le cascade est retiré pour que la suppression échoue si des attributions existent.
+    # CORRIGÉ : Ajout de passive_deletes=True
+    attributions = db.relationship("AttributionCours", back_populates="cours", passive_deletes=True)
     preparations_horaire = db.relationship("PreparationHoraire", back_populates="cours", cascade="all, delete-orphan")
 
 
@@ -152,9 +158,9 @@ class AttributionCours(db.Model):
     enseignant = db.relationship("Enseignant", back_populates="attributions")
     cours = db.relationship("Cours", back_populates="attributions")
 
-    # MODIFIÉ : `ondelete="CASCADE"` est retiré de la FK vers Cours.
+    # `ondelete="RESTRICT"` est le comportement voulu ici.
     # ondelete="CASCADE" est conservé pour la FK vers Enseignant, ce qui signifie que si un enseignant est supprimé, ses attributions le sont aussi. C'est le comportement désiré.
-    __table_args__ = (db.ForeignKeyConstraint(["codecours", "annee_id_cours"], ["cours.codecours", "cours.annee_id"]),)
+    __table_args__ = (db.ForeignKeyConstraint(["codecours", "annee_id_cours"], ["cours.codecours", "cours.annee_id"], ondelete="RESTRICT"),)
 
 
 class ChampAnneeStatut(db.Model):

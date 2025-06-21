@@ -91,3 +91,6 @@ def close_db(_exception: BaseException | None = None) -> None:
 def init_app(app: Flask) -> None:
     """Initialise la gestion de la base de données pour l'application Flask."""
     app.teardown_appcontext(close_db)
+
+# L'ancienne fonction get_periodes_restantes_for_export a été supprimée de ce fichier.
+# Ce module ne contient plus aucune fonction d'accès aux données métier.
