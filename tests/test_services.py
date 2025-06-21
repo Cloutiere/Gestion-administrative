@@ -1289,14 +1289,16 @@ class TestExportServices:
         db.session.commit()
 
         # Attributions
-        db.session.add_all([
-            # Attribution à un prof réel (doit être ignorée)
-            AttributionCours(enseignantid=prof_reel.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1),
-            # Attribution à une tâche fictive de MATH (doit être incluse)
-            AttributionCours(enseignantid=tache_math.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=2),
-            # Attribution à une tâche fictive de FRAN (doit être incluse)
-            AttributionCours(enseignantid=tache_fran.enseignantid, codecours="F1", annee_id_cours=annee_id, nbgroupespris=1),
-        ])
+        db.session.add_all(
+            [
+                # Attribution à un prof réel (doit être ignorée)
+                AttributionCours(enseignantid=prof_reel.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=1),
+                # Attribution à une tâche fictive de MATH (doit être incluse)
+                AttributionCours(enseignantid=tache_math.enseignantid, codecours="M1", annee_id_cours=annee_id, nbgroupespris=2),
+                # Attribution à une tâche fictive de FRAN (doit être incluse)
+                AttributionCours(enseignantid=tache_fran.enseignantid, codecours="F1", annee_id_cours=annee_id, nbgroupespris=1),
+            ]
+        )
         db.session.commit()
 
         # --- Act ---

@@ -6,7 +6,7 @@ Il contient la factory de l'application `create_app`.
 
 import datetime
 import os
-from typing import Any, cast
+from typing import Any
 
 from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
 from flask_login import LoginManager, current_user
@@ -36,16 +36,16 @@ def load_active_school_year() -> None:
         has_dashboard_access = current_user.is_admin or current_user.is_dashboard_only
         annee_id_session = session.get("annee_scolaire_id")
 
-        annee_active, warning_message = determine_active_school_year_service(
-            toutes_les_annees, has_dashboard_access, annee_id_session
-        )
+        annee_active, warning_message = determine_active_school_year_service(toutes_les_annees, has_dashboard_access, annee_id_session)
         g.annee_active = annee_active
 
         if warning_message:
             flash(warning_message, "warning")
 
     except Exception as e:
-        current_app = Flask.get_current_object()
+        # Utiliser get_current_object() pour obtenir l'instance de l'app dans ce contexte
+        from flask import current_app
+
         current_app.logger.error(f"Impossible de charger les années scolaires : {e}")
         g.toutes_les_annees = []
         g.annee_active = None
@@ -95,12 +95,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # --- NETTOYAGE ---
-    # L'ancien système de BDD est maintenant complètement inutile.
-    # Nous supprimons son import et son initialisation.
-    # from . import database
-    # database.init_app(app)
-
     login_manager = LoginManager()
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
@@ -139,6 +133,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(api.bp)
 
     from . import commands
+
     commands.init_app(app)
 
     return app

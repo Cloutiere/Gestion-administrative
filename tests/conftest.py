@@ -1,8 +1,7 @@
 # tests/conftest.py
 """
 Ce fichier contient les fixtures pytest partagées pour la suite de tests.
-Il utilise une base de données SQLite en mémoire et neutralise les effets
-de bord de l'ancien code pour des tests parfaitement isolés.
+Il utilise une base de données SQLite en mémoire pour des tests isolés.
 """
 
 import logging
@@ -40,14 +39,11 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 
 
 @pytest.fixture
-def app(monkeypatch):
+def app():
     """
     Crée une nouvelle instance de l'application POUR CHAQUE TEST.
     C'est la clé de l'isolation.
     """
-    # Règle d'or : On neutralise l'ancien système de BDD pour les tests.
-    monkeypatch.setattr("mon_application.load_active_school_year", lambda: None)
-
     app = create_app(
         {
             "TESTING": True,

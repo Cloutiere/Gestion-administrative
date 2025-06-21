@@ -894,6 +894,7 @@ def delete_user_service(user_id_to_delete: int, current_user_id: int) -> None:
 
 # --- Services pour les Attributions ---
 
+
 def get_attribution_details_service(attribution_id: int) -> dict[str, Any]:
     """Récupère les détails d'une attribution, y compris le champno de l'enseignant."""
     attribution = db.session.get(AttributionCours, attribution_id)
@@ -918,11 +919,7 @@ def get_remaining_groups_for_course_service(code_cours: str, annee_id: int) -> i
         # Retourne 0 si le cours n'existe pas, car il n'y a pas de groupes.
         return 0
 
-    groupes_pris = (
-        db.session.query(func.coalesce(func.sum(AttributionCours.nbgroupespris), 0))
-        .filter_by(codecours=code_cours, annee_id_cours=annee_id)
-        .scalar()
-    )
+    groupes_pris = db.session.query(func.coalesce(func.sum(AttributionCours.nbgroupespris), 0)).filter_by(codecours=code_cours, annee_id_cours=annee_id).scalar()
 
     return cours.nbgroupeinitial - (groupes_pris or 0)
 
@@ -969,9 +966,7 @@ def delete_attribution_service(attribution_id: int) -> dict[str, Any]:
     # 1. Récupérer l'entité et valider les règles métier
     attribution = (
         db.session.query(AttributionCours)
-        .options(
-            joinedload(AttributionCours.enseignant).joinedload(Enseignant.champ).joinedload(Champ.statuts_annee)
-        )
+        .options(joinedload(AttributionCours.enseignant).joinedload(Enseignant.champ).joinedload(Champ.statuts_annee))
         .filter(AttributionCours.attributionid == attribution_id)
         .first()
     )
@@ -1280,12 +1275,7 @@ def get_teacher_update_payload_service(enseignant_id: int) -> dict[str, Any]:
     l'interface d'un enseignant après une action.
     """
     try:
-        enseignant = (
-            db.session.query(Enseignant)
-            .options(joinedload(Enseignant.attributions).joinedload(AttributionCours.cours))
-            .filter(Enseignant.enseignantid == enseignant_id)
-            .one_or_none()
-        )
+        enseignant = db.session.query(Enseignant).options(joinedload(Enseignant.attributions).joinedload(AttributionCours.cours)).filter(Enseignant.enseignantid == enseignant_id).one_or_none()
 
         if not enseignant:
             raise EntityNotFoundError("Enseignant non trouvé.")
@@ -1526,11 +1516,7 @@ def get_org_scolaire_export_data_service(annee_id: int) -> dict[str, dict[str, A
 
         donnees_par_champ: dict[str, dict[str, Any]] = {}
         for champ_no, enseignants_data in pivot_data.items():
-            filtered_enseignants = [
-                data
-                for data in enseignants_data.values()
-                if sum(data.get(h, 0.0) for h in all_headers) > 0 or not data["estfictif"]
-            ]
+            filtered_enseignants = [data for data in enseignants_data.values() if sum(data.get(h, 0.0) for h in all_headers) > 0 or not data["estfictif"]]
             if not filtered_enseignants:
                 continue
             sorted_enseignants = sorted(filtered_enseignants, key=_create_teacher_sort_key)
